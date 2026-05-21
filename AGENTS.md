@@ -184,6 +184,14 @@ ParticipationStatus: PENDING, APPROVED, REJECTED, CANCELED
 - 커밋 메시지는 Conventional Commits 스타일을 사용한다.
 - PR 병합은 기본적으로 `Squash and merge`를 사용한다.
 
+### Codex 작업 흐름
+
+- Codex는 요청받은 작업을 별도 브랜치에서 구현하고 테스트한다.
+- Codex는 변경 내용을 커밋하고 원격 브랜치에 푸시한 뒤 PR 생성 링크를 전달한다.
+- PR 생성, 리뷰 요청, 머지는 사용자가 직접 진행한다.
+- 사용자가 명시적으로 요청한 경우에만 Codex가 PR을 생성한다.
+- 머지는 사용자가 최종 검토 후 직접 수행한다.
+
 예시:
 
 ```text
