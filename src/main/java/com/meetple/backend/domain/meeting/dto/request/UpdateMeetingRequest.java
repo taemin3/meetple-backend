@@ -18,6 +18,9 @@ public record UpdateMeetingRequest(
         @Size(max = 100, message = "장소명은 100자 이하여야 합니다.")
         String locationName,
 
+        @Size(max = 255, message = "주소는 255자 이하여야 합니다.")
+        String address,
+
         @DecimalMin(value = "-90.0", message = "위도는 -90 이상이어야 합니다.")
         @DecimalMax(value = "90.0", message = "위도는 90 이하여야 합니다.")
         Double latitude,
