@@ -148,16 +148,27 @@ public class Meeting extends BaseTimeEntity {
         if (this.currentPeople < this.maxPeople) {
             this.currentPeople++;
         }
-        if (this.currentPeople >= this.maxPeople) {
-            this.status = MeetingStatus.FULL;
-        }
+        updateRecruitmentStatusByCapacity();
     }
 
     public void decreaseCurrentPeople() {
         if (this.currentPeople > 1) {
             this.currentPeople--;
         }
-        if (this.status == MeetingStatus.FULL && this.currentPeople < this.maxPeople) {
+        updateRecruitmentStatusByCapacity();
+    }
+
+    private void updateRecruitmentStatusByCapacity() {
+        if (this.status == MeetingStatus.COMPLETED || this.status == MeetingStatus.CANCELED) {
+            return;
+        }
+
+        if (this.currentPeople >= this.maxPeople) {
+            this.status = MeetingStatus.FULL;
+            return;
+        }
+
+        if (this.status == MeetingStatus.FULL) {
             this.status = MeetingStatus.RECRUITING;
         }
     }
