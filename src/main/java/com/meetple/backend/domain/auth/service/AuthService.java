@@ -3,12 +3,14 @@ package com.meetple.backend.domain.auth.service;
 import com.meetple.backend.domain.auth.dto.request.LoginRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
+import com.meetple.backend.domain.auth.dto.response.LoginResponse;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.UnauthorizedException;
 import com.meetple.backend.global.response.ErrorStatus;
+import com.meetple.backend.global.security.JwtTokenProvider;
 import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -26,6 +28,7 @@ public class AuthService {
 
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
 
     @Transactional
     public AuthMemberResponse signup(SignupRequest request) {
@@ -42,7 +45,7 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public AuthMemberResponse login(LoginRequest request) {
+    public LoginResponse login(LoginRequest request) {
         validatePasswordByteLength(request.password());
 
         Member member = memberRepository.findByEmail(request.email())
@@ -52,7 +55,8 @@ public class AuthService {
             throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
         }
 
-        return AuthMemberResponse.from(member);
+        String accessToken = jwtTokenProvider.createAccessToken(member);
+        return LoginResponse.bearer(accessToken, jwtTokenProvider.getAccessTokenExpirationSeconds());
     }
 
     private Member saveMember(Member member) {

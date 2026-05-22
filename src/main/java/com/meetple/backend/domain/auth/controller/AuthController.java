@@ -3,6 +3,7 @@ package com.meetple.backend.domain.auth.controller;
 import com.meetple.backend.domain.auth.dto.request.LoginRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
+import com.meetple.backend.domain.auth.dto.response.LoginResponse;
 import com.meetple.backend.domain.auth.service.AuthService;
 import com.meetple.backend.global.response.ApiResponse;
 import com.meetple.backend.global.response.SuccessStatus;
@@ -31,8 +32,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    @Operation(summary = "로그인", description = "이메일과 비밀번호로 로그인합니다. 토큰 발급은 이후 JWT 작업에서 추가합니다.")
-    public ResponseEntity<ApiResponse<AuthMemberResponse>> login(@Valid @RequestBody LoginRequest request) {
+    @Operation(summary = "로그인", description = "이메일과 비밀번호로 로그인하고 access token을 발급합니다.")
+    public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.success(SuccessStatus.OK, authService.login(request));
     }
 }
