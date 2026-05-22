@@ -38,4 +38,18 @@ class JwtTokenProviderTest {
         assertThatThrownBy(() -> jwtTokenProvider.getAuthentication("invalid-token"))
                 .isInstanceOf(JwtException.class);
     }
+
+    @Test
+    void jwtPropertiesRejectsWeakSecret() {
+        assertThatThrownBy(() -> new JwtProperties("short-secret", 3600))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("at least 32 bytes");
+    }
+
+    @Test
+    void jwtPropertiesRejectsNonPositiveExpiration() {
+        assertThatThrownBy(() -> new JwtProperties("test-jwt-secret-key-for-meetple-backend-1234567890", 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must be positive");
+    }
 }

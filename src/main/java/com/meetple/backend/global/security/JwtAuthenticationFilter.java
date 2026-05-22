@@ -7,10 +7,14 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -20,13 +24,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
+    private final List<RequestMatcher> permitAllRequestMatchers;
 
     public JwtAuthenticationFilter(
             JwtTokenProvider jwtTokenProvider,
-            JwtAuthenticationEntryPoint authenticationEntryPoint
+            JwtAuthenticationEntryPoint authenticationEntryPoint,
+            String... permitAllPatterns
     ) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.authenticationEntryPoint = authenticationEntryPoint;
+        this.permitAllRequestMatchers = Arrays.stream(permitAllPatterns)
+                .map(PathPatternRequestMatcher::pathPattern)
+                .map(RequestMatcher.class::cast)
+                .toList();
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return permitAllRequestMatchers.stream()
+                .anyMatch(requestMatcher -> requestMatcher.matches(request));
     }
 
     @Override
@@ -45,7 +61,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             Authentication authentication = jwtTokenProvider.getAuthentication(token);
             SecurityContextHolder.getContext().setAuthentication(authentication);
-            filterChain.doFilter(request, response);
         } catch (JwtException | IllegalArgumentException e) {
             SecurityContextHolder.clearContext();
             request.setAttribute(JwtAuthenticationEntryPoint.ERROR_STATUS_ATTRIBUTE, ErrorStatus.INVALID_TOKEN);
@@ -54,7 +69,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     response,
                     new BadCredentialsException(ErrorStatus.INVALID_TOKEN.getMessage(), e)
             );
+            return;
         }
+
+        filterChain.doFilter(request, response);
     }
 
     private String resolveToken(HttpServletRequest request) {

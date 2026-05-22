@@ -35,7 +35,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(
                 jwtTokenProvider,
-                authenticationEntryPoint
+                authenticationEntryPoint,
+                PUBLIC_ENDPOINTS
         );
 
         return http
