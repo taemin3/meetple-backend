@@ -2,6 +2,7 @@ package com.meetple.backend.domain.member.controller;
 
 import com.meetple.backend.domain.member.dto.response.MemberProfileResponse;
 import com.meetple.backend.domain.member.service.MemberService;
+import com.meetple.backend.global.config.OpenApiConfig;
 import com.meetple.backend.global.response.ApiResponse;
 import com.meetple.backend.global.response.SuccessStatus;
 import com.meetple.backend.global.security.AuthenticatedMember;
@@ -24,7 +25,7 @@ public class MemberController {
     private final MemberService memberService;
 
     @GetMapping("/me")
-    @SecurityRequirement(name = "bearerAuth")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
     @Operation(summary = "내 정보 조회", description = "로그인한 회원의 기본 프로필 정보를 조회합니다.")
     public ResponseEntity<ApiResponse<MemberProfileResponse>> getMyProfile(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember
