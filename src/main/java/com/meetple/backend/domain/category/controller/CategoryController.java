@@ -22,7 +22,7 @@ public class CategoryController {
     private final CategoryService categoryService;
 
     @GetMapping
-    @Operation(summary = "Get categories", description = "Returns all categories ordered by name.")
+    @Operation(summary = "전체 카테고리 조회", description = "전체 카테고리 목록을 이름 오름차순으로 조회합니다.")
     public ResponseEntity<ApiResponse<List<CategoryResponse>>> getCategories() {
         return ApiResponse.success(SuccessStatus.OK, categoryService.getCategories());
     }
