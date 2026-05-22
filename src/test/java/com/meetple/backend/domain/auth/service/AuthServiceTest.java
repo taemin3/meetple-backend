@@ -10,12 +10,14 @@ import static org.mockito.Mockito.verify;
 import com.meetple.backend.domain.auth.dto.request.LoginRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
+import com.meetple.backend.domain.auth.dto.response.LoginResponse;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.UnauthorizedException;
 import com.meetple.backend.global.response.ErrorStatus;
+import com.meetple.backend.global.security.JwtTokenProvider;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +36,9 @@ class AuthServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private JwtTokenProvider jwtTokenProvider;
 
     @InjectMocks
     private AuthService authService;
@@ -96,16 +101,19 @@ class AuthServiceTest {
     }
 
     @Test
-    void loginReturnsMemberWhenPasswordMatches() {
+    void loginReturnsAccessTokenWhenPasswordMatches() {
         LoginRequest request = new LoginRequest("user@meetple.com", "password123");
         Member member = Member.createUser(request.email(), "encoded-password", "tester", null);
         given(memberRepository.findByEmail(request.email())).willReturn(Optional.of(member));
         given(passwordEncoder.matches(request.password(), member.getPassword())).willReturn(true);
+        given(jwtTokenProvider.createAccessToken(member)).willReturn("access-token");
+        given(jwtTokenProvider.getAccessTokenExpirationSeconds()).willReturn(3600L);
 
-        AuthMemberResponse response = authService.login(request);
+        LoginResponse response = authService.login(request);
 
-        assertThat(response.email()).isEqualTo(request.email());
-        assertThat(response.nickname()).isEqualTo("tester");
+        assertThat(response.accessToken()).isEqualTo("access-token");
+        assertThat(response.tokenType()).isEqualTo("Bearer");
+        assertThat(response.expiresIn()).isEqualTo(3600L);
     }
 
     @Test

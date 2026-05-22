@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.auth.dto.request.LoginRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
+import com.meetple.backend.domain.auth.dto.response.LoginResponse;
 import com.meetple.backend.domain.auth.service.AuthService;
 import com.meetple.backend.global.exception.GlobalExceptionHandler;
 import com.meetple.backend.global.response.SuccessStatus;
@@ -58,9 +59,9 @@ class AuthControllerTest {
     }
 
     @Test
-    void loginReturnsOkApiResponse() throws Exception {
+    void loginReturnsOkApiResponseWithAccessToken() throws Exception {
         given(authService.login(any(LoginRequest.class)))
-                .willReturn(new AuthMemberResponse(1L, "user@meetple.com", "tester", null));
+                .willReturn(LoginResponse.bearer("access-token", 3600L));
 
         LoginRequest request = new LoginRequest("user@meetple.com", "password123");
 
@@ -71,8 +72,8 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.status").value(200))
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.code").value(SuccessStatus.OK.getCode()))
-                .andExpect(jsonPath("$.data.id").value(1))
-                .andExpect(jsonPath("$.data.email").value("user@meetple.com"))
-                .andExpect(jsonPath("$.data.nickname").value("tester"));
+                .andExpect(jsonPath("$.data.accessToken").value("access-token"))
+                .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.data.expiresIn").value(3600));
     }
 }

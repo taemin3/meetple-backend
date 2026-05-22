@@ -8,3 +8,7 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: false
+
+jwt:
+  secret: test-jwt-secret-key-for-meetple-backend-1234567890
+  access-token-expiration-seconds: 3600
