@@ -12,6 +12,7 @@ import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.UnauthorizedException;
 import com.meetple.backend.global.response.ErrorStatus;
@@ -22,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,12 +43,12 @@ class AuthServiceTest {
         SignupRequest request = new SignupRequest("user@meetple.com", "password123", "tester");
         given(memberRepository.existsByEmail(request.email())).willReturn(false);
         given(passwordEncoder.encode(request.password())).willReturn("encoded-password");
-        given(memberRepository.save(any(Member.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(memberRepository.saveAndFlush(any(Member.class))).willAnswer(invocation -> invocation.getArgument(0));
 
         AuthMemberResponse response = authService.signup(request);
 
         ArgumentCaptor<Member> memberCaptor = ArgumentCaptor.forClass(Member.class);
-        verify(memberRepository).save(memberCaptor.capture());
+        verify(memberRepository).saveAndFlush(memberCaptor.capture());
         Member savedMember = memberCaptor.getValue();
 
         assertThat(savedMember.getEmail()).isEqualTo(request.email());
@@ -66,7 +68,31 @@ class AuthServiceTest {
                 .hasMessage(ErrorStatus.EMAIL_ALREADY_EXISTS.getMessage());
 
         verify(passwordEncoder, never()).encode(any());
-        verify(memberRepository, never()).save(any());
+        verify(memberRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void signupMapsUniqueConstraintViolationToDuplicateEmail() {
+        SignupRequest request = new SignupRequest("user@meetple.com", "password123", "tester");
+        given(memberRepository.existsByEmail(request.email())).willReturn(false);
+        given(passwordEncoder.encode(request.password())).willReturn("encoded-password");
+        given(memberRepository.saveAndFlush(any(Member.class)))
+                .willThrow(new DataIntegrityViolationException("uk_members_email"));
+
+        assertThatThrownBy(() -> authService.signup(request))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage(ErrorStatus.EMAIL_ALREADY_EXISTS.getMessage());
+    }
+
+    @Test
+    void signupRejectsPasswordOverBcryptByteLimit() {
+        SignupRequest request = new SignupRequest("user@meetple.com", "가".repeat(25), "tester");
+
+        assertThatThrownBy(() -> authService.signup(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("비밀번호는 UTF-8 기준 72바이트 이하여야 합니다.");
+
+        verify(memberRepository, never()).existsByEmail(any());
     }
 
     @Test
@@ -102,5 +128,16 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("이메일 또는 비밀번호가 올바르지 않습니다.");
+    }
+
+    @Test
+    void loginRejectsPasswordOverBcryptByteLimit() {
+        LoginRequest request = new LoginRequest("user@meetple.com", "가".repeat(25));
+
+        assertThatThrownBy(() -> authService.login(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("비밀번호는 UTF-8 기준 72바이트 이하여야 합니다.");
+
+        verify(memberRepository, never()).findByEmail(any());
     }
 }

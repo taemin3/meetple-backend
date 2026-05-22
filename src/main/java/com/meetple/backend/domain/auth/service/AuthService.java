@@ -5,10 +5,13 @@ import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.UnauthorizedException;
 import com.meetple.backend.global.response.ErrorStatus;
+import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,12 +21,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private static final String INVALID_LOGIN_MESSAGE = "이메일 또는 비밀번호가 올바르지 않습니다.";
+    private static final int BCRYPT_MAX_PASSWORD_BYTES = 72;
+    private static final String PASSWORD_TOO_LONG_MESSAGE = "비밀번호는 UTF-8 기준 72바이트 이하여야 합니다.";
 
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Transactional
     public AuthMemberResponse signup(SignupRequest request) {
+        validatePasswordByteLength(request.password());
+
         if (memberRepository.existsByEmail(request.email())) {
             throw new ConflictException(ErrorStatus.EMAIL_ALREADY_EXISTS);
         }
@@ -31,11 +38,13 @@ public class AuthService {
         String encodedPassword = passwordEncoder.encode(request.password());
         Member member = Member.createUser(request.email(), encodedPassword, request.nickname(), null);
 
-        return AuthMemberResponse.from(memberRepository.save(member));
+        return AuthMemberResponse.from(saveMember(member));
     }
 
     @Transactional(readOnly = true)
     public AuthMemberResponse login(LoginRequest request) {
+        validatePasswordByteLength(request.password());
+
         Member member = memberRepository.findByEmail(request.email())
                 .orElseThrow(() -> new UnauthorizedException(INVALID_LOGIN_MESSAGE));
 
@@ -44,5 +53,19 @@ public class AuthService {
         }
 
         return AuthMemberResponse.from(member);
+    }
+
+    private Member saveMember(Member member) {
+        try {
+            return memberRepository.saveAndFlush(member);
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(ErrorStatus.EMAIL_ALREADY_EXISTS);
+        }
+    }
+
+    private void validatePasswordByteLength(String password) {
+        if (password.getBytes(StandardCharsets.UTF_8).length > BCRYPT_MAX_PASSWORD_BYTES) {
+            throw new BadRequestException(PASSWORD_TOO_LONG_MESSAGE);
+        }
     }
 }
