@@ -34,6 +34,7 @@ public enum ErrorStatus {
     // 409 CONFLICT
     CONFLICT(HttpStatus.CONFLICT, "충돌이 발생했습니다.",10901),
     OPTIMISTIC_LOCK_CONFLICT(HttpStatus.CONFLICT, "리소스가 갱신되었습니다. 다시 시도해 주세요.",10902),
+    EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 가입된 이메일입니다.",10903),
 
     // 500 INTERNAL_SERVER_ERROR
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.",10501),
