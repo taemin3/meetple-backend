@@ -8,6 +8,7 @@ import com.meetple.backend.domain.member.entity.MemberRole;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.Authentication;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -26,6 +27,9 @@ class JwtTokenProviderTest {
         String accessToken = jwtTokenProvider.createAccessToken(member);
         Authentication authentication = jwtTokenProvider.getAuthentication(accessToken);
 
+        assertThat(jwtTokenProvider.getAccessTokenMemberId(accessToken)).isEqualTo(1L);
+        assertThat(jwtTokenProvider.getAccessTokenRemainingExpiration(accessToken))
+                .isGreaterThan(Duration.ZERO);
         assertThat(authentication.isAuthenticated()).isTrue();
         assertThat(authentication.getPrincipal()).isEqualTo(
                 new AuthenticatedMember(1L, "user@meetple.com", MemberRole.USER)

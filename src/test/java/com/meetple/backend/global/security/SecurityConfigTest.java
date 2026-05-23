@@ -4,8 +4,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.global.response.ErrorStatus;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,18 +27,23 @@ import org.springframework.web.bind.annotation.RestController;
 @ActiveProfiles("test")
 class SecurityConfigTest {
 
+    private static final AtomicLong MEMBER_ID_SEQUENCE = new AtomicLong(1L);
+
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
 
+    @Autowired
+    private AccessTokenBlacklistRepository accessTokenBlacklistRepository;
+
     private String accessToken;
 
     @BeforeEach
     void setUp() {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
-        ReflectionTestUtils.setField(member, "id", 1L);
+        ReflectionTestUtils.setField(member, "id", MEMBER_ID_SEQUENCE.getAndIncrement());
         accessToken = jwtTokenProvider.createAccessToken(member);
     }
 
@@ -66,6 +74,17 @@ class SecurityConfigTest {
     void protectedEndpointWithInvalidTokenReturnsInvalidTokenApiResponse() throws Exception {
         mockMvc.perform(get("/api/v1/users/me")
                         .header("Authorization", "Bearer invalid-token"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.INVALID_TOKEN.getCode()));
+    }
+
+    @Test
+    void protectedEndpointWithBlacklistedTokenReturnsInvalidTokenApiResponse() throws Exception {
+        accessTokenBlacklistRepository.save(accessToken, Duration.ofMinutes(10));
+
+        mockMvc.perform(get("/api/v1/users/me")
+                        .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.code").value(ErrorStatus.INVALID_TOKEN.getCode()));

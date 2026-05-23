@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -13,6 +15,7 @@ import com.meetple.backend.domain.auth.dto.request.ReissueRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.auth.dto.response.LoginResponse;
+import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
@@ -26,6 +29,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -47,6 +51,9 @@ class AuthServiceTest {
 
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
+
+    @Mock
+    private AccessTokenBlacklistRepository accessTokenBlacklistRepository;
 
     @InjectMocks
     private AuthService authService;
@@ -136,7 +143,7 @@ class AuthServiceTest {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
         ReflectionTestUtils.setField(member, "id", 1L);
         given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
-        given(refreshTokenRepository.findByMemberId(1L)).willReturn(Optional.of(request.refreshToken()));
+        given(refreshTokenRepository.matches(1L, request.refreshToken())).willReturn(true);
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(jwtTokenProvider.createAccessToken(member)).willReturn("new-access-token");
         given(jwtTokenProvider.createRefreshToken(member)).willReturn("new-refresh-token");
@@ -154,7 +161,7 @@ class AuthServiceTest {
     void reissueRejectsMismatchedStoredRefreshToken() {
         ReissueRequest request = new ReissueRequest("request-refresh-token");
         given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
-        given(refreshTokenRepository.findByMemberId(1L)).willReturn(Optional.of("saved-refresh-token"));
+        given(refreshTokenRepository.matches(1L, request.refreshToken())).willReturn(false);
 
         assertThatThrownBy(() -> authService.reissue(request))
                 .isInstanceOf(UnauthorizedException.class)
@@ -178,11 +185,61 @@ class AuthServiceTest {
     void logoutDeletesStoredRefreshToken() {
         LogoutRequest request = new LogoutRequest("refresh-token");
         given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
-        given(refreshTokenRepository.findByMemberId(1L)).willReturn(Optional.of(request.refreshToken()));
+        given(jwtTokenProvider.getAccessTokenMemberId("access-token")).willReturn(1L);
+        given(refreshTokenRepository.matches(1L, request.refreshToken())).willReturn(true);
+        given(jwtTokenProvider.getAccessTokenRemainingExpiration("access-token"))
+                .willReturn(Duration.ofMinutes(10));
 
-        authService.logout(request);
+        authService.logout(request, "Bearer access-token");
 
-        verify(refreshTokenRepository).deleteByMemberId(1L);
+        InOrder inOrder = inOrder(accessTokenBlacklistRepository, refreshTokenRepository);
+        inOrder.verify(accessTokenBlacklistRepository).save("access-token", Duration.ofMinutes(10));
+        inOrder.verify(refreshTokenRepository).deleteByMemberId(1L);
+    }
+
+    @Test
+    void logoutKeepsRefreshTokenWhenAccessTokenBlacklistSaveFails() {
+        LogoutRequest request = new LogoutRequest("refresh-token");
+        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
+        given(jwtTokenProvider.getAccessTokenMemberId("access-token")).willReturn(1L);
+        given(refreshTokenRepository.matches(1L, request.refreshToken())).willReturn(true);
+        given(jwtTokenProvider.getAccessTokenRemainingExpiration("access-token"))
+                .willReturn(Duration.ofMinutes(10));
+        doThrow(new IllegalStateException("redis timeout"))
+                .when(accessTokenBlacklistRepository).save("access-token", Duration.ofMinutes(10));
+
+        assertThatThrownBy(() -> authService.logout(request, "Bearer access-token"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("redis timeout");
+
+        verify(refreshTokenRepository, never()).deleteByMemberId(any());
+    }
+
+    @Test
+    void logoutRejectsMismatchedAccessTokenMember() {
+        LogoutRequest request = new LogoutRequest("refresh-token");
+        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
+        given(jwtTokenProvider.getAccessTokenMemberId("access-token")).willReturn(2L);
+
+        assertThatThrownBy(() -> authService.logout(request, "Bearer access-token"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("유효하지 않은 access token입니다.");
+
+        verify(refreshTokenRepository, never()).deleteByMemberId(any());
+        verify(accessTokenBlacklistRepository, never()).save(any(), any());
+    }
+
+    @Test
+    void logoutRejectsMalformedAuthorizationHeader() {
+        LogoutRequest request = new LogoutRequest("refresh-token");
+        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
+
+        assertThatThrownBy(() -> authService.logout(request, "access-token"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("유효하지 않은 access token입니다.");
+
+        verify(refreshTokenRepository, never()).deleteByMemberId(any());
+        verify(accessTokenBlacklistRepository, never()).save(any(), any());
     }
 
     @Test

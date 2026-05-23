@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.Optional;
+import java.util.HexFormat;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -23,24 +26,47 @@ class RefreshTokenRepositoryTest {
     private ValueOperations<String, String> valueOperations;
 
     @Test
-    void saveStoresRefreshTokenWithTtl() {
+    void saveStoresHashedRefreshTokenWithTtl() {
         RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
         given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
 
         repository.save(1L, "refresh-token", Duration.ofDays(14));
 
-        verify(valueOperations).set("refresh:1", "refresh-token", Duration.ofDays(14));
+        String hashedRefreshToken = sha256("refresh-token");
+        verify(valueOperations).set("refresh:1", hashedRefreshToken, Duration.ofDays(14));
+        assertThat(hashedRefreshToken).doesNotContain("refresh-token");
     }
 
     @Test
-    void findByMemberIdReturnsRefreshToken() {
+    void matchesReturnsTrueWhenStoredHashMatchesRefreshToken() {
         RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
         given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
-        given(valueOperations.get("refresh:1")).willReturn("refresh-token");
+        given(valueOperations.get("refresh:1")).willReturn(sha256("refresh-token"));
 
-        Optional<String> refreshToken = repository.findByMemberId(1L);
+        boolean matches = repository.matches(1L, "refresh-token");
 
-        assertThat(refreshToken).contains("refresh-token");
+        assertThat(matches).isTrue();
+    }
+
+    @Test
+    void matchesReturnsFalseWhenStoredHashDoesNotMatchRefreshToken() {
+        RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
+        given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("refresh:1")).willReturn(sha256("another-refresh-token"));
+
+        boolean matches = repository.matches(1L, "refresh-token");
+
+        assertThat(matches).isFalse();
+    }
+
+    @Test
+    void matchesReturnsFalseWhenStoredHashIsMissing() {
+        RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
+        given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
+
+        boolean matches = repository.matches(1L, "refresh-token");
+
+        assertThat(matches).isFalse();
     }
 
     @Test
@@ -50,5 +76,15 @@ class RefreshTokenRepositoryTest {
         repository.deleteByMemberId(1L);
 
         verify(stringRedisTemplate).delete("refresh:1");
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            byte[] digest = messageDigest.digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm is not available.", e);
+        }
     }
 }
