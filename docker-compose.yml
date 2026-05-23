@@ -3,7 +3,7 @@ services:
     image: postgis/postgis:16-3.4
     container_name: meetple-postgres
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-15432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-meetple}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}

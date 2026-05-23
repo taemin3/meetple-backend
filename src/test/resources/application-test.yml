@@ -8,6 +8,10 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
 
 jwt:
   secret: test-jwt-secret-key-for-meetple-backend-1234567890
