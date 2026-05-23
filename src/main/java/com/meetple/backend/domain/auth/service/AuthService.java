@@ -6,6 +6,7 @@ import com.meetple.backend.domain.auth.dto.request.ReissueRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.auth.dto.response.LoginResponse;
+import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
@@ -20,6 +21,7 @@ import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +31,8 @@ public class AuthService {
 
     private static final String INVALID_LOGIN_MESSAGE = "이메일 또는 비밀번호가 올바르지 않습니다.";
     private static final String INVALID_REFRESH_TOKEN_MESSAGE = "유효하지 않은 refresh token입니다.";
+    private static final String INVALID_ACCESS_TOKEN_MESSAGE = "유효하지 않은 access token입니다.";
+    private static final String BEARER_PREFIX = "Bearer ";
     private static final int BCRYPT_MAX_PASSWORD_BYTES = 72;
     private static final String PASSWORD_TOO_LONG_MESSAGE = "비밀번호는 UTF-8 기준 72바이트 이하여야 합니다.";
 
@@ -36,6 +40,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final AccessTokenBlacklistRepository accessTokenBlacklistRepository;
 
     @Transactional
     public AuthMemberResponse signup(SignupRequest request) {
@@ -81,8 +86,15 @@ public class AuthService {
         return issueTokens(member);
     }
 
-    public void logout(LogoutRequest request) {
+    public void logout(LogoutRequest request, String authorizationHeader) {
         Long memberId = parseRefreshTokenMemberId(request.refreshToken());
+        String accessToken = resolveAccessToken(authorizationHeader);
+        Long accessTokenMemberId = parseAccessTokenMemberId(accessToken);
+
+        if (!memberId.equals(accessTokenMemberId)) {
+            throw new UnauthorizedException(INVALID_ACCESS_TOKEN_MESSAGE);
+        }
+
         String savedRefreshToken = refreshTokenRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE));
 
@@ -91,6 +103,10 @@ public class AuthService {
         }
 
         refreshTokenRepository.deleteByMemberId(memberId);
+        accessTokenBlacklistRepository.save(
+                accessToken,
+                jwtTokenProvider.getAccessTokenRemainingExpiration(accessToken)
+        );
     }
 
     private Member saveMember(Member member) {
@@ -132,5 +148,20 @@ public class AuthService {
         } catch (JwtException | IllegalArgumentException e) {
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
+    }
+
+    private Long parseAccessTokenMemberId(String accessToken) {
+        try {
+            return jwtTokenProvider.getAccessTokenMemberId(accessToken);
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new UnauthorizedException(INVALID_ACCESS_TOKEN_MESSAGE);
+        }
+    }
+
+    private String resolveAccessToken(String authorizationHeader) {
+        if (StringUtils.hasText(authorizationHeader) && authorizationHeader.startsWith(BEARER_PREFIX)) {
+            return authorizationHeader.substring(BEARER_PREFIX.length());
+        }
+        throw new UnauthorizedException(INVALID_ACCESS_TOKEN_MESSAGE);
     }
 }

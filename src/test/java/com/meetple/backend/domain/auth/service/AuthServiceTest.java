@@ -13,6 +13,7 @@ import com.meetple.backend.domain.auth.dto.request.ReissueRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.auth.dto.response.LoginResponse;
+import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
@@ -47,6 +48,9 @@ class AuthServiceTest {
 
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
+
+    @Mock
+    private AccessTokenBlacklistRepository accessTokenBlacklistRepository;
 
     @InjectMocks
     private AuthService authService;
@@ -178,11 +182,42 @@ class AuthServiceTest {
     void logoutDeletesStoredRefreshToken() {
         LogoutRequest request = new LogoutRequest("refresh-token");
         given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
+        given(jwtTokenProvider.getAccessTokenMemberId("access-token")).willReturn(1L);
         given(refreshTokenRepository.findByMemberId(1L)).willReturn(Optional.of(request.refreshToken()));
+        given(jwtTokenProvider.getAccessTokenRemainingExpiration("access-token"))
+                .willReturn(Duration.ofMinutes(10));
 
-        authService.logout(request);
+        authService.logout(request, "Bearer access-token");
 
         verify(refreshTokenRepository).deleteByMemberId(1L);
+        verify(accessTokenBlacklistRepository).save("access-token", Duration.ofMinutes(10));
+    }
+
+    @Test
+    void logoutRejectsMismatchedAccessTokenMember() {
+        LogoutRequest request = new LogoutRequest("refresh-token");
+        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
+        given(jwtTokenProvider.getAccessTokenMemberId("access-token")).willReturn(2L);
+
+        assertThatThrownBy(() -> authService.logout(request, "Bearer access-token"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("유효하지 않은 access token입니다.");
+
+        verify(refreshTokenRepository, never()).deleteByMemberId(any());
+        verify(accessTokenBlacklistRepository, never()).save(any(), any());
+    }
+
+    @Test
+    void logoutRejectsMalformedAuthorizationHeader() {
+        LogoutRequest request = new LogoutRequest("refresh-token");
+        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
+
+        assertThatThrownBy(() -> authService.logout(request, "access-token"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("유효하지 않은 access token입니다.");
+
+        verify(refreshTokenRepository, never()).deleteByMemberId(any());
+        verify(accessTokenBlacklistRepository, never()).save(any(), any());
     }
 
     @Test

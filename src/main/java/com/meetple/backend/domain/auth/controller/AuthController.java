@@ -7,13 +7,17 @@ import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.auth.dto.response.LoginResponse;
 import com.meetple.backend.domain.auth.service.AuthService;
+import com.meetple.backend.global.config.OpenApiConfig;
 import com.meetple.backend.global.response.ApiResponse;
 import com.meetple.backend.global.response.SuccessStatus;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -46,9 +50,13 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    @Operation(summary = "로그아웃", description = "저장된 refresh token을 삭제합니다.")
-    public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody LogoutRequest request) {
-        authService.logout(request);
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(summary = "로그아웃", description = "저장된 refresh token을 삭제하고 access token을 만료 전까지 차단합니다.")
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,
+            @Valid @RequestBody LogoutRequest request
+    ) {
+        authService.logout(request, authorizationHeader);
         return ApiResponse.successOnly(SuccessStatus.OK);
     }
 }

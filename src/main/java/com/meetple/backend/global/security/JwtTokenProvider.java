@@ -4,6 +4,7 @@ import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.entity.MemberRole;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
@@ -75,6 +76,22 @@ public class JwtTokenProvider {
         Claims claims = parseClaims(token);
         validateTokenType(claims, REFRESH_TOKEN_TYPE);
         return Long.valueOf(claims.getSubject());
+    }
+
+    public Long getAccessTokenMemberId(String token) {
+        Claims claims = parseClaims(token);
+        validateTokenType(claims, ACCESS_TOKEN_TYPE);
+        return Long.valueOf(claims.getSubject());
+    }
+
+    public Duration getAccessTokenRemainingExpiration(String token) {
+        Claims claims = parseClaims(token);
+        validateTokenType(claims, ACCESS_TOKEN_TYPE);
+        Duration remainingExpiration = Duration.between(Instant.now(), claims.getExpiration().toInstant());
+        if (remainingExpiration.isNegative() || remainingExpiration.isZero()) {
+            return Duration.ZERO;
+        }
+        return remainingExpiration;
     }
 
     public long getAccessTokenExpirationSeconds() {

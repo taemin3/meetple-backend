@@ -1,5 +1,6 @@
 package com.meetple.backend.global.security;
 
+import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
 import com.meetple.backend.global.response.ErrorStatus;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -24,15 +25,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
+    private final AccessTokenBlacklistRepository accessTokenBlacklistRepository;
     private final List<RequestMatcher> permitAllRequestMatchers;
 
     public JwtAuthenticationFilter(
             JwtTokenProvider jwtTokenProvider,
             JwtAuthenticationEntryPoint authenticationEntryPoint,
+            AccessTokenBlacklistRepository accessTokenBlacklistRepository,
             String... permitAllPatterns
     ) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.authenticationEntryPoint = authenticationEntryPoint;
+        this.accessTokenBlacklistRepository = accessTokenBlacklistRepository;
         this.permitAllRequestMatchers = Arrays.stream(permitAllPatterns)
                 .map(PathPatternRequestMatcher::pathPattern)
                 .map(RequestMatcher.class::cast)
@@ -59,6 +63,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         try {
+            if (accessTokenBlacklistRepository.exists(token)) {
+                throw new IllegalArgumentException("Blacklisted access token.");
+            }
             Authentication authentication = jwtTokenProvider.getAuthentication(token);
             SecurityContextHolder.getContext().setAuthentication(authentication);
         } catch (JwtException | IllegalArgumentException e) {
