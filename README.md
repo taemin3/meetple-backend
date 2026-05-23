@@ -21,7 +21,7 @@ docker compose up -d
 
 로컬 접속 정보는 `.env.example`을 복사한 `.env`에만 입력합니다.
 
-- PostgreSQL: `localhost:5432`
+- PostgreSQL: `localhost:15432`
 - database: `meetple`
 - Redis: `localhost:6379`
 
