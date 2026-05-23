@@ -1,6 +1,8 @@
 package com.meetple.backend.domain.auth.controller;
 
 import com.meetple.backend.domain.auth.dto.request.LoginRequest;
+import com.meetple.backend.domain.auth.dto.request.LogoutRequest;
+import com.meetple.backend.domain.auth.dto.request.ReissueRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.auth.dto.response.LoginResponse;
@@ -35,5 +37,18 @@ public class AuthController {
     @Operation(summary = "로그인", description = "이메일과 비밀번호로 로그인하고 access token을 발급합니다.")
     public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.success(SuccessStatus.OK, authService.login(request));
+    }
+
+    @PostMapping("/reissue")
+    @Operation(summary = "토큰 재발급", description = "refresh token으로 access token과 refresh token을 재발급합니다.")
+    public ResponseEntity<ApiResponse<LoginResponse>> reissue(@Valid @RequestBody ReissueRequest request) {
+        return ApiResponse.success(SuccessStatus.OK, authService.reissue(request));
+    }
+
+    @PostMapping("/logout")
+    @Operation(summary = "로그아웃", description = "저장된 refresh token을 삭제합니다.")
+    public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody LogoutRequest request) {
+        authService.logout(request);
+        return ApiResponse.successOnly(SuccessStatus.OK);
     }
 }

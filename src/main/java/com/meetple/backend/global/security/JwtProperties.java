@@ -8,7 +8,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "jwt")
 public record JwtProperties(
         String secret,
-        long accessTokenExpirationSeconds
+        long accessTokenExpirationSeconds,
+        long refreshTokenExpirationSeconds
 ) {
 
     private static final int MIN_SECRET_BYTES = 32;
@@ -22,6 +23,9 @@ public record JwtProperties(
         }
         if (accessTokenExpirationSeconds <= 0) {
             throw new IllegalArgumentException("jwt.access-token-expiration-seconds must be positive.");
+        }
+        if (refreshTokenExpirationSeconds <= 0) {
+            throw new IllegalArgumentException("jwt.refresh-token-expiration-seconds must be positive.");
         }
     }
 

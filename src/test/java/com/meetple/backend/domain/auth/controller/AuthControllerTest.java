@@ -2,12 +2,15 @@ package com.meetple.backend.domain.auth.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.auth.dto.request.LoginRequest;
+import com.meetple.backend.domain.auth.dto.request.LogoutRequest;
+import com.meetple.backend.domain.auth.dto.request.ReissueRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.auth.dto.response.LoginResponse;
@@ -61,7 +64,7 @@ class AuthControllerTest {
     @Test
     void loginReturnsOkApiResponseWithAccessToken() throws Exception {
         given(authService.login(any(LoginRequest.class)))
-                .willReturn(LoginResponse.bearer("access-token", 3600L));
+                .willReturn(LoginResponse.bearer("access-token", "refresh-token", 3600L, 1209600L));
 
         LoginRequest request = new LoginRequest("user@meetple.com", "password123");
 
@@ -73,7 +76,42 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.code").value(SuccessStatus.OK.getCode()))
                 .andExpect(jsonPath("$.data.accessToken").value("access-token"))
+                .andExpect(jsonPath("$.data.refreshToken").value("refresh-token"))
                 .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
-                .andExpect(jsonPath("$.data.expiresIn").value(3600));
+                .andExpect(jsonPath("$.data.accessTokenExpiresIn").value(3600))
+                .andExpect(jsonPath("$.data.refreshTokenExpiresIn").value(1209600));
+    }
+
+    @Test
+    void reissueReturnsOkApiResponseWithRotatedTokens() throws Exception {
+        given(authService.reissue(any(ReissueRequest.class)))
+                .willReturn(LoginResponse.bearer("new-access-token", "new-refresh-token", 3600L, 1209600L));
+
+        ReissueRequest request = new ReissueRequest("refresh-token");
+
+        mockMvc.perform(post("/api/v1/auth/reissue")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value(SuccessStatus.OK.getCode()))
+                .andExpect(jsonPath("$.data.accessToken").value("new-access-token"))
+                .andExpect(jsonPath("$.data.refreshToken").value("new-refresh-token"));
+    }
+
+    @Test
+    void logoutReturnsOkApiResponse() throws Exception {
+        LogoutRequest request = new LogoutRequest("refresh-token");
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value(SuccessStatus.OK.getCode()));
+
+        verify(authService).logout(any(LogoutRequest.class));
     }
 }
