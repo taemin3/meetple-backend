@@ -1,7 +1,6 @@
 package com.meetple.backend.domain.auth.repository;
 
 import java.time.Duration;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
@@ -15,11 +14,12 @@ public class RefreshTokenRepository {
     private final StringRedisTemplate stringRedisTemplate;
 
     public void save(Long memberId, String refreshToken, Duration ttl) {
-        stringRedisTemplate.opsForValue().set(createKey(memberId), refreshToken, ttl);
+        stringRedisTemplate.opsForValue().set(createKey(memberId), TokenHashUtil.sha256(refreshToken), ttl);
     }
 
-    public Optional<String> findByMemberId(Long memberId) {
-        return Optional.ofNullable(stringRedisTemplate.opsForValue().get(createKey(memberId)));
+    public boolean matches(Long memberId, String refreshToken) {
+        String savedRefreshTokenHash = stringRedisTemplate.opsForValue().get(createKey(memberId));
+        return TokenHashUtil.sha256(refreshToken).equals(savedRefreshTokenHash);
     }
 
     public void deleteByMemberId(Long memberId) {

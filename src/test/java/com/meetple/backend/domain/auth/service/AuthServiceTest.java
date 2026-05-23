@@ -140,7 +140,7 @@ class AuthServiceTest {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
         ReflectionTestUtils.setField(member, "id", 1L);
         given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
-        given(refreshTokenRepository.findByMemberId(1L)).willReturn(Optional.of(request.refreshToken()));
+        given(refreshTokenRepository.matches(1L, request.refreshToken())).willReturn(true);
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(jwtTokenProvider.createAccessToken(member)).willReturn("new-access-token");
         given(jwtTokenProvider.createRefreshToken(member)).willReturn("new-refresh-token");
@@ -158,7 +158,7 @@ class AuthServiceTest {
     void reissueRejectsMismatchedStoredRefreshToken() {
         ReissueRequest request = new ReissueRequest("request-refresh-token");
         given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
-        given(refreshTokenRepository.findByMemberId(1L)).willReturn(Optional.of("saved-refresh-token"));
+        given(refreshTokenRepository.matches(1L, request.refreshToken())).willReturn(false);
 
         assertThatThrownBy(() -> authService.reissue(request))
                 .isInstanceOf(UnauthorizedException.class)
@@ -183,7 +183,7 @@ class AuthServiceTest {
         LogoutRequest request = new LogoutRequest("refresh-token");
         given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
         given(jwtTokenProvider.getAccessTokenMemberId("access-token")).willReturn(1L);
-        given(refreshTokenRepository.findByMemberId(1L)).willReturn(Optional.of(request.refreshToken()));
+        given(refreshTokenRepository.matches(1L, request.refreshToken())).willReturn(true);
         given(jwtTokenProvider.getAccessTokenRemainingExpiration("access-token"))
                 .willReturn(Duration.ofMinutes(10));
 

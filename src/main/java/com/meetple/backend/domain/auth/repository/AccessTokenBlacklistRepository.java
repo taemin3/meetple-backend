@@ -1,10 +1,6 @@
 package com.meetple.backend.domain.auth.repository;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.HexFormat;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
@@ -29,16 +25,6 @@ public class AccessTokenBlacklistRepository {
     }
 
     private String createKey(String accessToken) {
-        return KEY_PREFIX + sha256(accessToken);
-    }
-
-    private String sha256(String value) {
-        try {
-            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
-            byte[] digest = messageDigest.digest(value.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 algorithm is not available.", e);
-        }
+        return KEY_PREFIX + TokenHashUtil.sha256(accessToken);
     }
 }

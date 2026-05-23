@@ -73,10 +73,8 @@ public class AuthService {
     @Transactional
     public LoginResponse reissue(ReissueRequest request) {
         Long memberId = parseRefreshTokenMemberId(request.refreshToken());
-        String savedRefreshToken = refreshTokenRepository.findByMemberId(memberId)
-                .orElseThrow(() -> new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE));
 
-        if (!savedRefreshToken.equals(request.refreshToken())) {
+        if (!refreshTokenRepository.matches(memberId, request.refreshToken())) {
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
@@ -95,10 +93,7 @@ public class AuthService {
             throw new UnauthorizedException(INVALID_ACCESS_TOKEN_MESSAGE);
         }
 
-        String savedRefreshToken = refreshTokenRepository.findByMemberId(memberId)
-                .orElseThrow(() -> new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE));
-
-        if (!savedRefreshToken.equals(request.refreshToken())) {
+        if (!refreshTokenRepository.matches(memberId, request.refreshToken())) {
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
