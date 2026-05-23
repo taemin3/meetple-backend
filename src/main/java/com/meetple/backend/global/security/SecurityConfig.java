@@ -22,6 +22,8 @@ public class SecurityConfig {
             "/health-notfound",
             "/api/v1/auth/signup",
             "/api/v1/auth/login",
+            "/api/v1/auth/reissue",
+            "/api/v1/auth/logout",
             "/api/v1/categories",
             "/swagger-ui.html",
             "/swagger-ui/**",
