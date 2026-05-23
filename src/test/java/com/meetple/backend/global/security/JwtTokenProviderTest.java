@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.entity.MemberRole;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.Authentication;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -50,6 +52,20 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    void refreshTokenContainsOnlyMinimalClaims() {
+        Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
+        ReflectionTestUtils.setField(member, "id", 1L);
+
+        String refreshToken = jwtTokenProvider.createRefreshToken(member);
+        Claims claims = parseClaims(refreshToken);
+
+        assertThat(claims.getSubject()).isEqualTo("1");
+        assertThat(claims.get("tokenType", String.class)).isEqualTo("refresh");
+        assertThat(claims.get("email")).isNull();
+        assertThat(claims.get("role")).isNull();
+    }
+
+    @Test
     void getAuthenticationRejectsRefreshToken() {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
         ReflectionTestUtils.setField(member, "id", 1L);
@@ -78,5 +94,17 @@ class JwtTokenProviderTest {
         assertThatThrownBy(() -> new JwtProperties("test-jwt-secret-key-for-meetple-backend-1234567890", 3600, 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("refresh-token-expiration-seconds");
+    }
+
+    private Claims parseClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(new JwtProperties(
+                        "test-jwt-secret-key-for-meetple-backend-1234567890",
+                        3600,
+                        1209600
+                ).secretKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 }

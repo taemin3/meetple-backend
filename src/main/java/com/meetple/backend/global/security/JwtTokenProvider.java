@@ -27,22 +27,27 @@ public class JwtTokenProvider {
     private final JwtProperties jwtProperties;
 
     public String createAccessToken(Member member) {
-        return createToken(member, ACCESS_TOKEN_TYPE, jwtProperties.accessTokenExpirationSeconds());
-    }
-
-    public String createRefreshToken(Member member) {
-        return createToken(member, REFRESH_TOKEN_TYPE, jwtProperties.refreshTokenExpirationSeconds());
-    }
-
-    private String createToken(Member member, String tokenType, long expirationSeconds) {
         Instant now = Instant.now();
-        Instant expiresAt = now.plusSeconds(expirationSeconds);
+        Instant expiresAt = now.plusSeconds(jwtProperties.accessTokenExpirationSeconds());
 
         return Jwts.builder()
                 .subject(String.valueOf(member.getId()))
                 .claim(EMAIL_CLAIM, member.getEmail())
                 .claim(ROLE_CLAIM, member.getRole().name())
-                .claim(TOKEN_TYPE_CLAIM, tokenType)
+                .claim(TOKEN_TYPE_CLAIM, ACCESS_TOKEN_TYPE)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(expiresAt))
+                .signWith(jwtProperties.secretKey())
+                .compact();
+    }
+
+    public String createRefreshToken(Member member) {
+        Instant now = Instant.now();
+        Instant expiresAt = now.plusSeconds(jwtProperties.refreshTokenExpirationSeconds());
+
+        return Jwts.builder()
+                .subject(String.valueOf(member.getId()))
+                .claim(TOKEN_TYPE_CLAIM, REFRESH_TOKEN_TYPE)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiresAt))
                 .signWith(jwtProperties.secretKey())
