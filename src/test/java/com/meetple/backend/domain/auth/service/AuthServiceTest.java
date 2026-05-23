@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -27,6 +29,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -189,8 +192,27 @@ class AuthServiceTest {
 
         authService.logout(request, "Bearer access-token");
 
-        verify(refreshTokenRepository).deleteByMemberId(1L);
-        verify(accessTokenBlacklistRepository).save("access-token", Duration.ofMinutes(10));
+        InOrder inOrder = inOrder(accessTokenBlacklistRepository, refreshTokenRepository);
+        inOrder.verify(accessTokenBlacklistRepository).save("access-token", Duration.ofMinutes(10));
+        inOrder.verify(refreshTokenRepository).deleteByMemberId(1L);
+    }
+
+    @Test
+    void logoutKeepsRefreshTokenWhenAccessTokenBlacklistSaveFails() {
+        LogoutRequest request = new LogoutRequest("refresh-token");
+        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
+        given(jwtTokenProvider.getAccessTokenMemberId("access-token")).willReturn(1L);
+        given(refreshTokenRepository.matches(1L, request.refreshToken())).willReturn(true);
+        given(jwtTokenProvider.getAccessTokenRemainingExpiration("access-token"))
+                .willReturn(Duration.ofMinutes(10));
+        doThrow(new IllegalStateException("redis timeout"))
+                .when(accessTokenBlacklistRepository).save("access-token", Duration.ofMinutes(10));
+
+        assertThatThrownBy(() -> authService.logout(request, "Bearer access-token"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("redis timeout");
+
+        verify(refreshTokenRepository, never()).deleteByMemberId(any());
     }
 
     @Test

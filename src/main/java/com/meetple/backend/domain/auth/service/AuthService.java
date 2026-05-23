@@ -97,11 +97,11 @@ public class AuthService {
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
-        refreshTokenRepository.deleteByMemberId(memberId);
         accessTokenBlacklistRepository.save(
                 accessToken,
                 jwtTokenProvider.getAccessTokenRemainingExpiration(accessToken)
         );
+        refreshTokenRepository.deleteByMemberId(memberId);
     }
 
     private Member saveMember(Member member) {

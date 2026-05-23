@@ -63,10 +63,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         try {
+            Authentication authentication = jwtTokenProvider.getAuthentication(token);
             if (accessTokenBlacklistRepository.exists(token)) {
                 throw new IllegalArgumentException("Blacklisted access token.");
             }
-            Authentication authentication = jwtTokenProvider.getAuthentication(token);
             SecurityContextHolder.getContext().setAuthentication(authentication);
         } catch (JwtException | IllegalArgumentException e) {
             SecurityContextHolder.clearContext();
