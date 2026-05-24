@@ -2,6 +2,7 @@ package com.meetple.backend.domain.auth.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
@@ -10,15 +11,16 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HexFormat;
-import java.util.LinkedHashSet;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.SetOperations;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 
 @ExtendWith(MockitoExtension.class)
 class RefreshTokenRepositoryTest {
@@ -35,15 +37,17 @@ class RefreshTokenRepositoryTest {
     @Test
     void saveStoresHashedRefreshTokenWithTtl() {
         RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
-        given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
-        given(stringRedisTemplate.opsForSet()).willReturn(setOperations);
 
         repository.save(1L, "session-id", "refresh-token", Duration.ofDays(14));
 
         String hashedRefreshToken = sha256("refresh-token");
-        verify(valueOperations).set("refresh:1:session-id", hashedRefreshToken, Duration.ofDays(14));
-        verify(setOperations).add("refresh:sessions:1", "session-id");
-        verify(stringRedisTemplate).expire("refresh:sessions:1", Duration.ofDays(14));
+        verify(stringRedisTemplate).execute(
+                ArgumentMatchers.<RedisScript<Long>>any(),
+                eq(List.of("refresh:1:session-id", "refresh:sessions:1")),
+                eq(hashedRefreshToken),
+                eq(String.valueOf(Duration.ofDays(14).toMillis())),
+                eq("session-id")
+        );
         assertThat(hashedRefreshToken).doesNotContain("refresh-token");
     }
 
@@ -101,29 +105,16 @@ class RefreshTokenRepositoryTest {
     }
 
     @Test
-    void deleteAllByMemberIdDeletesAllRefreshTokenKeysAndSessionSet() {
+    void deleteAllByMemberIdExecutesAtomicDeleteScript() {
         RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
-        given(stringRedisTemplate.opsForSet()).willReturn(setOperations);
-        given(setOperations.members("refresh:sessions:1"))
-                .willReturn(new LinkedHashSet<>(List.of("session-1", "session-2")));
 
         repository.deleteAllByMemberId(1L);
 
-        verify(stringRedisTemplate).delete(List.of(
-                "refresh:1:session-1",
-                "refresh:1:session-2",
-                "refresh:sessions:1"
-        ));
-    }
-
-    @Test
-    void deleteAllByMemberIdDeletesSessionSetWhenSessionIdsAreMissing() {
-        RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
-        given(stringRedisTemplate.opsForSet()).willReturn(setOperations);
-
-        repository.deleteAllByMemberId(1L);
-
-        verify(stringRedisTemplate).delete("refresh:sessions:1");
+        verify(stringRedisTemplate).execute(
+                ArgumentMatchers.<RedisScript<Long>>any(),
+                eq(List.of("refresh:sessions:1")),
+                eq("refresh:1:")
+        );
     }
 
     @Test
