@@ -1,6 +1,7 @@
 package com.meetple.backend.domain.auth.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
@@ -76,6 +77,15 @@ class RefreshTokenRepositoryTest {
         repository.deleteByMemberIdAndSessionId(1L, "session-id");
 
         verify(stringRedisTemplate).delete("refresh:1:session-id");
+    }
+
+    @Test
+    void saveRejectsBlankSessionId() {
+        RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
+
+        assertThatThrownBy(() -> repository.save(1L, " ", "refresh-token", Duration.ofDays(14)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Refresh token session id is required.");
     }
 
     private String sha256(String value) {

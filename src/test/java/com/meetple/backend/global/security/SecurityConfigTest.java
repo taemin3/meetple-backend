@@ -44,7 +44,7 @@ class SecurityConfigTest {
     void setUp() {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
         ReflectionTestUtils.setField(member, "id", MEMBER_ID_SEQUENCE.getAndIncrement());
-        accessToken = jwtTokenProvider.createAccessToken(member);
+        accessToken = jwtTokenProvider.createAccessToken(member, "security-config-test-session");
     }
 
     @Test

@@ -48,6 +48,16 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    void createAccessTokenRejectsBlankSessionId() {
+        Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
+        ReflectionTestUtils.setField(member, "id", 1L);
+
+        assertThatThrownBy(() -> jwtTokenProvider.createAccessToken(member, " "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Token session id is required.");
+    }
+
+    @Test
     void createRefreshTokenAndReadSession() {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
         ReflectionTestUtils.setField(member, "id", 1L);
@@ -57,6 +67,16 @@ class JwtTokenProviderTest {
         assertThat(jwtTokenProvider.getRefreshTokenMemberId(refreshToken)).isEqualTo(1L);
         assertThat(jwtTokenProvider.getRefreshTokenSession(refreshToken))
                 .isEqualTo(new JwtTokenSession(1L, "session-id"));
+    }
+
+    @Test
+    void createRefreshTokenRejectsBlankSessionId() {
+        Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
+        ReflectionTestUtils.setField(member, "id", 1L);
+
+        assertThatThrownBy(() -> jwtTokenProvider.createRefreshToken(member, " "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Token session id is required.");
     }
 
     @Test

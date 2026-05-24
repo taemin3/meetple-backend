@@ -8,7 +8,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -29,11 +28,8 @@ public class JwtTokenProvider {
 
     private final JwtProperties jwtProperties;
 
-    public String createAccessToken(Member member) {
-        return createAccessToken(member, UUID.randomUUID().toString());
-    }
-
     public String createAccessToken(Member member, String sessionId) {
+        validateSessionId(sessionId);
         Instant now = Instant.now();
         Instant expiresAt = now.plusSeconds(jwtProperties.accessTokenExpirationSeconds());
 
@@ -49,11 +45,8 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    public String createRefreshToken(Member member) {
-        return createRefreshToken(member, UUID.randomUUID().toString());
-    }
-
     public String createRefreshToken(Member member, String sessionId) {
+        validateSessionId(sessionId);
         Instant now = Instant.now();
         Instant expiresAt = now.plusSeconds(jwtProperties.refreshTokenExpirationSeconds());
 
@@ -135,6 +128,12 @@ public class JwtTokenProvider {
         String tokenType = claims.get(TOKEN_TYPE_CLAIM, String.class);
         if (!expectedTokenType.equals(tokenType)) {
             throw new IllegalArgumentException("Invalid token type.");
+        }
+    }
+
+    private void validateSessionId(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new IllegalArgumentException("Token session id is required.");
         }
     }
 
