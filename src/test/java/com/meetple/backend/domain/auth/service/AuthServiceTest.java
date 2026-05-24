@@ -277,6 +277,25 @@ class AuthServiceTest {
     }
 
     @Test
+    void logoutAllDeletesAllStoredRefreshTokens() {
+        given(jwtTokenProvider.getAccessTokenSession("access-token"))
+                .willReturn(new JwtTokenSession(1L, "session-id"));
+
+        authService.logoutAll("Bearer access-token");
+
+        verify(refreshTokenRepository).deleteAllByMemberId(1L);
+    }
+
+    @Test
+    void logoutAllRejectsMalformedAuthorizationHeader() {
+        assertThatThrownBy(() -> authService.logoutAll("access-token"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("유효하지 않은 access token입니다.");
+
+        verify(refreshTokenRepository, never()).deleteAllByMemberId(any());
+    }
+
+    @Test
     void loginRejectsUnknownEmail() {
         LoginRequest request = new LoginRequest("user@meetple.com", "password123");
         given(memberRepository.findByEmail(request.email())).willReturn(Optional.empty());

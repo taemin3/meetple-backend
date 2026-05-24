@@ -117,4 +117,16 @@ class AuthControllerTest {
 
         verify(authService).logout(any(LogoutRequest.class), eq("Bearer access-token"));
     }
+
+    @Test
+    void logoutAllReturnsOkApiResponse() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout-all")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer access-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value(SuccessStatus.OK.getCode()));
+
+        verify(authService).logoutAll("Bearer access-token");
+    }
 }

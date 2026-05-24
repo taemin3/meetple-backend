@@ -59,4 +59,14 @@ public class AuthController {
         authService.logout(request, authorizationHeader);
         return ApiResponse.successOnly(SuccessStatus.OK);
     }
+
+    @PostMapping("/logout-all")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(summary = "전체 기기 로그아웃", description = "회원의 모든 refresh token 세션을 삭제해 모든 기기에서 로그아웃합니다.")
+    public ResponseEntity<ApiResponse<Void>> logoutAll(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader
+    ) {
+        authService.logoutAll(authorizationHeader);
+        return ApiResponse.successOnly(SuccessStatus.OK);
+    }
 }

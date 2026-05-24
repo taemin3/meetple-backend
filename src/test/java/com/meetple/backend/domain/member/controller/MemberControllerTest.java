@@ -4,10 +4,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.global.response.SuccessStatus;
 import com.meetple.backend.global.security.JwtTokenProvider;
+import java.time.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +32,9 @@ class MemberControllerTest {
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
 
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
     private String accessToken;
 
     @BeforeEach
@@ -39,6 +44,12 @@ class MemberControllerTest {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
         Member savedMember = memberRepository.save(member);
         accessToken = jwtTokenProvider.createAccessToken(savedMember, "member-controller-test-session");
+        refreshTokenRepository.save(
+                savedMember.getId(),
+                "member-controller-test-session",
+                "refresh-token",
+                Duration.ofMinutes(10)
+        );
     }
 
     @Test

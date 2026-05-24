@@ -10,11 +10,14 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.ValueOperations;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,15 +29,21 @@ class RefreshTokenRepositoryTest {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
+    @Mock
+    private SetOperations<String, String> setOperations;
+
     @Test
     void saveStoresHashedRefreshTokenWithTtl() {
         RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
         given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
+        given(stringRedisTemplate.opsForSet()).willReturn(setOperations);
 
         repository.save(1L, "session-id", "refresh-token", Duration.ofDays(14));
 
         String hashedRefreshToken = sha256("refresh-token");
         verify(valueOperations).set("refresh:1:session-id", hashedRefreshToken, Duration.ofDays(14));
+        verify(setOperations).add("refresh:sessions:1", "session-id");
+        verify(stringRedisTemplate).expire("refresh:sessions:1", Duration.ofDays(14));
         assertThat(hashedRefreshToken).doesNotContain("refresh-token");
     }
 
@@ -73,10 +82,48 @@ class RefreshTokenRepositoryTest {
     @Test
     void deleteByMemberIdAndSessionIdDeletesRefreshTokenKey() {
         RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
+        given(stringRedisTemplate.opsForSet()).willReturn(setOperations);
 
         repository.deleteByMemberIdAndSessionId(1L, "session-id");
 
         verify(stringRedisTemplate).delete("refresh:1:session-id");
+        verify(setOperations).remove("refresh:sessions:1", "session-id");
+    }
+
+    @Test
+    void existsByMemberIdAndSessionIdReturnsTrueWhenRefreshTokenKeyExists() {
+        RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
+        given(stringRedisTemplate.hasKey("refresh:1:session-id")).willReturn(true);
+
+        boolean exists = repository.existsByMemberIdAndSessionId(1L, "session-id");
+
+        assertThat(exists).isTrue();
+    }
+
+    @Test
+    void deleteAllByMemberIdDeletesAllRefreshTokenKeysAndSessionSet() {
+        RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
+        given(stringRedisTemplate.opsForSet()).willReturn(setOperations);
+        given(setOperations.members("refresh:sessions:1"))
+                .willReturn(new LinkedHashSet<>(List.of("session-1", "session-2")));
+
+        repository.deleteAllByMemberId(1L);
+
+        verify(stringRedisTemplate).delete(List.of(
+                "refresh:1:session-1",
+                "refresh:1:session-2",
+                "refresh:sessions:1"
+        ));
+    }
+
+    @Test
+    void deleteAllByMemberIdDeletesSessionSetWhenSessionIdsAreMissing() {
+        RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
+        given(stringRedisTemplate.opsForSet()).willReturn(setOperations);
+
+        repository.deleteAllByMemberId(1L);
+
+        verify(stringRedisTemplate).delete("refresh:sessions:1");
     }
 
     @Test
