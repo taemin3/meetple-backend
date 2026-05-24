@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
+import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,9 @@ class JwtAuthenticationFilterTest {
     private AccessTokenBlacklistRepository accessTokenBlacklistRepository;
 
     @Mock
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Mock
     private FilterChain filterChain;
 
     @Mock
@@ -49,6 +53,7 @@ class JwtAuthenticationFilterTest {
         filter.doFilter(request, response, filterChain);
 
         verify(accessTokenBlacklistRepository, never()).exists(any());
+        verify(refreshTokenRepository, never()).existsByMemberIdAndSessionId(any(), any());
         verify(authenticationEntryPoint).commence(
                 eq(request),
                 eq(response),
@@ -70,6 +75,28 @@ class JwtAuthenticationFilterTest {
         InOrder inOrder = inOrder(jwtTokenProvider, accessTokenBlacklistRepository);
         inOrder.verify(jwtTokenProvider).getAuthentication("access-token");
         inOrder.verify(accessTokenBlacklistRepository).exists("access-token");
+        verify(refreshTokenRepository, never()).existsByMemberIdAndSessionId(any(), any());
+        verify(authenticationEntryPoint).commence(
+                eq(request),
+                eq(response),
+                any(BadCredentialsException.class)
+        );
+        verify(filterChain, never()).doFilter(any(), any());
+    }
+
+    @Test
+    void inactiveSessionReturnsInvalidTokenApiResponse() throws Exception {
+        JwtAuthenticationFilter filter = createFilter();
+        MockHttpServletRequest request = protectedRequest("access-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        given(jwtTokenProvider.getAuthentication("access-token")).willReturn(authentication);
+        given(accessTokenBlacklistRepository.exists("access-token")).willReturn(false);
+        given(jwtTokenProvider.getAccessTokenSession("access-token"))
+                .willReturn(new JwtTokenSession(1L, "session-id"));
+        given(refreshTokenRepository.existsByMemberIdAndSessionId(1L, "session-id")).willReturn(false);
+
+        filter.doFilter(request, response, filterChain);
+
         verify(authenticationEntryPoint).commence(
                 eq(request),
                 eq(response),
@@ -82,7 +109,8 @@ class JwtAuthenticationFilterTest {
         return new JwtAuthenticationFilter(
                 jwtTokenProvider,
                 authenticationEntryPoint,
-                accessTokenBlacklistRepository
+                accessTokenBlacklistRepository,
+                refreshTokenRepository
         );
     }
 

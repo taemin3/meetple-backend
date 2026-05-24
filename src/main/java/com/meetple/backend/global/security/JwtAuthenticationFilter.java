@@ -1,6 +1,7 @@
 package com.meetple.backend.global.security;
 
 import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
+import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.global.response.ErrorStatus;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -26,17 +27,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final AccessTokenBlacklistRepository accessTokenBlacklistRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final List<RequestMatcher> permitAllRequestMatchers;
 
     public JwtAuthenticationFilter(
             JwtTokenProvider jwtTokenProvider,
             JwtAuthenticationEntryPoint authenticationEntryPoint,
             AccessTokenBlacklistRepository accessTokenBlacklistRepository,
+            RefreshTokenRepository refreshTokenRepository,
             String... permitAllPatterns
     ) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessTokenBlacklistRepository = accessTokenBlacklistRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
         this.permitAllRequestMatchers = Arrays.stream(permitAllPatterns)
                 .map(PathPatternRequestMatcher::pathPattern)
                 .map(RequestMatcher.class::cast)
@@ -66,6 +70,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             Authentication authentication = jwtTokenProvider.getAuthentication(token);
             if (accessTokenBlacklistRepository.exists(token)) {
                 throw new IllegalArgumentException("Blacklisted access token.");
+            }
+            JwtTokenSession tokenSession = jwtTokenProvider.getAccessTokenSession(token);
+            if (!refreshTokenRepository.existsByMemberIdAndSessionId(
+                    tokenSession.memberId(),
+                    tokenSession.sessionId()
+            )) {
+                throw new IllegalArgumentException("Inactive access token session.");
             }
             SecurityContextHolder.getContext().setAuthentication(authentication);
         } catch (JwtException | IllegalArgumentException e) {

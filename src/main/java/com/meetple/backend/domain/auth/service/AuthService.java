@@ -115,6 +115,13 @@ public class AuthService {
         );
     }
 
+    public void logoutAll(String authorizationHeader) {
+        String accessToken = resolveAccessToken(authorizationHeader);
+        JwtTokenSession accessTokenSession = parseAccessTokenSession(accessToken);
+
+        refreshTokenRepository.deleteAllByMemberId(accessTokenSession.memberId());
+    }
+
     private Member saveMember(Member member) {
         try {
             return memberRepository.saveAndFlush(member);

@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
+import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.global.response.ErrorStatus;
 import java.time.Duration;
@@ -38,6 +39,9 @@ class SecurityConfigTest {
     @Autowired
     private AccessTokenBlacklistRepository accessTokenBlacklistRepository;
 
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
     private String accessToken;
 
     @BeforeEach
@@ -45,6 +49,12 @@ class SecurityConfigTest {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
         ReflectionTestUtils.setField(member, "id", MEMBER_ID_SEQUENCE.getAndIncrement());
         accessToken = jwtTokenProvider.createAccessToken(member, "security-config-test-session");
+        refreshTokenRepository.save(
+                member.getId(),
+                "security-config-test-session",
+                "refresh-token",
+                Duration.ofMinutes(10)
+        );
     }
 
     @Test
