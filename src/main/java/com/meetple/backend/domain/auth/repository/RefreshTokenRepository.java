@@ -13,20 +13,20 @@ public class RefreshTokenRepository {
 
     private final StringRedisTemplate stringRedisTemplate;
 
-    public void save(Long memberId, String refreshToken, Duration ttl) {
-        stringRedisTemplate.opsForValue().set(createKey(memberId), TokenHashUtil.sha256(refreshToken), ttl);
+    public void save(Long memberId, String sessionId, String refreshToken, Duration ttl) {
+        stringRedisTemplate.opsForValue().set(createKey(memberId, sessionId), TokenHashUtil.sha256(refreshToken), ttl);
     }
 
-    public boolean matches(Long memberId, String refreshToken) {
-        String savedRefreshTokenHash = stringRedisTemplate.opsForValue().get(createKey(memberId));
+    public boolean matches(Long memberId, String sessionId, String refreshToken) {
+        String savedRefreshTokenHash = stringRedisTemplate.opsForValue().get(createKey(memberId, sessionId));
         return TokenHashUtil.sha256(refreshToken).equals(savedRefreshTokenHash);
     }
 
-    public void deleteByMemberId(Long memberId) {
-        stringRedisTemplate.delete(createKey(memberId));
+    public void deleteByMemberIdAndSessionId(Long memberId, String sessionId) {
+        stringRedisTemplate.delete(createKey(memberId, sessionId));
     }
 
-    private String createKey(Long memberId) {
-        return KEY_PREFIX + memberId;
+    private String createKey(Long memberId, String sessionId) {
+        return KEY_PREFIX + memberId + ":" + sessionId;
     }
 }

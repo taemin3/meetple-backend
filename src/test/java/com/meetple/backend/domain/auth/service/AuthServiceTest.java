@@ -3,6 +3,8 @@ package com.meetple.backend.domain.auth.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
@@ -24,6 +26,7 @@ import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.UnauthorizedException;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.security.JwtTokenProvider;
+import com.meetple.backend.global.security.JwtTokenSession;
 import java.time.Duration;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -122,19 +125,27 @@ class AuthServiceTest {
         ReflectionTestUtils.setField(member, "id", 1L);
         given(memberRepository.findByEmail(request.email())).willReturn(Optional.of(member));
         given(passwordEncoder.matches(request.password(), member.getPassword())).willReturn(true);
-        given(jwtTokenProvider.createAccessToken(member)).willReturn("access-token");
-        given(jwtTokenProvider.createRefreshToken(member)).willReturn("refresh-token");
+        given(jwtTokenProvider.createAccessToken(eq(member), anyString())).willReturn("access-token");
+        given(jwtTokenProvider.createRefreshToken(eq(member), anyString())).willReturn("refresh-token");
         given(jwtTokenProvider.getAccessTokenExpirationSeconds()).willReturn(3600L);
         given(jwtTokenProvider.getRefreshTokenExpirationSeconds()).willReturn(1209600L);
 
         LoginResponse response = authService.login(request);
 
+        ArgumentCaptor<String> sessionIdCaptor = ArgumentCaptor.forClass(String.class);
+        verify(jwtTokenProvider).createAccessToken(eq(member), sessionIdCaptor.capture());
+        verify(jwtTokenProvider).createRefreshToken(eq(member), eq(sessionIdCaptor.getValue()));
         assertThat(response.accessToken()).isEqualTo("access-token");
         assertThat(response.refreshToken()).isEqualTo("refresh-token");
         assertThat(response.tokenType()).isEqualTo("Bearer");
         assertThat(response.accessTokenExpiresIn()).isEqualTo(3600L);
         assertThat(response.refreshTokenExpiresIn()).isEqualTo(1209600L);
-        verify(refreshTokenRepository).save(1L, "refresh-token", Duration.ofSeconds(1209600L));
+        verify(refreshTokenRepository).save(
+                1L,
+                sessionIdCaptor.getValue(),
+                "refresh-token",
+                Duration.ofSeconds(1209600L)
+        );
     }
 
     @Test
@@ -142,11 +153,12 @@ class AuthServiceTest {
         ReissueRequest request = new ReissueRequest("old-refresh-token");
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
         ReflectionTestUtils.setField(member, "id", 1L);
-        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
-        given(refreshTokenRepository.matches(1L, request.refreshToken())).willReturn(true);
+        JwtTokenSession tokenSession = new JwtTokenSession(1L, "session-id");
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken())).willReturn(tokenSession);
+        given(refreshTokenRepository.matches(1L, "session-id", request.refreshToken())).willReturn(true);
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
-        given(jwtTokenProvider.createAccessToken(member)).willReturn("new-access-token");
-        given(jwtTokenProvider.createRefreshToken(member)).willReturn("new-refresh-token");
+        given(jwtTokenProvider.createAccessToken(member, "session-id")).willReturn("new-access-token");
+        given(jwtTokenProvider.createRefreshToken(member, "session-id")).willReturn("new-refresh-token");
         given(jwtTokenProvider.getAccessTokenExpirationSeconds()).willReturn(3600L);
         given(jwtTokenProvider.getRefreshTokenExpirationSeconds()).willReturn(1209600L);
 
@@ -154,14 +166,15 @@ class AuthServiceTest {
 
         assertThat(response.accessToken()).isEqualTo("new-access-token");
         assertThat(response.refreshToken()).isEqualTo("new-refresh-token");
-        verify(refreshTokenRepository).save(1L, "new-refresh-token", Duration.ofSeconds(1209600L));
+        verify(refreshTokenRepository).save(1L, "session-id", "new-refresh-token", Duration.ofSeconds(1209600L));
     }
 
     @Test
     void reissueRejectsMismatchedStoredRefreshToken() {
         ReissueRequest request = new ReissueRequest("request-refresh-token");
-        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
-        given(refreshTokenRepository.matches(1L, request.refreshToken())).willReturn(false);
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken()))
+                .willReturn(new JwtTokenSession(1L, "session-id"));
+        given(refreshTokenRepository.matches(1L, "session-id", request.refreshToken())).willReturn(false);
 
         assertThatThrownBy(() -> authService.reissue(request))
                 .isInstanceOf(UnauthorizedException.class)
@@ -173,7 +186,7 @@ class AuthServiceTest {
     @Test
     void reissueRejectsInvalidRefreshToken() {
         ReissueRequest request = new ReissueRequest("invalid-refresh-token");
-        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken()))
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken()))
                 .willThrow(new IllegalArgumentException("invalid"));
 
         assertThatThrownBy(() -> authService.reissue(request))
@@ -184,9 +197,10 @@ class AuthServiceTest {
     @Test
     void logoutDeletesStoredRefreshToken() {
         LogoutRequest request = new LogoutRequest("refresh-token");
-        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
-        given(jwtTokenProvider.getAccessTokenMemberId("access-token")).willReturn(1L);
-        given(refreshTokenRepository.matches(1L, request.refreshToken())).willReturn(true);
+        JwtTokenSession tokenSession = new JwtTokenSession(1L, "session-id");
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken())).willReturn(tokenSession);
+        given(jwtTokenProvider.getAccessTokenSession("access-token")).willReturn(tokenSession);
+        given(refreshTokenRepository.matches(1L, "session-id", request.refreshToken())).willReturn(true);
         given(jwtTokenProvider.getAccessTokenRemainingExpiration("access-token"))
                 .willReturn(Duration.ofMinutes(10));
 
@@ -194,15 +208,16 @@ class AuthServiceTest {
 
         InOrder inOrder = inOrder(accessTokenBlacklistRepository, refreshTokenRepository);
         inOrder.verify(accessTokenBlacklistRepository).save("access-token", Duration.ofMinutes(10));
-        inOrder.verify(refreshTokenRepository).deleteByMemberId(1L);
+        inOrder.verify(refreshTokenRepository).deleteByMemberIdAndSessionId(1L, "session-id");
     }
 
     @Test
     void logoutKeepsRefreshTokenWhenAccessTokenBlacklistSaveFails() {
         LogoutRequest request = new LogoutRequest("refresh-token");
-        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
-        given(jwtTokenProvider.getAccessTokenMemberId("access-token")).willReturn(1L);
-        given(refreshTokenRepository.matches(1L, request.refreshToken())).willReturn(true);
+        JwtTokenSession tokenSession = new JwtTokenSession(1L, "session-id");
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken())).willReturn(tokenSession);
+        given(jwtTokenProvider.getAccessTokenSession("access-token")).willReturn(tokenSession);
+        given(refreshTokenRepository.matches(1L, "session-id", request.refreshToken())).willReturn(true);
         given(jwtTokenProvider.getAccessTokenRemainingExpiration("access-token"))
                 .willReturn(Duration.ofMinutes(10));
         doThrow(new IllegalStateException("redis timeout"))
@@ -212,33 +227,52 @@ class AuthServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("redis timeout");
 
-        verify(refreshTokenRepository, never()).deleteByMemberId(any());
+        verify(refreshTokenRepository, never()).deleteByMemberIdAndSessionId(any(), anyString());
     }
 
     @Test
     void logoutRejectsMismatchedAccessTokenMember() {
         LogoutRequest request = new LogoutRequest("refresh-token");
-        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
-        given(jwtTokenProvider.getAccessTokenMemberId("access-token")).willReturn(2L);
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken()))
+                .willReturn(new JwtTokenSession(1L, "session-id"));
+        given(jwtTokenProvider.getAccessTokenSession("access-token"))
+                .willReturn(new JwtTokenSession(2L, "session-id"));
 
         assertThatThrownBy(() -> authService.logout(request, "Bearer access-token"))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("유효하지 않은 access token입니다.");
 
-        verify(refreshTokenRepository, never()).deleteByMemberId(any());
+        verify(refreshTokenRepository, never()).deleteByMemberIdAndSessionId(any(), anyString());
+        verify(accessTokenBlacklistRepository, never()).save(any(), any());
+    }
+
+    @Test
+    void logoutRejectsMismatchedAccessTokenSession() {
+        LogoutRequest request = new LogoutRequest("refresh-token");
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken()))
+                .willReturn(new JwtTokenSession(1L, "refresh-session-id"));
+        given(jwtTokenProvider.getAccessTokenSession("access-token"))
+                .willReturn(new JwtTokenSession(1L, "access-session-id"));
+
+        assertThatThrownBy(() -> authService.logout(request, "Bearer access-token"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("유효하지 않은 access token입니다.");
+
+        verify(refreshTokenRepository, never()).deleteByMemberIdAndSessionId(any(), anyString());
         verify(accessTokenBlacklistRepository, never()).save(any(), any());
     }
 
     @Test
     void logoutRejectsMalformedAuthorizationHeader() {
         LogoutRequest request = new LogoutRequest("refresh-token");
-        given(jwtTokenProvider.getRefreshTokenMemberId(request.refreshToken())).willReturn(1L);
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken()))
+                .willReturn(new JwtTokenSession(1L, "session-id"));
 
         assertThatThrownBy(() -> authService.logout(request, "access-token"))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("유효하지 않은 access token입니다.");
 
-        verify(refreshTokenRepository, never()).deleteByMemberId(any());
+        verify(refreshTokenRepository, never()).deleteByMemberIdAndSessionId(any(), anyString());
         verify(accessTokenBlacklistRepository, never()).save(any(), any());
     }
 

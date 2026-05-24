@@ -30,10 +30,10 @@ class RefreshTokenRepositoryTest {
         RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
         given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
 
-        repository.save(1L, "refresh-token", Duration.ofDays(14));
+        repository.save(1L, "session-id", "refresh-token", Duration.ofDays(14));
 
         String hashedRefreshToken = sha256("refresh-token");
-        verify(valueOperations).set("refresh:1", hashedRefreshToken, Duration.ofDays(14));
+        verify(valueOperations).set("refresh:1:session-id", hashedRefreshToken, Duration.ofDays(14));
         assertThat(hashedRefreshToken).doesNotContain("refresh-token");
     }
 
@@ -41,9 +41,9 @@ class RefreshTokenRepositoryTest {
     void matchesReturnsTrueWhenStoredHashMatchesRefreshToken() {
         RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
         given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
-        given(valueOperations.get("refresh:1")).willReturn(sha256("refresh-token"));
+        given(valueOperations.get("refresh:1:session-id")).willReturn(sha256("refresh-token"));
 
-        boolean matches = repository.matches(1L, "refresh-token");
+        boolean matches = repository.matches(1L, "session-id", "refresh-token");
 
         assertThat(matches).isTrue();
     }
@@ -52,9 +52,9 @@ class RefreshTokenRepositoryTest {
     void matchesReturnsFalseWhenStoredHashDoesNotMatchRefreshToken() {
         RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
         given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
-        given(valueOperations.get("refresh:1")).willReturn(sha256("another-refresh-token"));
+        given(valueOperations.get("refresh:1:session-id")).willReturn(sha256("another-refresh-token"));
 
-        boolean matches = repository.matches(1L, "refresh-token");
+        boolean matches = repository.matches(1L, "session-id", "refresh-token");
 
         assertThat(matches).isFalse();
     }
@@ -64,18 +64,18 @@ class RefreshTokenRepositoryTest {
         RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
         given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
 
-        boolean matches = repository.matches(1L, "refresh-token");
+        boolean matches = repository.matches(1L, "session-id", "refresh-token");
 
         assertThat(matches).isFalse();
     }
 
     @Test
-    void deleteByMemberIdDeletesRefreshTokenKey() {
+    void deleteByMemberIdAndSessionIdDeletesRefreshTokenKey() {
         RefreshTokenRepository repository = new RefreshTokenRepository(stringRedisTemplate);
 
-        repository.deleteByMemberId(1L);
+        repository.deleteByMemberIdAndSessionId(1L, "session-id");
 
-        verify(stringRedisTemplate).delete("refresh:1");
+        verify(stringRedisTemplate).delete("refresh:1:session-id");
     }
 
     private String sha256(String value) {

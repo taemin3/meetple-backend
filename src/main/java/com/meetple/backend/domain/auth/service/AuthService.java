@@ -15,15 +15,17 @@ import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.UnauthorizedException;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.security.JwtTokenProvider;
+import com.meetple.backend.global.security.JwtTokenSession;
 import io.jsonwebtoken.JwtException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -72,28 +74,34 @@ public class AuthService {
 
     @Transactional
     public LoginResponse reissue(ReissueRequest request) {
-        Long memberId = parseRefreshTokenMemberId(request.refreshToken());
+        JwtTokenSession refreshTokenSession = parseRefreshTokenSession(request.refreshToken());
+        Long memberId = refreshTokenSession.memberId();
+        String sessionId = refreshTokenSession.sessionId();
 
-        if (!refreshTokenRepository.matches(memberId, request.refreshToken())) {
+        if (!refreshTokenRepository.matches(memberId, sessionId, request.refreshToken())) {
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE));
 
-        return issueTokens(member);
+        return issueTokens(member, sessionId);
     }
 
     public void logout(LogoutRequest request, String authorizationHeader) {
-        Long memberId = parseRefreshTokenMemberId(request.refreshToken());
+        JwtTokenSession refreshTokenSession = parseRefreshTokenSession(request.refreshToken());
         String accessToken = resolveAccessToken(authorizationHeader);
-        Long accessTokenMemberId = parseAccessTokenMemberId(accessToken);
+        JwtTokenSession accessTokenSession = parseAccessTokenSession(accessToken);
 
-        if (!memberId.equals(accessTokenMemberId)) {
+        if (!refreshTokenSession.equals(accessTokenSession)) {
             throw new UnauthorizedException(INVALID_ACCESS_TOKEN_MESSAGE);
         }
 
-        if (!refreshTokenRepository.matches(memberId, request.refreshToken())) {
+        if (!refreshTokenRepository.matches(
+                refreshTokenSession.memberId(),
+                refreshTokenSession.sessionId(),
+                request.refreshToken()
+        )) {
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
@@ -101,7 +109,10 @@ public class AuthService {
                 accessToken,
                 jwtTokenProvider.getAccessTokenRemainingExpiration(accessToken)
         );
-        refreshTokenRepository.deleteByMemberId(memberId);
+        refreshTokenRepository.deleteByMemberIdAndSessionId(
+                refreshTokenSession.memberId(),
+                refreshTokenSession.sessionId()
+        );
     }
 
     private Member saveMember(Member member) {
@@ -119,12 +130,17 @@ public class AuthService {
     }
 
     private LoginResponse issueTokens(Member member) {
-        String accessToken = jwtTokenProvider.createAccessToken(member);
-        String refreshToken = jwtTokenProvider.createRefreshToken(member);
+        return issueTokens(member, UUID.randomUUID().toString());
+    }
+
+    private LoginResponse issueTokens(Member member, String sessionId) {
+        String accessToken = jwtTokenProvider.createAccessToken(member, sessionId);
+        String refreshToken = jwtTokenProvider.createRefreshToken(member, sessionId);
         long refreshTokenExpirationSeconds = jwtTokenProvider.getRefreshTokenExpirationSeconds();
 
         refreshTokenRepository.save(
                 member.getId(),
+                sessionId,
                 refreshToken,
                 Duration.ofSeconds(refreshTokenExpirationSeconds)
         );
@@ -137,17 +153,17 @@ public class AuthService {
         );
     }
 
-    private Long parseRefreshTokenMemberId(String refreshToken) {
+    private JwtTokenSession parseRefreshTokenSession(String refreshToken) {
         try {
-            return jwtTokenProvider.getRefreshTokenMemberId(refreshToken);
+            return jwtTokenProvider.getRefreshTokenSession(refreshToken);
         } catch (JwtException | IllegalArgumentException e) {
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
     }
 
-    private Long parseAccessTokenMemberId(String accessToken) {
+    private JwtTokenSession parseAccessTokenSession(String accessToken) {
         try {
-            return jwtTokenProvider.getAccessTokenMemberId(accessToken);
+            return jwtTokenProvider.getAccessTokenSession(accessToken);
         } catch (JwtException | IllegalArgumentException e) {
             throw new UnauthorizedException(INVALID_ACCESS_TOKEN_MESSAGE);
         }
