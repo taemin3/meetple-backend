@@ -38,7 +38,7 @@ class MemberControllerTest {
 
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
         Member savedMember = memberRepository.save(member);
-        accessToken = jwtTokenProvider.createAccessToken(savedMember);
+        accessToken = jwtTokenProvider.createAccessToken(savedMember, "member-controller-test-session");
     }
 
     @Test
