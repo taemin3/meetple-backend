@@ -24,22 +24,9 @@ public class RefreshTokenRepository {
             local refreshKeyPrefix = ARGV[1]
             local sessionIds = redis.call('SMEMBERS', KEYS[1])
             local keysToDelete = {}
-            local seen = {}
 
             for _, sessionId in ipairs(sessionIds) do
-                local key = refreshKeyPrefix .. sessionId
-                if seen[key] == nil then
-                    table.insert(keysToDelete, key)
-                    seen[key] = true
-                end
-            end
-
-            local refreshKeys = redis.call('KEYS', refreshKeyPrefix .. '*')
-            for _, key in ipairs(refreshKeys) do
-                if seen[key] == nil then
-                    table.insert(keysToDelete, key)
-                    seen[key] = true
-                end
+                table.insert(keysToDelete, refreshKeyPrefix .. sessionId)
             end
 
             table.insert(keysToDelete, KEYS[1])
