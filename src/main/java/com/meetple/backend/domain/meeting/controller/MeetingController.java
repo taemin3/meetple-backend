@@ -4,7 +4,6 @@ import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
-import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.service.MeetingService;
 import com.meetple.backend.global.config.OpenApiConfig;
 import com.meetple.backend.global.response.ApiResponse;
@@ -57,7 +56,7 @@ public class MeetingController {
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
     @Operation(summary = "모임 목록 조회", description = "상태 조건을 선택적으로 적용해 모임 목록을 조회합니다.")
     public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> getMeetings(
-            @RequestParam(required = false) MeetingStatus status,
+            @RequestParam(required = false) String status,
             @PageableDefault(size = 20, sort = "meetingDate", direction = Sort.Direction.ASC) Pageable pageable
     ) {
         return ApiResponse.success(SuccessStatus.OK, meetingService.getMeetings(status, pageable));

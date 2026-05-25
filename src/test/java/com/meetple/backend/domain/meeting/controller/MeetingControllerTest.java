@@ -18,6 +18,7 @@ import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.service.MeetingService;
 import com.meetple.backend.domain.member.entity.MemberRole;
+import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.GlobalExceptionHandler;
 import com.meetple.backend.global.response.PageResponse;
 import com.meetple.backend.global.response.SuccessStatus;
@@ -84,7 +85,7 @@ class MeetingControllerTest {
 
     @Test
     void getMeetingsReturnsPagedApiResponse() throws Exception {
-        given(meetingService.getMeetings(eq(MeetingStatus.RECRUITING), any()))
+        given(meetingService.getMeetings(eq("RECRUITING"), any()))
                 .willReturn(PageResponse.from(new org.springframework.data.domain.PageImpl<>(
                         List.of(meetingResponse()),
                         PageRequest.of(0, 20),
@@ -99,6 +100,18 @@ class MeetingControllerTest {
                 .andExpect(jsonPath("$.code").value(SuccessStatus.OK.getCode()))
                 .andExpect(jsonPath("$.data.content[0].id").value(10))
                 .andExpect(jsonPath("$.data.totalElements").value(1));
+    }
+
+    @Test
+    void getMeetingsReturnsBadRequestForInvalidStatus() throws Exception {
+        given(meetingService.getMeetings(eq("OPEN"), any()))
+                .willThrow(new BadRequestException("지원하지 않는 모임 상태입니다."));
+
+        mockMvc.perform(get("/api/v1/meetings")
+                        .param("status", "OPEN"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("지원하지 않는 모임 상태입니다."));
     }
 
     @Test

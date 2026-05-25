@@ -3,6 +3,9 @@ package com.meetple.backend.domain.meeting.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
 
 import com.meetple.backend.domain.category.entity.Category;
@@ -16,6 +19,7 @@ import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.response.PageResponse;
 import java.math.BigDecimal;
@@ -29,6 +33,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -103,21 +108,20 @@ class MeetingServiceTest {
                 new BigDecimal("37.521900"),
                 new BigDecimal("126.924500")
         );
-        Meeting farAway = meeting(
-                11L,
-                member(2L, "far@meetple.com", "far"),
-                category,
-                new BigDecimal("37.700000"),
-                new BigDecimal("127.100000")
-        );
-        given(meetingRepository.findByStatusAndCoordinateBounds(
+        given(meetingRepository.findNearbyMeetings(
                 any(),
                 any(),
                 any(),
                 any(),
                 any(),
+                anyBoolean(),
+                any(),
+                anyDouble(),
+                anyDouble(),
+                anyInt(),
+                anyDouble(),
                 any()
-        )).willReturn(List.of(nearby, farAway));
+        )).willReturn(new PageImpl<>(List.of(nearby), PageRequest.of(0, 20), 1));
 
         PageResponse<MeetingResponse> response = meetingService.getNearbyMeetings(
                 new NearbyMeetingSearchRequest(37.5219, 126.9245, 1000, "exercise"),
@@ -136,7 +140,7 @@ class MeetingServiceTest {
                 .willReturn(new PageImpl<>(List.of(meeting), PageRequest.of(0, 10), 1));
 
         PageResponse<MeetingResponse> response = meetingService.getMeetings(
-                MeetingStatus.RECRUITING,
+                "RECRUITING",
                 PageRequest.of(0, 10)
         );
 
@@ -145,6 +149,23 @@ class MeetingServiceTest {
         assertThat(response.totalElements()).isEqualTo(1);
         assertThat(response.content()).extracting(MeetingResponse::title)
                 .containsExactly("Weekend running");
+    }
+
+    @Test
+    void getMeetingsRejectsInvalidStatus() {
+        assertThatThrownBy(() -> meetingService.getMeetings("OPEN", PageRequest.of(0, 10)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("지원하지 않는 모임 상태입니다.");
+    }
+
+    @Test
+    void getMeetingsRejectsInvalidSortProperty() {
+        assertThatThrownBy(() -> meetingService.getMeetings(
+                "RECRUITING",
+                PageRequest.of(0, 10, Sort.by("unknown"))
+        ))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("지원하지 않는 정렬 조건입니다.");
     }
 
     private CreateMeetingRequest createRequest() {

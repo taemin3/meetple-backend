@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 
 @DataJpaTest
@@ -84,6 +86,50 @@ class MeetingRepositoryTest {
     }
 
     @Test
+    void findNearbyMeetingsFiltersByDistanceAndAppliesPaging() {
+        Member host = memberRepository.save(Member.createUser(
+                "nearby-host@meetple.com",
+                "encoded-password",
+                "host",
+                "Seoul"
+        ));
+        Category category = categoryRepository.save(Category.create("exercise"));
+        Meeting nearby = meetingRepository.save(createMeeting(
+                host,
+                category,
+                "Nearby running",
+                new BigDecimal("37.521900"),
+                new BigDecimal("126.924500")
+        ));
+        meetingRepository.save(createMeeting(
+                host,
+                category,
+                "Far running",
+                new BigDecimal("37.540000"),
+                new BigDecimal("126.924500")
+        ));
+
+        Page<Meeting> result = meetingRepository.findNearbyMeetings(
+                MeetingStatus.RECRUITING.name(),
+                new BigDecimal("37.500000"),
+                new BigDecimal("37.550000"),
+                new BigDecimal("126.900000"),
+                new BigDecimal("126.950000"),
+                false,
+                "exercise",
+                37.5219,
+                126.9245,
+                1000,
+                6371000.0,
+                PageRequest.of(0, 1)
+        );
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent()).extracting(Meeting::getId)
+                .containsExactly(nearby.getId());
+    }
+
+    @Test
     void participationStatusTransitions() {
         Member host = memberRepository.save(Member.createUser(
                 "host@meetple.com",
@@ -123,6 +169,28 @@ class MeetingRepositoryTest {
                 "서울 영등포구 여의동로 330",
                 new BigDecimal("37.521900"),
                 new BigDecimal("126.924500"),
+                10,
+                LocalDateTime.now().plusDays(7),
+                null
+        );
+    }
+
+    private Meeting createMeeting(
+            Member host,
+            Category category,
+            String title,
+            BigDecimal latitude,
+            BigDecimal longitude
+    ) {
+        return Meeting.create(
+                host,
+                category,
+                title,
+                "Run together at an easy pace.",
+                "Yeouido Park",
+                "330 Yeouidong-ro, Yeongdeungpo-gu, Seoul",
+                latitude,
+                longitude,
                 10,
                 LocalDateTime.now().plusDays(7),
                 null

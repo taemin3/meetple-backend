@@ -17,12 +17,13 @@ import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -38,8 +39,20 @@ public class MeetingService {
     private static final String MEETING_FORBIDDEN_MESSAGE = "Only the host can change this meeting.";
     private static final String CLOSED_MEETING_MESSAGE = "Closed meetings cannot be changed.";
     private static final String CAPACITY_TOO_SMALL_MESSAGE = "Capacity cannot be less than current people.";
+    private static final String INVALID_MEETING_STATUS_MESSAGE = "지원하지 않는 모임 상태입니다.";
+    private static final String INVALID_SORT_PROPERTY_MESSAGE = "지원하지 않는 정렬 조건입니다.";
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
     private static final double METERS_PER_LATITUDE_DEGREE = 111_320.0;
+    private static final Set<String> ALLOWED_SORT_PROPERTIES = Set.of(
+            "id",
+            "title",
+            "meetingDate",
+            "currentPeople",
+            "maxPeople",
+            "status",
+            "createdAt",
+            "updatedAt"
+    );
 
     private final MeetingRepository meetingRepository;
     private final MemberRepository memberRepository;
@@ -67,10 +80,13 @@ public class MeetingService {
         return MeetingResponse.from(meetingRepository.save(meeting));
     }
 
-    public PageResponse<MeetingResponse> getMeetings(MeetingStatus status, Pageable pageable) {
-        Page<MeetingResponse> meetings = (status == null
+    public PageResponse<MeetingResponse> getMeetings(String status, Pageable pageable) {
+        validateSort(pageable);
+        MeetingStatus meetingStatus = parseStatus(status);
+
+        Page<MeetingResponse> meetings = (meetingStatus == null
                 ? meetingRepository.findAll(pageable)
-                : meetingRepository.findByStatus(status, pageable))
+                : meetingRepository.findByStatus(meetingStatus, pageable))
                 .map(MeetingResponse::from);
 
         return PageResponse.from(meetings);
@@ -83,35 +99,21 @@ public class MeetingService {
                 request.radiusMeters()
         );
 
-        List<NearbyMeeting> nearbyMeetings = meetingRepository.findByStatusAndCoordinateBounds(
-                        MeetingStatus.RECRUITING,
+        Page<MeetingResponse> page = meetingRepository.findNearbyMeetings(
+                        MeetingStatus.RECRUITING.name(),
                         bounds.minLatitude(),
                         bounds.maxLatitude(),
                         bounds.minLongitude(),
                         bounds.maxLongitude(),
-                        normalizeOptionalText(request.category())
+                        bounds.crossesAntimeridian(),
+                        normalizeOptionalText(request.category()),
+                        request.latitude(),
+                        request.longitude(),
+                        request.radiusMeters(),
+                        EARTH_RADIUS_METERS,
+                        withoutSort(pageable)
                 )
-                .stream()
-                .map(meeting -> new NearbyMeeting(
-                        meeting,
-                        calculateDistanceMeters(
-                                request.latitude(),
-                                request.longitude(),
-                                meeting.getLatitude().doubleValue(),
-                                meeting.getLongitude().doubleValue()
-                        )
-                ))
-                .filter(nearbyMeeting -> nearbyMeeting.distanceMeters() <= request.radiusMeters())
-                .sorted(Comparator.comparingDouble(NearbyMeeting::distanceMeters))
-                .toList();
-
-        Page<MeetingResponse> page = toPage(
-                nearbyMeetings.stream()
-                        .map(NearbyMeeting::meeting)
-                        .map(MeetingResponse::from)
-                        .toList(),
-                pageable
-        );
+                .map(MeetingResponse::from);
         return PageResponse.from(page);
     }
 
@@ -219,6 +221,33 @@ public class MeetingService {
         return value == null ? currentValue : value;
     }
 
+    private MeetingStatus parseStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            return null;
+        }
+
+        try {
+            return MeetingStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException(INVALID_MEETING_STATUS_MESSAGE);
+        }
+    }
+
+    private void validateSort(Pageable pageable) {
+        for (Sort.Order order : pageable.getSort()) {
+            if (!ALLOWED_SORT_PROPERTIES.contains(order.getProperty())) {
+                throw new BadRequestException(INVALID_SORT_PROPERTY_MESSAGE);
+            }
+        }
+    }
+
+    private Pageable withoutSort(Pageable pageable) {
+        if (pageable.isUnpaged()) {
+            return pageable;
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+    }
+
     private String normalizeOptionalText(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
     }
@@ -227,43 +256,12 @@ public class MeetingService {
         return BigDecimal.valueOf(value);
     }
 
-    private Page<MeetingResponse> toPage(List<MeetingResponse> meetings, Pageable pageable) {
-        if (pageable.isUnpaged()) {
-            return new PageImpl<>(meetings);
-        }
-
-        int start = (int) Math.min(pageable.getOffset(), meetings.size());
-        int end = Math.min(start + pageable.getPageSize(), meetings.size());
-        return new PageImpl<>(meetings.subList(start, end), pageable, meetings.size());
-    }
-
-    private double calculateDistanceMeters(
-            double latitude,
-            double longitude,
-            double targetLatitude,
-            double targetLongitude
-    ) {
-        double latitudeDistance = Math.toRadians(targetLatitude - latitude);
-        double longitudeDistance = Math.toRadians(targetLongitude - longitude);
-        double originLatitude = Math.toRadians(latitude);
-        double destinationLatitude = Math.toRadians(targetLatitude);
-
-        double a = Math.pow(Math.sin(latitudeDistance / 2), 2)
-                + Math.cos(originLatitude)
-                * Math.cos(destinationLatitude)
-                * Math.pow(Math.sin(longitudeDistance / 2), 2);
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return EARTH_RADIUS_METERS * c;
-    }
-
-    private record NearbyMeeting(Meeting meeting, double distanceMeters) {
-    }
-
     private record CoordinateBounds(
             BigDecimal minLatitude,
             BigDecimal maxLatitude,
             BigDecimal minLongitude,
-            BigDecimal maxLongitude
+            BigDecimal maxLongitude,
+            boolean crossesAntimeridian
     ) {
 
         private static CoordinateBounds from(double latitude, double longitude, int radiusMeters) {
@@ -272,13 +270,26 @@ public class MeetingService {
             double longitudeDelta = Math.abs(longitudeScale) < 0.000001
                     ? 180.0
                     : radiusMeters / (METERS_PER_LATITUDE_DEGREE * longitudeScale);
+            double rawMinLongitude = longitude - Math.abs(longitudeDelta);
+            double rawMaxLongitude = longitude + Math.abs(longitudeDelta);
+            boolean crossesAntimeridian = rawMinLongitude < -180.0 || rawMaxLongitude > 180.0;
 
             return new CoordinateBounds(
                     BigDecimal.valueOf(Math.max(-90.0, latitude - latitudeDelta)),
                     BigDecimal.valueOf(Math.min(90.0, latitude + latitudeDelta)),
-                    BigDecimal.valueOf(Math.max(-180.0, longitude - Math.abs(longitudeDelta))),
-                    BigDecimal.valueOf(Math.min(180.0, longitude + Math.abs(longitudeDelta)))
+                    BigDecimal.valueOf(crossesAntimeridian
+                            ? normalizeLongitude(rawMinLongitude)
+                            : Math.max(-180.0, rawMinLongitude)),
+                    BigDecimal.valueOf(crossesAntimeridian
+                            ? normalizeLongitude(rawMaxLongitude)
+                            : Math.min(180.0, rawMaxLongitude)),
+                    crossesAntimeridian
             );
+        }
+
+        private static double normalizeLongitude(double longitude) {
+            double normalized = ((longitude + 180.0) % 360.0 + 360.0) % 360.0 - 180.0;
+            return normalized == -180.0 ? 180.0 : normalized;
         }
     }
 }
