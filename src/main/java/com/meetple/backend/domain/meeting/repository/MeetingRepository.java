@@ -2,12 +2,15 @@ package com.meetple.backend.domain.meeting.repository;
 
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
+import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -21,6 +24,11 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
 
     @EntityGraph(attributePaths = {"host", "category"})
     Page<Meeting> findByStatus(MeetingStatus status, Pageable pageable);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"host"})
+    @Query("select m from Meeting m where m.id = :meetingId")
+    Optional<Meeting> findByIdForUpdate(@Param("meetingId") Long meetingId);
 
     @Query(
             value = """

@@ -2,6 +2,12 @@
 
 이 문서는 Codex가 `meetple-backend` 저장소를 다시 열었을 때 바로 이어서 작업하기 위한 기준이다.
 
+## GitHub 저장소
+
+- 저장소: https://github.com/taemin3/meetple-backend
+- 이 프로젝트는 `C:\project\meetple\backend` 기준의 별도 Git 저장소이다.
+- 커밋, 브랜치 생성, pull, push는 반드시 `backend/` 폴더에서 실행한다.
+
 ## 프로젝트 개요
 
 `meetple-backend`는 운동, 스터디, 취미 모임 앱 meetple의 Spring Boot API 서버이다.
@@ -37,8 +43,6 @@
 - API path: `/api/v1/meetings`
 - 참여 신청 path: `/api/v1/meetings/{meetingId}/participations`
 
-Flutter 목업 쪽에는 아직 `meetup` 이름이 남아 있을 수 있지만, 백엔드에서는 새 코드에 `meetup`을 쓰지 않는다.
-
 ## 현재 주요 구조
 
 ```text
@@ -72,14 +76,8 @@ src/test/
 
 ## 환경변수와 보안
 
-- `.env`는 절대 커밋하지 않는다.
-- `.env.example`은 GitHub에 올려도 되지만, 실제 값은 비워둔다.
-- DB 비밀번호, 토큰, 개인 로컬 설정은 코드/문서/커밋 메시지에 남기지 않는다.
-- 로컬 Spring Boot는 `application.yml`의 `optional:file:.env[.properties]` 설정으로 `backend/.env`를 읽는다.
 - `application-local.yml`은 DB 계정/비밀번호를 환경변수에서만 읽는다.
 - `application-prod.yml`은 운영 환경변수를 반드시 주입받아야 한다.
-
-로컬 `.env` 예시는 사용자가 직접 관리한다. 실제 값이 필요하면 사용자에게 묻거나 현재 파일을 확인하되, 최종 답변에 비밀번호를 그대로 쓰지 않는다.
 
 ## Spring profile
 
@@ -266,16 +264,6 @@ Docker가 설치되어 있지 않거나 PATH에 없을 수 있다. 이 경우 Do
 - 응답 포맷은 `ApiResponse` 계약을 유지한다.
 - 새 API를 만들 때는 controller, request/response DTO, service, repository, test 순서로 작게 진행한다.
 - 대규모 리팩터링보다 도메인 단위의 작은 PR을 선호한다.
-
-## 다음 작업 우선순위
-
-1. `MemberService`와 회원가입 기본 흐름
-2. 비밀번호 암호화와 Spring Security/JWT 기반 인증
-3. `MeetingService`와 모임 생성 API
-4. 모임 목록/상세/주변 검색 API
-5. 참여 신청, 승인, 거절, 취소 API
-6. Refresh Token 저장 전략 결정
-7. WebSocket/Redis 채팅 확장
 
 ## PR Review Language
 
