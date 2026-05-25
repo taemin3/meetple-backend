@@ -144,6 +144,37 @@ public class Meeting extends BaseTimeEntity {
         this.status = MeetingStatus.CANCELED;
     }
 
+    public void update(
+            Category category,
+            String title,
+            String content,
+            String locationName,
+            String address,
+            BigDecimal latitude,
+            BigDecimal longitude,
+            Integer maxPeople,
+            LocalDateTime meetingDate
+    ) {
+        this.category = category;
+        this.title = title;
+        this.content = content;
+        this.locationName = locationName;
+        this.address = address;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.maxPeople = maxPeople;
+        this.meetingDate = meetingDate;
+        updateRecruitmentStatusByCapacity();
+    }
+
+    public boolean isHostedBy(Long memberId) {
+        return this.host.getId().equals(memberId);
+    }
+
+    public boolean isClosed() {
+        return this.status == MeetingStatus.COMPLETED || this.status == MeetingStatus.CANCELED;
+    }
+
     public void increaseCurrentPeople() {
         if (this.currentPeople < this.maxPeople) {
             this.currentPeople++;
