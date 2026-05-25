@@ -95,7 +95,7 @@ class MeetingServiceTest {
 
         assertThatThrownBy(() -> meetingService.updateMeeting(2L, 10L, request))
                 .isInstanceOf(ForbiddenException.class)
-                .hasMessage("Only the host can change this meeting.");
+                .hasMessage("모임 변경은 주최자만 할 수 있습니다.");
     }
 
     @Test
