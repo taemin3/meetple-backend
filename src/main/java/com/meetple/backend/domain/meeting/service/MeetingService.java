@@ -32,12 +32,12 @@ import org.springframework.util.StringUtils;
 @Transactional(readOnly = true)
 public class MeetingService {
 
-    private static final String MEMBER_NOT_FOUND_MESSAGE = "Member not found.";
-    private static final String CATEGORY_NOT_FOUND_MESSAGE = "Category not found.";
-    private static final String MEETING_NOT_FOUND_MESSAGE = "Meeting not found.";
-    private static final String MEETING_FORBIDDEN_MESSAGE = "Only the host can change this meeting.";
-    private static final String CLOSED_MEETING_MESSAGE = "Closed meetings cannot be changed.";
-    private static final String CAPACITY_TOO_SMALL_MESSAGE = "Capacity cannot be less than current people.";
+    private static final String MEMBER_NOT_FOUND_MESSAGE = "회원을 찾을 수 없습니다.";
+    private static final String CATEGORY_NOT_FOUND_MESSAGE = "카테고리를 찾을 수 없습니다.";
+    private static final String MEETING_NOT_FOUND_MESSAGE = "모임을 찾을 수 없습니다.";
+    private static final String MEETING_FORBIDDEN_MESSAGE = "모임 변경은 주최자만 할 수 있습니다.";
+    private static final String CLOSED_MEETING_MESSAGE = "마감된 모임은 변경할 수 없습니다.";
+    private static final String CAPACITY_TOO_SMALL_MESSAGE = "정원은 현재 인원보다 적을 수 없습니다.";
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
     private static final double METERS_PER_LATITUDE_DEGREE = 111_320.0;
 
