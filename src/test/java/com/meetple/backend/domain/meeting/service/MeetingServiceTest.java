@@ -10,7 +10,6 @@ import com.meetple.backend.domain.category.repository.CategoryRepository;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
-import com.meetple.backend.domain.meeting.dto.response.MeetingPageResponse;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
@@ -18,6 +17,7 @@ import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.global.exception.ForbiddenException;
+import com.meetple.backend.global.response.PageResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -119,13 +119,13 @@ class MeetingServiceTest {
                 any()
         )).willReturn(List.of(nearby, farAway));
 
-        MeetingPageResponse response = meetingService.getNearbyMeetings(
+        PageResponse<MeetingResponse> response = meetingService.getNearbyMeetings(
                 new NearbyMeetingSearchRequest(37.5219, 126.9245, 1000, "exercise"),
                 PageRequest.of(0, 20)
         );
 
         assertThat(response.totalElements()).isEqualTo(1);
-        assertThat(response.meetings()).extracting(MeetingResponse::id)
+        assertThat(response.content()).extracting(MeetingResponse::id)
                 .containsExactly(10L);
     }
 
@@ -135,7 +135,7 @@ class MeetingServiceTest {
         given(meetingRepository.findByStatus(MeetingStatus.RECRUITING, PageRequest.of(0, 10)))
                 .willReturn(new PageImpl<>(List.of(meeting), PageRequest.of(0, 10), 1));
 
-        MeetingPageResponse response = meetingService.getMeetings(
+        PageResponse<MeetingResponse> response = meetingService.getMeetings(
                 MeetingStatus.RECRUITING,
                 PageRequest.of(0, 10)
         );
@@ -143,7 +143,7 @@ class MeetingServiceTest {
         assertThat(response.page()).isZero();
         assertThat(response.size()).isEqualTo(10);
         assertThat(response.totalElements()).isEqualTo(1);
-        assertThat(response.meetings()).extracting(MeetingResponse::title)
+        assertThat(response.content()).extracting(MeetingResponse::title)
                 .containsExactly("Weekend running");
     }
 

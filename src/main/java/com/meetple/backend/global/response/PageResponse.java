@@ -1,10 +1,10 @@
-package com.meetple.backend.domain.meeting.dto.response;
+package com.meetple.backend.global.response;
 
 import java.util.List;
 import org.springframework.data.domain.Page;
 
-public record MeetingPageResponse(
-        List<MeetingResponse> meetings,
+public record PageResponse<T>(
+        List<T> content,
         int page,
         int size,
         long totalElements,
@@ -13,8 +13,8 @@ public record MeetingPageResponse(
         boolean last
 ) {
 
-    public static MeetingPageResponse from(Page<MeetingResponse> page) {
-        return new MeetingPageResponse(
+    public static <T> PageResponse<T> from(Page<T> page) {
+        return new PageResponse<>(
                 page.getContent(),
                 page.getNumber(),
                 page.getSize(),

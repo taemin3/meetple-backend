@@ -5,7 +5,6 @@ import com.meetple.backend.domain.category.repository.CategoryRepository;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
-import com.meetple.backend.domain.meeting.dto.response.MeetingPageResponse;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
@@ -15,6 +14,7 @@ import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.exception.NotFoundException;
+import com.meetple.backend.global.response.PageResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -67,16 +67,16 @@ public class MeetingService {
         return MeetingResponse.from(meetingRepository.save(meeting));
     }
 
-    public MeetingPageResponse getMeetings(MeetingStatus status, Pageable pageable) {
+    public PageResponse<MeetingResponse> getMeetings(MeetingStatus status, Pageable pageable) {
         Page<MeetingResponse> meetings = (status == null
                 ? meetingRepository.findAll(pageable)
                 : meetingRepository.findByStatus(status, pageable))
                 .map(MeetingResponse::from);
 
-        return MeetingPageResponse.from(meetings);
+        return PageResponse.from(meetings);
     }
 
-    public MeetingPageResponse getNearbyMeetings(NearbyMeetingSearchRequest request, Pageable pageable) {
+    public PageResponse<MeetingResponse> getNearbyMeetings(NearbyMeetingSearchRequest request, Pageable pageable) {
         CoordinateBounds bounds = CoordinateBounds.from(
                 request.latitude(),
                 request.longitude(),
@@ -112,7 +112,7 @@ public class MeetingService {
                         .toList(),
                 pageable
         );
-        return MeetingPageResponse.from(page);
+        return PageResponse.from(page);
     }
 
     public MeetingResponse getMeeting(Long meetingId) {

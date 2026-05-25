@@ -3,12 +3,12 @@ package com.meetple.backend.domain.meeting.controller;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
-import com.meetple.backend.domain.meeting.dto.response.MeetingPageResponse;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.service.MeetingService;
 import com.meetple.backend.global.config.OpenApiConfig;
 import com.meetple.backend.global.response.ApiResponse;
+import com.meetple.backend.global.response.PageResponse;
 import com.meetple.backend.global.response.SuccessStatus;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import io.swagger.v3.oas.annotations.Operation;
@@ -56,7 +56,7 @@ public class MeetingController {
     @GetMapping
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
     @Operation(summary = "Get meetings", description = "Get meetings with optional status filtering.")
-    public ResponseEntity<ApiResponse<MeetingPageResponse>> getMeetings(
+    public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> getMeetings(
             @RequestParam(required = false) MeetingStatus status,
             @PageableDefault(size = 20, sort = "meetingDate", direction = Sort.Direction.ASC) Pageable pageable
     ) {
@@ -66,7 +66,7 @@ public class MeetingController {
     @GetMapping("/nearby")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
     @Operation(summary = "Get nearby meetings", description = "Get recruiting meetings within the requested radius.")
-    public ResponseEntity<ApiResponse<MeetingPageResponse>> getNearbyMeetings(
+    public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> getNearbyMeetings(
             @Valid @ModelAttribute NearbyMeetingSearchRequest request,
             @PageableDefault(size = 20) Pageable pageable
     ) {

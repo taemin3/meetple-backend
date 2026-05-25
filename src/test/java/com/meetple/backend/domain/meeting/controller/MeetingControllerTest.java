@@ -14,12 +14,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
-import com.meetple.backend.domain.meeting.dto.response.MeetingPageResponse;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.service.MeetingService;
 import com.meetple.backend.domain.member.entity.MemberRole;
 import com.meetple.backend.global.exception.GlobalExceptionHandler;
+import com.meetple.backend.global.response.PageResponse;
 import com.meetple.backend.global.response.SuccessStatus;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import java.time.LocalDateTime;
@@ -85,7 +85,7 @@ class MeetingControllerTest {
     @Test
     void getMeetingsReturnsPagedApiResponse() throws Exception {
         given(meetingService.getMeetings(eq(MeetingStatus.RECRUITING), any()))
-                .willReturn(MeetingPageResponse.from(new org.springframework.data.domain.PageImpl<>(
+                .willReturn(PageResponse.from(new org.springframework.data.domain.PageImpl<>(
                         List.of(meetingResponse()),
                         PageRequest.of(0, 20),
                         1
@@ -97,14 +97,14 @@ class MeetingControllerTest {
                 .andExpect(jsonPath("$.status").value(200))
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.code").value(SuccessStatus.OK.getCode()))
-                .andExpect(jsonPath("$.data.meetings[0].id").value(10))
+                .andExpect(jsonPath("$.data.content[0].id").value(10))
                 .andExpect(jsonPath("$.data.totalElements").value(1));
     }
 
     @Test
     void getNearbyMeetingsReturnsPagedApiResponse() throws Exception {
         given(meetingService.getNearbyMeetings(any(), eq(PageRequest.of(0, 20))))
-                .willReturn(MeetingPageResponse.from(new org.springframework.data.domain.PageImpl<>(
+                .willReturn(PageResponse.from(new org.springframework.data.domain.PageImpl<>(
                         List.of(meetingResponse()),
                         PageRequest.of(0, 20),
                         1
@@ -116,7 +116,7 @@ class MeetingControllerTest {
                         .param("radiusMeters", "1000")
                         .param("category", "exercise"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.meetings[0].categoryName").value("exercise"))
+                .andExpect(jsonPath("$.data.content[0].categoryName").value("exercise"))
                 .andExpect(jsonPath("$.data.totalElements").value(1));
     }
 
