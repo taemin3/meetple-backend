@@ -2,6 +2,12 @@
 
 이 문서는 Codex가 `meetple-backend` 저장소를 다시 열었을 때 바로 이어서 작업하기 위한 기준이다.
 
+## GitHub 저장소
+
+- 저장소: https://github.com/taemin3/meetple-backend
+- 이 프로젝트는 `C:\project\meetple\backend` 기준의 별도 Git 저장소이다.
+- 커밋, 브랜치 생성, pull, push는 반드시 `backend/` 폴더에서 실행한다.
+
 ## 프로젝트 개요
 
 `meetple-backend`는 운동, 스터디, 취미 모임 앱 meetple의 Spring Boot API 서버이다.
