@@ -21,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -75,7 +76,12 @@ public class MeetingParticipationService {
                 member,
                 normalizeMessage(request == null ? null : request.message())
         );
-        return MeetingParticipationResponse.from(participationRepository.save(participation));
+
+        try {
+            return MeetingParticipationResponse.from(participationRepository.saveAndFlush(participation));
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(DUPLICATE_PARTICIPATION_MESSAGE);
+        }
     }
 
     public PageResponse<MeetingParticipationResponse> getMeetingParticipations(
@@ -98,8 +104,8 @@ public class MeetingParticipationService {
 
     @Transactional
     public MeetingParticipationResponse approveParticipation(Long hostId, Long meetingId, Long participationId) {
-        MeetingParticipation participation = getParticipation(meetingId, participationId);
-        Meeting meeting = participation.getMeeting();
+        Meeting meeting = getMeetingForUpdate(meetingId);
+        MeetingParticipation participation = getParticipationForUpdate(meetingId, participationId);
         ensureHost(meeting, hostId);
         ensurePending(participation);
         ensureMeetingCanAccept(meeting);
@@ -111,8 +117,9 @@ public class MeetingParticipationService {
 
     @Transactional
     public MeetingParticipationResponse rejectParticipation(Long hostId, Long meetingId, Long participationId) {
-        MeetingParticipation participation = getParticipation(meetingId, participationId);
-        ensureHost(participation.getMeeting(), hostId);
+        Meeting meeting = getMeetingForUpdate(meetingId);
+        MeetingParticipation participation = getParticipationForUpdate(meetingId, participationId);
+        ensureHost(meeting, hostId);
         ensurePending(participation);
 
         participation.reject();
@@ -121,12 +128,13 @@ public class MeetingParticipationService {
 
     @Transactional
     public MeetingParticipationResponse cancelParticipation(Long memberId, Long meetingId, Long participationId) {
-        MeetingParticipation participation = getParticipation(meetingId, participationId);
+        Meeting meeting = getMeetingForUpdate(meetingId);
+        MeetingParticipation participation = getParticipationForUpdate(meetingId, participationId);
         ensureApplicant(participation, memberId);
         ensureCancelable(participation);
 
         if (participation.getStatus() == ParticipationStatus.APPROVED) {
-            participation.getMeeting().decreaseCurrentPeople();
+            meeting.decreaseCurrentPeople();
         }
         participation.cancel();
         return MeetingParticipationResponse.from(participation);
@@ -137,13 +145,18 @@ public class MeetingParticipationService {
                 .orElseThrow(() -> new NotFoundException(MEETING_NOT_FOUND_MESSAGE));
     }
 
+    private Meeting getMeetingForUpdate(Long meetingId) {
+        return meetingRepository.findByIdForUpdate(meetingId)
+                .orElseThrow(() -> new NotFoundException(MEETING_NOT_FOUND_MESSAGE));
+    }
+
     private Member getMember(Long memberId) {
         return memberRepository.findById(memberId)
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
     }
 
-    private MeetingParticipation getParticipation(Long meetingId, Long participationId) {
-        return participationRepository.findByIdAndMeetingId(participationId, meetingId)
+    private MeetingParticipation getParticipationForUpdate(Long meetingId, Long participationId) {
+        return participationRepository.findByIdAndMeetingIdForUpdate(participationId, meetingId)
                 .orElseThrow(() -> new NotFoundException(PARTICIPATION_NOT_FOUND_MESSAGE));
     }
 
@@ -151,11 +164,11 @@ public class MeetingParticipationService {
         if (meeting.isHostedBy(memberId)) {
             throw new BadRequestException(HOST_CANNOT_APPLY_MESSAGE);
         }
+        if (isFull(meeting)) {
+            throw new BadRequestException(MEETING_FULL_MESSAGE);
+        }
         if (meeting.getStatus() != MeetingStatus.RECRUITING) {
             throw new BadRequestException(MEETING_NOT_RECRUITING_MESSAGE);
-        }
-        if (meeting.getCurrentPeople() >= meeting.getMaxPeople()) {
-            throw new BadRequestException(MEETING_FULL_MESSAGE);
         }
     }
 
@@ -185,12 +198,17 @@ public class MeetingParticipationService {
     }
 
     private void ensureMeetingCanAccept(Meeting meeting) {
+        if (isFull(meeting)) {
+            throw new BadRequestException(MEETING_FULL_MESSAGE);
+        }
         if (meeting.getStatus() != MeetingStatus.RECRUITING) {
             throw new BadRequestException(MEETING_NOT_RECRUITING_MESSAGE);
         }
-        if (meeting.getCurrentPeople() >= meeting.getMaxPeople()) {
-            throw new BadRequestException(MEETING_FULL_MESSAGE);
-        }
+    }
+
+    private boolean isFull(Meeting meeting) {
+        return meeting.getStatus() == MeetingStatus.FULL
+                || meeting.getCurrentPeople() >= meeting.getMaxPeople();
     }
 
     private ParticipationStatus parseStatus(String status) {

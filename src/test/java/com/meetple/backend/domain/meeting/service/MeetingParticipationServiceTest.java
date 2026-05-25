@@ -28,6 +28,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -56,7 +57,7 @@ class MeetingParticipationServiceTest {
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
         given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
         given(participationRepository.existsByMeetingIdAndMemberId(10L, 2L)).willReturn(false);
-        given(participationRepository.save(any(MeetingParticipation.class))).willAnswer(invocation -> {
+        given(participationRepository.saveAndFlush(any(MeetingParticipation.class))).willAnswer(invocation -> {
             MeetingParticipation participation = invocation.getArgument(0);
             ReflectionTestUtils.setField(participation, "id", 100L);
             return participation;
@@ -100,6 +101,27 @@ class MeetingParticipationServiceTest {
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
         given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
         given(participationRepository.existsByMeetingIdAndMemberId(10L, 2L)).willReturn(true);
+
+        assertThatThrownBy(() -> participationService.applyParticipation(
+                2L,
+                10L,
+                new CreateMeetingParticipationRequest(null)
+        ))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("Participation already exists.");
+    }
+
+    @Test
+    void applyParticipationConvertsUniqueConstraintRaceToConflict() {
+        Member host = member(1L, "host@meetple.com", "host");
+        Member applicant = member(2L, "runner@meetple.com", "runner");
+        Meeting meeting = meeting(10L, host);
+
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
+        given(participationRepository.existsByMeetingIdAndMemberId(10L, 2L)).willReturn(false);
+        given(participationRepository.saveAndFlush(any(MeetingParticipation.class)))
+                .willThrow(new DataIntegrityViolationException("duplicate participation"));
 
         assertThatThrownBy(() -> participationService.applyParticipation(
                 2L,
@@ -159,7 +181,8 @@ class MeetingParticipationServiceTest {
         Meeting meeting = meeting(10L, host);
         MeetingParticipation participation = participation(100L, meeting, applicant);
 
-        given(participationRepository.findByIdAndMeetingId(100L, 10L))
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
+        given(participationRepository.findByIdAndMeetingIdForUpdate(100L, 10L))
                 .willReturn(Optional.of(participation));
 
         MeetingParticipationResponse response = participationService.approveParticipation(1L, 10L, 100L);
@@ -176,7 +199,8 @@ class MeetingParticipationServiceTest {
         Meeting meeting = meeting(10L, host, 1);
         MeetingParticipation participation = participation(100L, meeting, applicant);
 
-        given(participationRepository.findByIdAndMeetingId(100L, 10L))
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
+        given(participationRepository.findByIdAndMeetingIdForUpdate(100L, 10L))
                 .willReturn(Optional.of(participation));
 
         assertThatThrownBy(() -> participationService.approveParticipation(1L, 10L, 100L))
@@ -191,7 +215,8 @@ class MeetingParticipationServiceTest {
         Meeting meeting = meeting(10L, host);
         MeetingParticipation participation = participation(100L, meeting, applicant);
 
-        given(participationRepository.findByIdAndMeetingId(100L, 10L))
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
+        given(participationRepository.findByIdAndMeetingIdForUpdate(100L, 10L))
                 .willReturn(Optional.of(participation));
 
         MeetingParticipationResponse response = participationService.rejectParticipation(1L, 10L, 100L);
@@ -209,7 +234,8 @@ class MeetingParticipationServiceTest {
         participation.approve();
         meeting.increaseCurrentPeople();
 
-        given(participationRepository.findByIdAndMeetingId(100L, 10L))
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
+        given(participationRepository.findByIdAndMeetingIdForUpdate(100L, 10L))
                 .willReturn(Optional.of(participation));
 
         MeetingParticipationResponse response = participationService.cancelParticipation(2L, 10L, 100L);
@@ -226,7 +252,8 @@ class MeetingParticipationServiceTest {
         Meeting meeting = meeting(10L, host);
         MeetingParticipation participation = participation(100L, meeting, applicant);
 
-        given(participationRepository.findByIdAndMeetingId(100L, 10L))
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
+        given(participationRepository.findByIdAndMeetingIdForUpdate(100L, 10L))
                 .willReturn(Optional.of(participation));
 
         assertThatThrownBy(() -> participationService.cancelParticipation(3L, 10L, 100L))
