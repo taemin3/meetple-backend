@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Meeting", description = "Meeting API")
+@Tag(name = "Meeting", description = "모임 API")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/meetings")
@@ -42,7 +42,7 @@ public class MeetingController {
 
     @PostMapping
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Create meeting", description = "Create a meeting hosted by the logged-in member.")
+    @Operation(summary = "모임 생성", description = "로그인한 회원을 모임장으로 새 모임을 생성합니다.")
     public ResponseEntity<ApiResponse<MeetingResponse>> createMeeting(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @Valid @RequestBody CreateMeetingRequest request
@@ -55,7 +55,7 @@ public class MeetingController {
 
     @GetMapping
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Get meetings", description = "Get meetings with optional status filtering.")
+    @Operation(summary = "모임 목록 조회", description = "상태 조건을 선택적으로 적용해 모임 목록을 조회합니다.")
     public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> getMeetings(
             @RequestParam(required = false) MeetingStatus status,
             @PageableDefault(size = 20, sort = "meetingDate", direction = Sort.Direction.ASC) Pageable pageable
@@ -65,7 +65,7 @@ public class MeetingController {
 
     @GetMapping("/nearby")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Get nearby meetings", description = "Get recruiting meetings within the requested radius.")
+    @Operation(summary = "주변 모임 조회", description = "요청한 반경 안의 모집 중인 모임을 조회합니다.")
     public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> getNearbyMeetings(
             @Valid @ModelAttribute NearbyMeetingSearchRequest request,
             @PageableDefault(size = 20) Pageable pageable
@@ -75,14 +75,14 @@ public class MeetingController {
 
     @GetMapping("/{meetingId}")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Get meeting", description = "Get a meeting detail.")
+    @Operation(summary = "모임 상세 조회", description = "모임 상세 정보를 조회합니다.")
     public ResponseEntity<ApiResponse<MeetingResponse>> getMeeting(@PathVariable Long meetingId) {
         return ApiResponse.success(SuccessStatus.OK, meetingService.getMeeting(meetingId));
     }
 
     @PatchMapping("/{meetingId}")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Update meeting", description = "Update a meeting hosted by the logged-in member.")
+    @Operation(summary = "모임 수정", description = "로그인한 회원이 모임장인 모임 정보를 수정합니다.")
     public ResponseEntity<ApiResponse<MeetingResponse>> updateMeeting(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable Long meetingId,
@@ -96,7 +96,7 @@ public class MeetingController {
 
     @DeleteMapping("/{meetingId}")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Delete meeting", description = "Cancel a meeting hosted by the logged-in member.")
+    @Operation(summary = "모임 삭제", description = "로그인한 회원이 모임장인 모임을 취소 처리합니다.")
     public ResponseEntity<ApiResponse<Void>> deleteMeeting(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable Long meetingId
@@ -107,7 +107,7 @@ public class MeetingController {
 
     @PatchMapping("/{meetingId}/complete")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Complete meeting", description = "Mark a meeting as completed.")
+    @Operation(summary = "모임 완료", description = "모임을 완료 상태로 변경합니다.")
     public ResponseEntity<ApiResponse<MeetingResponse>> completeMeeting(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable Long meetingId
@@ -120,7 +120,7 @@ public class MeetingController {
 
     @PatchMapping("/{meetingId}/cancel")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Cancel meeting", description = "Cancel a meeting hosted by the logged-in member.")
+    @Operation(summary = "모임 취소", description = "로그인한 회원이 모임장인 모임을 취소합니다.")
     public ResponseEntity<ApiResponse<MeetingResponse>> cancelMeeting(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable Long meetingId
