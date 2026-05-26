@@ -265,6 +265,44 @@ Docker가 설치되어 있지 않거나 PATH에 없을 수 있다. 이 경우 Do
 - 새 API를 만들 때는 controller, request/response DTO, service, repository, test 순서로 작게 진행한다.
 - 대규모 리팩터링보다 도메인 단위의 작은 PR을 선호한다.
 
+## 작업 로그 규칙
+
+Codex가 브랜치 단위로 파일을 수정하고 커밋/푸시하는 작업을 수행하면 가능하면 `docs/work-logs/`에 작업 로그를 남긴다.
+
+작업 로그는 `docs/work-logs/TEMPLATE.md`를 기준으로 작성한다.
+
+로그에는 다음 내용을 포함한다.
+
+- 사용자 요청 요약
+- 브랜치명
+- 작업 목표와 작업 흐름
+- 사용한 도구
+- 실행한 주요 명령
+- 변경 파일 요약
+- 검증 명령과 결과
+- 작업 중 발견한 이슈와 결정 사항
+- 후속 작업
+
+민감한 값은 기록하지 않는다.
+
+- access token, refresh token, API key, 비밀번호, 개인 정보는 남기지 않는다.
+- `.env` 값, 로컬 DB/Redis 비밀번호, 운영 환경 변수 값은 남기지 않는다.
+- 긴 명령 출력은 전체를 붙이지 말고 핵심 결과만 요약한다.
+- 실패한 명령은 원인 추적에 필요한 경우 명령과 실패 이유를 요약한다.
+- PR 본문은 짧게 유지하고, 자세한 작업 흐름은 작업 로그에 남긴다.
+
+파일 이름은 날짜와 브랜치명을 사용한다.
+
+```text
+docs/work-logs/YYYY-MM-DD-branch-name.md
+```
+
+예시:
+
+```text
+docs/work-logs/2026-05-26-feat-meeting-participation.md
+```
+
 ## PR Review Language
 
 - 모든 PR 리뷰 요약과 코멘트는 한국어로 작성한다.
