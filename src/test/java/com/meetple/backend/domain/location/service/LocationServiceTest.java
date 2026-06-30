@@ -3,23 +3,20 @@ package com.meetple.backend.domain.location.service;
 import static org.mockito.BDDMockito.then;
 
 import com.meetple.backend.domain.location.client.LocationClient;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 
+@ExtendWith(MockitoExtension.class)
 class LocationServiceTest {
 
     @Mock
     private LocationClient locationClient;
 
+    @InjectMocks
     private LocationService locationService;
-
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
-        locationService = new LocationService(locationClient);
-    }
 
     @Test
     void searchTrimsQuery() {

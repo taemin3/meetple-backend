@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.meetple.backend.domain.location.dto.response.LocationSearchResponse;
 import com.meetple.backend.domain.location.service.LocationService;
+import com.meetple.backend.global.exception.GlobalExceptionHandler;
+import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.response.SuccessStatus;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +29,9 @@ class LocationControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new LocationController(locationService)).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(new LocationController(locationService))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test
@@ -57,5 +61,15 @@ class LocationControllerTest {
                 .andExpect(jsonPath("$.data[0].latitude").value(37.5219))
                 .andExpect(jsonPath("$.data[0].longitude").value(126.9245))
                 .andExpect(jsonPath("$.data[0].provider").value("NAVER"));
+    }
+
+    @Test
+    void searchLocationsWithoutQueryReturnsApiResponse() throws Exception {
+        mockMvc.perform(get("/api/v1/locations/search")
+                        .param("display", "5"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.BAD_REQUEST.getCode()))
+                .andExpect(jsonPath("$.message").value("검색어를 입력해주세요."));
     }
 }

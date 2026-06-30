@@ -81,6 +81,15 @@ class SecurityConfigTest {
     }
 
     @Test
+    void locationSearchWithoutTokenReturnsUnauthorizedApiResponse() throws Exception {
+        mockMvc.perform(get("/api/v1/locations/search")
+                        .param("query", "여의도공원"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.UNAUTHORIZED.getCode()));
+    }
+
+    @Test
     void protectedEndpointWithInvalidTokenReturnsInvalidTokenApiResponse() throws Exception {
         mockMvc.perform(get("/api/v1/users/me")
                         .header("Authorization", "Bearer invalid-token"))

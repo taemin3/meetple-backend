@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -18,6 +19,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.util.HtmlUtils;
 
 @Component
+@Slf4j
 public class NaverLocationClient implements LocationClient {
 
     private static final String LOCAL_SEARCH_PATH = "/v1/search/local.json";
@@ -52,13 +54,7 @@ public class NaverLocationClient implements LocationClient {
 
     private List<LocationSearchResponse> searchAddresses(String query, int display) {
         try {
-            NaverGeocodeResponse response = restClient.get()
-                    .uri(properties.mapsBaseUrl() + GEOCODE_PATH + "?query={query}", query)
-                    .header("X-NCP-APIGW-API-KEY-ID", properties.mapsClientId())
-                    .header("X-NCP-APIGW-API-KEY", properties.mapsClientSecret())
-                    .retrieve()
-                    .body(NaverGeocodeResponse.class);
-
+            NaverGeocodeResponse response = requestGeocode(query);
             if (response == null || response.addresses() == null) {
                 return List.of();
             }
@@ -70,6 +66,7 @@ public class NaverLocationClient implements LocationClient {
                     .flatMap(Optional::stream)
                     .toList();
         } catch (RestClientException e) {
+            log.warn("Failed to call Naver Geocoding API.", e);
             throw new BaseException(ErrorStatus.EXTERNAL_API_ERROR, "네이버 위치 검색 호출에 실패했습니다.");
         }
     }
@@ -97,8 +94,18 @@ public class NaverLocationClient implements LocationClient {
                     .flatMap(Optional::stream)
                     .toList();
         } catch (RestClientException e) {
+            log.warn("Failed to call Naver Local Search API.", e);
             throw new BaseException(ErrorStatus.EXTERNAL_API_ERROR, "네이버 위치 검색 호출에 실패했습니다.");
         }
+    }
+
+    private NaverGeocodeResponse requestGeocode(String query) {
+        return restClient.get()
+                .uri(properties.mapsBaseUrl() + GEOCODE_PATH + "?query={query}", query)
+                .header("X-NCP-APIGW-API-KEY-ID", properties.mapsClientId())
+                .header("X-NCP-APIGW-API-KEY", properties.mapsClientSecret())
+                .retrieve()
+                .body(NaverGeocodeResponse.class);
     }
 
     private void validateAnyConfiguration() {
@@ -120,9 +127,8 @@ public class NaverLocationClient implements LocationClient {
     }
 
     private Optional<LocationSearchResponse> toAddressResponse(NaverGeocodeAddress address) {
-        Optional<Double> longitude = normalizeLongitude(address.x());
-        Optional<Double> latitude = normalizeLatitude(address.y());
-        if (longitude.isEmpty() || latitude.isEmpty() || !isKoreaCoordinate(latitude.get(), longitude.get())) {
+        Optional<Coordinate> coordinate = normalizeCoordinatePair(address.y(), address.x());
+        if (coordinate.isEmpty()) {
             return Optional.empty();
         }
 
@@ -134,38 +140,65 @@ public class NaverLocationClient implements LocationClient {
         }
 
         return Optional.of(new LocationSearchResponse(
-                createId(ADDRESS_TYPE, displayAddress, displayAddress, latitude.get(), longitude.get()),
+                createId(
+                        ADDRESS_TYPE,
+                        displayAddress,
+                        displayAddress,
+                        coordinate.get().latitude(),
+                        coordinate.get().longitude()
+                ),
                 ADDRESS_TYPE,
                 displayAddress,
                 "주소",
                 displayAddress,
-                latitude.get(),
-                longitude.get(),
+                coordinate.get().latitude(),
+                coordinate.get().longitude(),
                 NAVER_PROVIDER
         ));
     }
 
     private Optional<LocationSearchResponse> toPlaceResponse(NaverLocalSearchItem item) {
-        Optional<Double> longitude = normalizeLongitude(item.mapx());
-        Optional<Double> latitude = normalizeLatitude(item.mapy());
-        if (longitude.isEmpty() || latitude.isEmpty() || !isKoreaCoordinate(latitude.get(), longitude.get())) {
-            return Optional.empty();
-        }
-
         String name = sanitize(item.title());
         String roadAddress = sanitize(item.roadAddress());
         String address = StringUtils.hasText(roadAddress) ? roadAddress : sanitize(item.address());
+        Optional<Coordinate> coordinate = normalizeCoordinatePair(item.mapy(), item.mapx())
+                .or(() -> findAddressCoordinate(address));
+        if (coordinate.isEmpty()) {
+            return Optional.empty();
+        }
 
         return Optional.of(new LocationSearchResponse(
-                createId(PLACE_TYPE, name, address, latitude.get(), longitude.get()),
+                createId(PLACE_TYPE, name, address, coordinate.get().latitude(), coordinate.get().longitude()),
                 PLACE_TYPE,
                 name,
                 sanitize(item.category()),
                 address,
-                latitude.get(),
-                longitude.get(),
+                coordinate.get().latitude(),
+                coordinate.get().longitude(),
                 NAVER_PROVIDER
         ));
+    }
+
+    private Optional<Coordinate> findAddressCoordinate(String address) {
+        if (!hasMapsConfiguration() || !StringUtils.hasText(address)) {
+            return Optional.empty();
+        }
+
+        try {
+            NaverGeocodeResponse response = requestGeocode(address);
+            if (response == null || response.addresses() == null) {
+                return Optional.empty();
+            }
+
+            return response.addresses()
+                    .stream()
+                    .map(candidate -> normalizeCoordinatePair(candidate.y(), candidate.x()))
+                    .flatMap(Optional::stream)
+                    .findFirst();
+        } catch (RestClientException e) {
+            log.warn("Failed to geocode Naver Local Search address.", e);
+            return Optional.empty();
+        }
     }
 
     private List<LocationSearchResponse> mergeAndLimit(List<LocationSearchResponse> responses, int display) {
@@ -193,6 +226,15 @@ public class NaverLocationClient implements LocationClient {
 
     private Optional<Double> normalizeLongitude(String value) {
         return normalizeCoordinate(value, 180.0);
+    }
+
+    private Optional<Coordinate> normalizeCoordinatePair(String latitudeValue, String longitudeValue) {
+        Optional<Double> latitude = normalizeLatitude(latitudeValue);
+        Optional<Double> longitude = normalizeLongitude(longitudeValue);
+        if (latitude.isEmpty() || longitude.isEmpty() || !isKoreaCoordinate(latitude.get(), longitude.get())) {
+            return Optional.empty();
+        }
+        return Optional.of(new Coordinate(latitude.get(), longitude.get()));
     }
 
     private Optional<Double> normalizeCoordinate(String value, double maxAbsoluteValue) {
@@ -257,6 +299,12 @@ public class NaverLocationClient implements LocationClient {
             String jibunAddress,
             String x,
             String y
+    ) {
+    }
+
+    private record Coordinate(
+            double latitude,
+            double longitude
     ) {
     }
 }

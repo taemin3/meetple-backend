@@ -24,6 +24,8 @@ class NaverLocationClientTest {
             "%EC%97%AC%EC%9D%98%EB%8F%84%EA%B3%B5%EC%9B%90";
     private static final String ENCODED_YEOUIDO_PARK_ADDRESS =
             "%EC%84%9C%EC%9A%B8%20%EC%98%81%EB%93%B1%ED%8F%AC%EA%B5%AC%20%EC%97%AC%EC%9D%98%EA%B3%B5%EC%9B%90%EB%A1%9C%2068";
+    private static final String ENCODED_FULL_YEOUIDO_PARK_ADDRESS =
+            "%EC%84%9C%EC%9A%B8%ED%8A%B9%EB%B3%84%EC%8B%9C%20%EC%98%81%EB%93%B1%ED%8F%AC%EA%B5%AC%20%EC%97%AC%EC%9D%98%EA%B3%B5%EC%9B%90%EB%A1%9C%2068";
 
     private MockRestServiceServer server;
 
@@ -96,6 +98,50 @@ class NaverLocationClientTest {
         assertThat(response.name()).isEqualTo("서울특별시 영등포구 여의공원로 68");
         assertThat(response.category()).isEqualTo("주소");
         assertThat(response.address()).isEqualTo("서울특별시 영등포구 여의공원로 68");
+        assertThat(response.latitude()).isEqualTo(37.5219);
+        assertThat(response.longitude()).isEqualTo(126.9245);
+    }
+
+    @Test
+    void searchUsesGeocodingFallbackWhenLocalSearchCoordinateIsNotWgs84() {
+        NaverLocationClient client = createClient(defaultProperties());
+        expectGeocode("여의도공원", """
+                {
+                  "addresses": []
+                }
+                """);
+        expectLocalSearch("여의도공원", """
+                {
+                  "items": [
+                    {
+                      "title": "<b>여의도공원</b>",
+                      "category": "여행,명소&gt;공원",
+                      "address": "서울특별시 영등포구 여의도동 2",
+                      "roadAddress": "서울특별시 영등포구 여의공원로 68",
+                      "mapx": "311277",
+                      "mapy": "552097"
+                    }
+                  ]
+                }
+                """);
+        expectGeocode("서울특별시 영등포구 여의공원로 68", """
+                {
+                  "addresses": [
+                    {
+                      "roadAddress": "서울특별시 영등포구 여의공원로 68",
+                      "jibunAddress": "서울특별시 영등포구 여의도동 2",
+                      "x": "126.9245",
+                      "y": "37.5219"
+                    }
+                  ]
+                }
+                """);
+
+        List<LocationSearchResponse> responses = client.search("여의도공원", 5);
+
+        assertThat(responses).hasSize(1);
+        LocationSearchResponse response = responses.getFirst();
+        assertThat(response.type()).isEqualTo("PLACE");
         assertThat(response.latitude()).isEqualTo(37.5219);
         assertThat(response.longitude()).isEqualTo(126.9245);
     }
@@ -201,6 +247,7 @@ class NaverLocationClientTest {
         return switch (query) {
             case "여의도공원" -> ENCODED_YEOUIDO_PARK_QUERY;
             case "서울 영등포구 여의공원로 68" -> ENCODED_YEOUIDO_PARK_ADDRESS;
+            case "서울특별시 영등포구 여의공원로 68" -> ENCODED_FULL_YEOUIDO_PARK_ADDRESS;
             default -> query;
         };
     }
