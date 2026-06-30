@@ -35,6 +35,7 @@ class LocationControllerTest {
         given(locationService.search("여의도공원", 5))
                 .willReturn(List.of(new LocationSearchResponse(
                         "naver:1",
+                        "PLACE",
                         "여의도공원",
                         "여행,명소>공원",
                         "서울특별시 영등포구 여의공원로 68",
@@ -50,6 +51,7 @@ class LocationControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.code").value(SuccessStatus.OK.getCode()))
                 .andExpect(jsonPath("$.data[0].id").value("naver:1"))
+                .andExpect(jsonPath("$.data[0].type").value("PLACE"))
                 .andExpect(jsonPath("$.data[0].name").value("여의도공원"))
                 .andExpect(jsonPath("$.data[0].address").value("서울특별시 영등포구 여의공원로 68"))
                 .andExpect(jsonPath("$.data[0].latitude").value(37.5219))

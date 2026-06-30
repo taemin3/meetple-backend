@@ -4,8 +4,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "naver.location")
 public record NaverLocationProperties(
-        String baseUrl,
-        String clientId,
-        String clientSecret
+        String searchBaseUrl,
+        String searchClientId,
+        String searchClientSecret,
+        String mapsBaseUrl,
+        String mapsClientId,
+        String mapsClientSecret
 ) {
 }
