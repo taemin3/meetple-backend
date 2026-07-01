@@ -17,3 +17,12 @@ jwt:
   secret: ${JWT_SECRET}
   access-token-expiration-seconds: ${JWT_ACCESS_TOKEN_EXPIRATION_SECONDS:3600}
   refresh-token-expiration-seconds: ${JWT_REFRESH_TOKEN_EXPIRATION_SECONDS:1209600}
+
+naver:
+  location:
+    search-base-url: ${NAVER_LOCATION_BASE_URL:https://openapi.naver.com}
+    search-client-id: ${NAVER_LOCATION_CLIENT_ID:}
+    search-client-secret: ${NAVER_LOCATION_CLIENT_SECRET:}
+    maps-base-url: ${NAVER_MAPS_BASE_URL:https://maps.apigw.ntruss.com}
+    maps-client-id: ${NAVER_MAPS_CLIENT_ID:}
+    maps-client-secret: ${NAVER_MAPS_CLIENT_SECRET:}
