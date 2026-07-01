@@ -38,3 +38,7 @@ out/
 
 ### VS Code ###
 .vscode/
+
+docs/work-logs/*.md
+!docs/work-logs/README.md
+!docs/work-logs/TEMPLATE.md

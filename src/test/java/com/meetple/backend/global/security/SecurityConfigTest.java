@@ -90,6 +90,16 @@ class SecurityConfigTest {
     }
 
     @Test
+    void locationReverseWithoutTokenReturnsUnauthorizedApiResponse() throws Exception {
+        mockMvc.perform(get("/api/v1/locations/reverse")
+                        .param("latitude", "37.5219")
+                        .param("longitude", "126.9245"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.UNAUTHORIZED.getCode()));
+    }
+
+    @Test
     void protectedEndpointWithInvalidTokenReturnsInvalidTokenApiResponse() throws Exception {
         mockMvc.perform(get("/api/v1/users/me")
                         .header("Authorization", "Bearer invalid-token"))

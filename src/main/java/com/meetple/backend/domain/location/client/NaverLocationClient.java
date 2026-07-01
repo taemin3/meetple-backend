@@ -3,14 +3,17 @@ package com.meetple.backend.domain.location.client;
 import com.meetple.backend.domain.location.config.NaverLocationProperties;
 import com.meetple.backend.domain.location.dto.response.LocationSearchResponse;
 import com.meetple.backend.global.exception.BaseException;
+import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.ErrorStatus;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -24,6 +27,7 @@ public class NaverLocationClient implements LocationClient {
 
     private static final String LOCAL_SEARCH_PATH = "/v1/search/local.json";
     private static final String GEOCODE_PATH = "/map-geocode/v2/geocode";
+    private static final String REVERSE_GEOCODE_PATH = "/map-reversegeocode/v2/gc";
     private static final String NAVER_PROVIDER = "NAVER";
     private static final String PLACE_TYPE = "PLACE";
     private static final String ADDRESS_TYPE = "ADDRESS";
@@ -50,6 +54,30 @@ public class NaverLocationClient implements LocationClient {
         }
 
         return mergeAndLimit(responses, display);
+    }
+
+    @Override
+    public LocationSearchResponse reverse(double latitude, double longitude) {
+        validateMapsConfiguration();
+
+        NaverReverseGeocodeResponse response;
+        try {
+            response = requestReverseGeocode(latitude, longitude);
+        } catch (RestClientException e) {
+            log.warn("Failed to call Naver Reverse Geocoding API.", e);
+            throw new BaseException(ErrorStatus.EXTERNAL_API_ERROR, "네이버 위치 역조회 호출에 실패했습니다.");
+        }
+
+        if (response == null || response.results() == null || !isReverseStatusOk(response.status())) {
+            throw new BaseException(ErrorStatus.EXTERNAL_API_ERROR, "네이버 위치 역조회 응답이 올바르지 않습니다.");
+        }
+
+        return response.results()
+                .stream()
+                .map(result -> toReverseResponse(result, latitude, longitude))
+                .flatMap(Optional::stream)
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("좌표에 해당하는 주소를 찾을 수 없습니다."));
     }
 
     private List<LocationSearchResponse> searchAddresses(String query, int display) {
@@ -108,9 +136,27 @@ public class NaverLocationClient implements LocationClient {
                 .body(NaverGeocodeResponse.class);
     }
 
+    private NaverReverseGeocodeResponse requestReverseGeocode(double latitude, double longitude) {
+        return restClient.get()
+                .uri(properties.mapsBaseUrl() + REVERSE_GEOCODE_PATH
+                                + "?coords={coords}&orders=roadaddr,addr&output=json",
+                        longitude + "," + latitude
+                )
+                .header("X-NCP-APIGW-API-KEY-ID", properties.mapsClientId())
+                .header("X-NCP-APIGW-API-KEY", properties.mapsClientSecret())
+                .retrieve()
+                .body(NaverReverseGeocodeResponse.class);
+    }
+
     private void validateAnyConfiguration() {
         if (!hasSearchConfiguration() && !hasMapsConfiguration()) {
             throw new BaseException(ErrorStatus.EXTERNAL_API_ERROR, "네이버 위치 검색 설정이 누락되었습니다.");
+        }
+    }
+
+    private void validateMapsConfiguration() {
+        if (!hasMapsConfiguration()) {
+            throw new BaseException(ErrorStatus.EXTERNAL_API_ERROR, "네이버 지도 API 설정이 누락되었습니다.");
         }
     }
 
@@ -179,6 +225,98 @@ public class NaverLocationClient implements LocationClient {
         ));
     }
 
+    private Optional<LocationSearchResponse> toReverseResponse(
+            NaverReverseGeocodeResult result,
+            double latitude,
+            double longitude
+    ) {
+        String address = buildReverseAddress(result);
+        if (!StringUtils.hasText(address)) {
+            return Optional.empty();
+        }
+
+        String name = buildReverseName(result, address);
+        return Optional.of(new LocationSearchResponse(
+                createId(ADDRESS_TYPE, name, address, latitude, longitude),
+                ADDRESS_TYPE,
+                name,
+                "주소",
+                address,
+                latitude,
+                longitude,
+                NAVER_PROVIDER
+        ));
+    }
+
+    private String buildReverseAddress(NaverReverseGeocodeResult result) {
+        return joinNonBlank(
+                buildRegionAddress(result.region()),
+                buildLandAddress(result.land())
+        );
+    }
+
+    private String buildReverseName(NaverReverseGeocodeResult result, String fallbackAddress) {
+        if (result.land() != null) {
+            String additionName = additionValue(result.land().addition0());
+            if (StringUtils.hasText(additionName)) {
+                return additionName;
+            }
+        }
+        return fallbackAddress;
+    }
+
+    private String buildRegionAddress(NaverReverseRegion region) {
+        if (region == null) {
+            return "";
+        }
+        return joinNonBlank(
+                areaName(region.area1()),
+                areaName(region.area2()),
+                areaName(region.area3()),
+                areaName(region.area4())
+        );
+    }
+
+    private String buildLandAddress(NaverReverseLand land) {
+        if (land == null) {
+            return "";
+        }
+        return joinNonBlank(
+                land.name(),
+                buildLandNumber(land.number1(), land.number2())
+        );
+    }
+
+    private String buildLandNumber(String number1, String number2) {
+        String mainNumber = sanitize(number1);
+        String subNumber = sanitize(number2);
+        if (!StringUtils.hasText(mainNumber)) {
+            return "";
+        }
+        if (!StringUtils.hasText(subNumber) || "0".equals(subNumber)) {
+            return mainNumber;
+        }
+        return mainNumber + "-" + subNumber;
+    }
+
+    private String areaName(NaverReverseArea area) {
+        if (area == null) {
+            return "";
+        }
+        return sanitize(area.name());
+    }
+
+    private String additionValue(NaverReverseAddition addition) {
+        if (addition == null) {
+            return "";
+        }
+        String value = sanitize(addition.value());
+        if (StringUtils.hasText(value)) {
+            return value;
+        }
+        return sanitize(addition.name());
+    }
+
     private Optional<Coordinate> findAddressCoordinate(String address) {
         if (!hasMapsConfiguration() || !StringUtils.hasText(address)) {
             return Optional.empty();
@@ -218,6 +356,17 @@ public class NaverLocationClient implements LocationClient {
             return "";
         }
         return HtmlUtils.htmlUnescape(value.replaceAll("<[^>]*>", "")).trim();
+    }
+
+    private String joinNonBlank(String... values) {
+        return Arrays.stream(values)
+                .map(this::sanitize)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.joining(" "));
+    }
+
+    private boolean isReverseStatusOk(NaverReverseStatus status) {
+        return status == null || Objects.equals(status.code(), 0);
     }
 
     private Optional<Double> normalizeLatitude(String value) {
@@ -299,6 +448,53 @@ public class NaverLocationClient implements LocationClient {
             String jibunAddress,
             String x,
             String y
+    ) {
+    }
+
+    private record NaverReverseGeocodeResponse(
+            NaverReverseStatus status,
+            List<NaverReverseGeocodeResult> results
+    ) {
+    }
+
+    private record NaverReverseStatus(
+            Integer code,
+            String name,
+            String message
+    ) {
+    }
+
+    private record NaverReverseGeocodeResult(
+            String name,
+            NaverReverseRegion region,
+            NaverReverseLand land
+    ) {
+    }
+
+    private record NaverReverseRegion(
+            NaverReverseArea area1,
+            NaverReverseArea area2,
+            NaverReverseArea area3,
+            NaverReverseArea area4
+    ) {
+    }
+
+    private record NaverReverseArea(
+            String name
+    ) {
+    }
+
+    private record NaverReverseLand(
+            String name,
+            String number1,
+            String number2,
+            NaverReverseAddition addition0
+    ) {
+    }
+
+    private record NaverReverseAddition(
+            String name,
+            String value
     ) {
     }
 

@@ -15,4 +15,8 @@ public class LocationService {
     public List<LocationSearchResponse> search(String query, int display) {
         return locationClient.search(query.trim(), display);
     }
+
+    public LocationSearchResponse reverse(double latitude, double longitude) {
+        return locationClient.reverse(latitude, longitude);
+    }
 }
