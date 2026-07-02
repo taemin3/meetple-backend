@@ -157,6 +157,7 @@ class MeetingControllerTest {
                 null,
                 null,
                 null,
+                null,
                 null
         );
 
@@ -217,7 +218,11 @@ class MeetingControllerTest {
                 126.9245,
                 LocalDateTime.now().plusDays(7),
                 10,
-                "Run together at an easy pace."
+                "Run together at an easy pace.",
+                List.of(
+                        "https://cdn.meetple.com/images/meeting/1/first.png",
+                        "https://cdn.meetple.com/images/meeting/1/second.png"
+                )
         );
     }
 
@@ -239,7 +244,11 @@ class MeetingControllerTest {
                 10,
                 1,
                 MeetingStatus.RECRUITING,
-                null,
+                "https://cdn.meetple.com/images/meeting/1/first.png",
+                List.of(
+                        "https://cdn.meetple.com/images/meeting/1/first.png",
+                        "https://cdn.meetple.com/images/meeting/1/second.png"
+                ),
                 now,
                 now
         );

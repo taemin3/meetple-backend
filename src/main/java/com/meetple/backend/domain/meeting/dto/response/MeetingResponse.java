@@ -3,6 +3,7 @@ package com.meetple.backend.domain.meeting.dto.response;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record MeetingResponse(
         Long id,
@@ -21,11 +22,16 @@ public record MeetingResponse(
         Integer currentPeople,
         MeetingStatus status,
         String thumbnailImageUrl,
+        List<String> imageUrls,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
 
     public static MeetingResponse from(Meeting meeting) {
+        return from(meeting, List.of());
+    }
+
+    public static MeetingResponse from(Meeting meeting, List<String> imageUrls) {
         return new MeetingResponse(
                 meeting.getId(),
                 meeting.getHost().getId(),
@@ -43,6 +49,7 @@ public record MeetingResponse(
                 meeting.getCurrentPeople(),
                 meeting.getStatus(),
                 meeting.getThumbnailImageUrl(),
+                imageUrls,
                 meeting.getCreatedAt(),
                 meeting.getUpdatedAt()
         );

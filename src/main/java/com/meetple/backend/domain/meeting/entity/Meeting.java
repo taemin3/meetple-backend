@@ -167,6 +167,10 @@ public class Meeting extends BaseTimeEntity {
         updateRecruitmentStatusByCapacity();
     }
 
+    public void changeThumbnailImageUrl(String thumbnailImageUrl) {
+        this.thumbnailImageUrl = thumbnailImageUrl;
+    }
+
     public boolean isHostedBy(Long memberId) {
         return this.host.getId().equals(memberId);
     }

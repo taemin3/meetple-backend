@@ -109,6 +109,14 @@ class SecurityConfigTest {
     }
 
     @Test
+    void imageUploadUrlsWithoutTokenReturnsUnauthorizedApiResponse() throws Exception {
+        mockMvc.perform(post("/api/v1/images/upload-urls"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.UNAUTHORIZED.getCode()));
+    }
+
+    @Test
     void protectedEndpointWithInvalidTokenReturnsInvalidTokenApiResponse() throws Exception {
         mockMvc.perform(get("/api/v1/users/me")
                         .header("Authorization", "Bearer invalid-token"))

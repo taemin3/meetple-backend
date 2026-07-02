@@ -7,7 +7,9 @@ import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
 import com.meetple.backend.domain.meeting.entity.Meeting;
+import com.meetple.backend.domain.meeting.entity.MeetingImage;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
+import com.meetple.backend.domain.meeting.repository.MeetingImageRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
@@ -17,8 +19,13 @@ import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -55,6 +62,7 @@ public class MeetingService {
     );
 
     private final MeetingRepository meetingRepository;
+    private final MeetingImageRepository meetingImageRepository;
     private final MemberRepository memberRepository;
     private final CategoryRepository categoryRepository;
 
@@ -62,6 +70,7 @@ public class MeetingService {
     public MeetingResponse createMeeting(Long memberId, CreateMeetingRequest request) {
         Member host = getMember(memberId);
         Category category = getCategory(request.category());
+        List<String> imageUrls = normalizeImageUrls(request.imageUrls());
 
         Meeting meeting = Meeting.create(
                 host,
@@ -74,22 +83,24 @@ public class MeetingService {
                 toBigDecimal(request.longitude()),
                 request.capacity(),
                 request.scheduledAt(),
-                null
+                firstImageUrl(imageUrls)
         );
 
-        return MeetingResponse.from(meetingRepository.save(meeting));
+        Meeting savedMeeting = meetingRepository.save(meeting);
+        saveMeetingImages(savedMeeting, imageUrls);
+
+        return MeetingResponse.from(savedMeeting, imageUrls);
     }
 
     public PageResponse<MeetingResponse> getMeetings(String status, Pageable pageable) {
         validateSort(pageable);
         MeetingStatus meetingStatus = parseStatus(status);
 
-        Page<MeetingResponse> meetings = (meetingStatus == null
+        Page<Meeting> meetings = (meetingStatus == null
                 ? meetingRepository.findAll(pageable)
-                : meetingRepository.findByStatus(meetingStatus, pageable))
-                .map(MeetingResponse::from);
+                : meetingRepository.findByStatus(meetingStatus, pageable));
 
-        return PageResponse.from(meetings);
+        return PageResponse.from(toResponsePage(meetings));
     }
 
     public PageResponse<MeetingResponse> getNearbyMeetings(NearbyMeetingSearchRequest request, Pageable pageable) {
@@ -99,7 +110,7 @@ public class MeetingService {
                 request.radiusMeters()
         );
 
-        Page<MeetingResponse> page = meetingRepository.findNearbyMeetings(
+        Page<Meeting> page = meetingRepository.findNearbyMeetings(
                         MeetingStatus.RECRUITING.name(),
                         bounds.minLatitude(),
                         bounds.maxLatitude(),
@@ -112,13 +123,12 @@ public class MeetingService {
                         request.radiusMeters(),
                         EARTH_RADIUS_METERS,
                         withoutSort(pageable)
-                )
-                .map(MeetingResponse::from);
-        return PageResponse.from(page);
+                );
+        return PageResponse.from(toResponsePage(page));
     }
 
     public MeetingResponse getMeeting(Long meetingId) {
-        return MeetingResponse.from(getMeetingEntity(meetingId));
+        return toResponse(getMeetingEntity(meetingId));
     }
 
     @Transactional
@@ -149,7 +159,14 @@ public class MeetingService {
                 chooseDateTime(request.scheduledAt(), meeting.getMeetingDate())
         );
 
-        return MeetingResponse.from(meeting);
+        if (request.imageUrls() != null) {
+            List<String> imageUrls = normalizeImageUrls(request.imageUrls());
+            meeting.changeThumbnailImageUrl(firstImageUrl(imageUrls));
+            replaceMeetingImages(meeting, imageUrls);
+            return MeetingResponse.from(meeting, imageUrls);
+        }
+
+        return toResponse(meeting);
     }
 
     @Transactional
@@ -164,7 +181,7 @@ public class MeetingService {
         ensureOpen(meeting);
 
         meeting.complete();
-        return MeetingResponse.from(meeting);
+        return toResponse(meeting);
     }
 
     @Transactional
@@ -174,7 +191,70 @@ public class MeetingService {
         ensureOpen(meeting);
 
         meeting.cancel();
-        return MeetingResponse.from(meeting);
+        return toResponse(meeting);
+    }
+
+    private void saveMeetingImages(Meeting meeting, List<String> imageUrls) {
+        if (imageUrls.isEmpty()) {
+            return;
+        }
+
+        List<MeetingImage> images = IntStream.range(0, imageUrls.size())
+                .mapToObj(index -> MeetingImage.create(meeting, imageUrls.get(index), index))
+                .toList();
+        meetingImageRepository.saveAll(images);
+    }
+
+    private void replaceMeetingImages(Meeting meeting, List<String> imageUrls) {
+        meetingImageRepository.deleteByMeetingId(meeting.getId());
+        saveMeetingImages(meeting, imageUrls);
+    }
+
+    private MeetingResponse toResponse(Meeting meeting) {
+        List<String> imageUrls = meetingImageRepository.findByMeetingIdOrderBySortOrderAsc(meeting.getId())
+                .stream()
+                .map(MeetingImage::getImageUrl)
+                .toList();
+        return MeetingResponse.from(meeting, imageUrls);
+    }
+
+    private Page<MeetingResponse> toResponsePage(Page<Meeting> meetings) {
+        Map<Long, List<String>> imageUrlsByMeetingId = getImageUrlsByMeetingIds(
+                meetings.getContent()
+                        .stream()
+                        .map(Meeting::getId)
+                        .toList()
+        );
+        return meetings.map(meeting -> MeetingResponse.from(
+                meeting,
+                imageUrlsByMeetingId.getOrDefault(meeting.getId(), List.of())
+        ));
+    }
+
+    private Map<Long, List<String>> getImageUrlsByMeetingIds(Collection<Long> meetingIds) {
+        if (meetingIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, List<String>> imageUrlsByMeetingId = new HashMap<>();
+        meetingImageRepository.findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(meetingIds)
+                .forEach(image -> imageUrlsByMeetingId
+                        .computeIfAbsent(image.getMeeting().getId(), id -> new java.util.ArrayList<>())
+                        .add(image.getImageUrl()));
+        return imageUrlsByMeetingId;
+    }
+
+    private List<String> normalizeImageUrls(List<String> imageUrls) {
+        if (imageUrls == null) {
+            return List.of();
+        }
+        return imageUrls.stream()
+                .map(String::trim)
+                .toList();
+    }
+
+    private String firstImageUrl(List<String> imageUrls) {
+        return imageUrls.isEmpty() ? null : imageUrls.get(0);
     }
 
     private Member getMember(Long memberId) {
