@@ -4,6 +4,7 @@ import com.meetple.backend.domain.image.config.ImageStorageProperties;
 import com.meetple.backend.global.exception.BaseException;
 import com.meetple.backend.global.response.ErrorStatus;
 import java.net.URI;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -46,10 +47,20 @@ public class S3ImageStorageClient implements ImageStorageClient {
                     buildFileUrl(uploadObject.objectKey()),
                     uploadObject.objectKey(),
                     "PUT",
-                    Map.of("Content-Type", uploadObject.contentType()),
+                    extractHeaders(presignedRequest),
                     uploadObject.expiresIn()
             );
         }
+    }
+
+    private Map<String, String> extractHeaders(PresignedPutObjectRequest presignedRequest) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        presignedRequest.httpRequest().headers().forEach((name, values) -> {
+            if (!name.equalsIgnoreCase("host") && !values.isEmpty()) {
+                headers.put(name, String.join(",", values));
+            }
+        });
+        return headers;
     }
 
     private S3Presigner createPresigner() {

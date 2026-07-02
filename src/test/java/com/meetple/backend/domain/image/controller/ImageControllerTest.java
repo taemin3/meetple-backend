@@ -104,6 +104,25 @@ class ImageControllerTest {
         verifyNoInteractions(imageService);
     }
 
+    @Test
+    void createUploadUrlWithInvalidPurposeReturnsValidationResponse() throws Exception {
+        mockMvc.perform(post("/api/v1/images/upload-url")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "purpose": "AVATAR",
+                                  "fileName": "avatar.png",
+                                  "contentType": "image/png",
+                                  "contentLength": 512
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.VALIDATION_ERROR.getCode()));
+
+        verifyNoInteractions(imageService);
+    }
+
     private static class AuthenticatedMemberArgumentResolver implements HandlerMethodArgumentResolver {
 
         @Override
