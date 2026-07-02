@@ -49,9 +49,12 @@ public class LocationController {
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
     @Operation(summary = "좌표 주소 조회", description = "위도와 경도를 기준으로 네이버 Reverse Geocoding 주소 정보를 조회합니다.")
     public ResponseEntity<ApiResponse<LocationSearchResponse>> reverseLocation(
-            @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double latitude,
-            @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double longitude
+            @RequestParam(required = false) @DecimalMin("-90.0") @DecimalMax("90.0") Double latitude,
+            @RequestParam(required = false) @DecimalMin("-180.0") @DecimalMax("180.0") Double longitude
     ) {
+        if (latitude == null || longitude == null) {
+            throw new BadRequestException("위도와 경도를 입력해주세요.");
+        }
         return ApiResponse.success(SuccessStatus.OK, locationService.reverse(latitude, longitude));
     }
 }

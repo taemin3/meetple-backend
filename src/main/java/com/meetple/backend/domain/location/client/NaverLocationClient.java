@@ -31,6 +31,10 @@ public class NaverLocationClient implements LocationClient {
     private static final String NAVER_PROVIDER = "NAVER";
     private static final String PLACE_TYPE = "PLACE";
     private static final String ADDRESS_TYPE = "ADDRESS";
+    private static final String REVERSE_ROAD_ADDRESS = "roadaddr";
+    private static final int REVERSE_STATUS_OK = 0;
+    private static final int REVERSE_STATUS_NO_RESULTS = 3;
+    private static final String MOUNTAIN_LAND_TYPE = "2";
     private static final BigDecimal COORDINATE_SCALE = BigDecimal.valueOf(10_000_000L);
 
     private final RestClient restClient;
@@ -68,7 +72,13 @@ public class NaverLocationClient implements LocationClient {
             throw new BaseException(ErrorStatus.EXTERNAL_API_ERROR, "네이버 위치 역조회 호출에 실패했습니다.");
         }
 
-        if (response == null || response.results() == null || !isReverseStatusOk(response.status())) {
+        if (response == null || response.results() == null) {
+            throw new BaseException(ErrorStatus.EXTERNAL_API_ERROR, "네이버 위치 역조회 응답이 올바르지 않습니다.");
+        }
+        if (isReverseStatusNoResults(response.status())) {
+            throw new NotFoundException("좌표에 해당하는 주소를 찾을 수 없습니다.");
+        }
+        if (!isReverseStatusOk(response.status())) {
             throw new BaseException(ErrorStatus.EXTERNAL_API_ERROR, "네이버 위치 역조회 응답이 올바르지 않습니다.");
         }
 
@@ -249,9 +259,16 @@ public class NaverLocationClient implements LocationClient {
     }
 
     private String buildReverseAddress(NaverReverseGeocodeResult result) {
+        if (REVERSE_ROAD_ADDRESS.equals(sanitize(result.name()))) {
+            return joinNonBlank(
+                    buildRoadRegionAddress(result.region()),
+                    buildLandAddress(result.land(), false)
+            );
+        }
+
         return joinNonBlank(
                 buildRegionAddress(result.region()),
-                buildLandAddress(result.land())
+                buildLandAddress(result.land(), true)
         );
     }
 
@@ -277,21 +294,39 @@ public class NaverLocationClient implements LocationClient {
         );
     }
 
-    private String buildLandAddress(NaverReverseLand land) {
+    private String buildRoadRegionAddress(NaverReverseRegion region) {
+        if (region == null) {
+            return "";
+        }
+        return joinNonBlank(
+                areaName(region.area1()),
+                areaName(region.area2())
+        );
+    }
+
+    private String buildLandAddress(NaverReverseLand land, boolean includeMountainPrefix) {
         if (land == null) {
             return "";
         }
         return joinNonBlank(
                 land.name(),
-                buildLandNumber(land.number1(), land.number2())
+                buildLandNumber(land.type(), land.number1(), land.number2(), includeMountainPrefix)
         );
     }
 
-    private String buildLandNumber(String number1, String number2) {
+    private String buildLandNumber(
+            String type,
+            String number1,
+            String number2,
+            boolean includeMountainPrefix
+    ) {
         String mainNumber = sanitize(number1);
         String subNumber = sanitize(number2);
         if (!StringUtils.hasText(mainNumber)) {
             return "";
+        }
+        if (includeMountainPrefix && MOUNTAIN_LAND_TYPE.equals(sanitize(type))) {
+            mainNumber = "산" + mainNumber;
         }
         if (!StringUtils.hasText(subNumber) || "0".equals(subNumber)) {
             return mainNumber;
@@ -366,7 +401,11 @@ public class NaverLocationClient implements LocationClient {
     }
 
     private boolean isReverseStatusOk(NaverReverseStatus status) {
-        return status == null || Objects.equals(status.code(), 0);
+        return status != null && Objects.equals(status.code(), REVERSE_STATUS_OK);
+    }
+
+    private boolean isReverseStatusNoResults(NaverReverseStatus status) {
+        return status != null && Objects.equals(status.code(), REVERSE_STATUS_NO_RESULTS);
     }
 
     private Optional<Double> normalizeLatitude(String value) {
@@ -486,6 +525,7 @@ public class NaverLocationClient implements LocationClient {
 
     private record NaverReverseLand(
             String name,
+            String type,
             String number1,
             String number2,
             NaverReverseAddition addition0

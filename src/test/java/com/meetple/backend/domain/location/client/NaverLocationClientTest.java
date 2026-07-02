@@ -119,11 +119,12 @@ class NaverLocationClientTest {
                       "region": {
                         "area1": { "name": "서울특별시" },
                         "area2": { "name": "영등포구" },
-                        "area3": { "name": "" },
+                        "area3": { "name": "여의도동" },
                         "area4": { "name": "" }
                       },
                       "land": {
                         "name": "여의공원로",
+                        "type": "1",
                         "number1": "68",
                         "number2": "",
                         "addition0": {
@@ -146,6 +147,91 @@ class NaverLocationClientTest {
         assertThat(response.latitude()).isEqualTo(37.5219);
         assertThat(response.longitude()).isEqualTo(126.9245);
         assertThat(response.provider()).isEqualTo("NAVER");
+    }
+
+    @Test
+    void reverseThrowsNotFoundWhenReverseGeocodingStatusIsNoResults() {
+        NaverLocationClient client = createClient(mapsOnlyProperties());
+        expectReverseGeocode(37.5219, 126.9245, """
+                {
+                  "status": {
+                    "code": 3,
+                    "name": "no results",
+                    "message": "요청한 데이터의 결과가 없습니다."
+                  },
+                  "results": []
+                }
+                """);
+
+        assertThatThrownBy(() -> client.reverse(37.5219, 126.9245))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("좌표에 해당하는 주소를 찾을 수 없습니다.");
+    }
+
+    @Test
+    void reverseThrowsWhenReverseGeocodingStatusIsMissing() {
+        NaverLocationClient client = createClient(mapsOnlyProperties());
+        expectReverseGeocode(37.5219, 126.9245, """
+                {
+                  "results": [
+                    {
+                      "name": "roadaddr",
+                      "region": {
+                        "area1": { "name": "서울특별시" },
+                        "area2": { "name": "영등포구" },
+                        "area3": { "name": "" },
+                        "area4": { "name": "" }
+                      },
+                      "land": {
+                        "name": "여의공원로",
+                        "type": "1",
+                        "number1": "68",
+                        "number2": ""
+                      }
+                    }
+                  ]
+                }
+                """);
+
+        assertThatThrownBy(() -> client.reverse(37.5219, 126.9245))
+                .isInstanceOf(BaseException.class)
+                .hasMessage("네이버 위치 역조회 응답이 올바르지 않습니다.");
+    }
+
+    @Test
+    void reversePreservesMountainLotNumberForJibunAddress() {
+        NaverLocationClient client = createClient(mapsOnlyProperties());
+        expectReverseGeocode(37.7219, 127.6245, """
+                {
+                  "status": {
+                    "code": 0,
+                    "name": "ok",
+                    "message": "done"
+                  },
+                  "results": [
+                    {
+                      "name": "addr",
+                      "region": {
+                        "area1": { "name": "강원특별자치도" },
+                        "area2": { "name": "춘천시" },
+                        "area3": { "name": "남산면" },
+                        "area4": { "name": "" }
+                      },
+                      "land": {
+                        "name": "",
+                        "type": "2",
+                        "number1": "5",
+                        "number2": "6"
+                      }
+                    }
+                  ]
+                }
+                """);
+
+        LocationSearchResponse response = client.reverse(37.7219, 127.6245);
+
+        assertThat(response.name()).isEqualTo("강원특별자치도 춘천시 남산면 산5-6");
+        assertThat(response.address()).isEqualTo("강원특별자치도 춘천시 남산면 산5-6");
     }
 
     @Test

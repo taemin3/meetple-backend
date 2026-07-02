@@ -103,4 +103,14 @@ class LocationControllerTest {
                 .andExpect(jsonPath("$.data.longitude").value(126.9245))
                 .andExpect(jsonPath("$.data.provider").value("NAVER"));
     }
+
+    @Test
+    void reverseLocationWithoutCoordinateReturnsApiResponse() throws Exception {
+        mockMvc.perform(get("/api/v1/locations/reverse")
+                        .param("latitude", "37.5219"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.BAD_REQUEST.getCode()))
+                .andExpect(jsonPath("$.message").value("위도와 경도를 입력해주세요."));
+    }
 }
