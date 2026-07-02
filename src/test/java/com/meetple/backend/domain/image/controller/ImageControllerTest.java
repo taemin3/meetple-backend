@@ -190,6 +190,22 @@ class ImageControllerTest {
         verifyNoInteractions(imageService);
     }
 
+    @Test
+    void createUploadUrlsWithNullImageReturnsValidationResponse() throws Exception {
+        mockMvc.perform(post("/api/v1/images/upload-urls")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "images": [null]
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.VALIDATION_ERROR.getCode()));
+
+        verifyNoInteractions(imageService);
+    }
+
     private static class AuthenticatedMemberArgumentResolver implements HandlerMethodArgumentResolver {
 
         @Override

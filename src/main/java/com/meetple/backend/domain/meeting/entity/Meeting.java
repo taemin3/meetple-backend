@@ -69,7 +69,7 @@ public class Meeting extends BaseTimeEntity {
     @Column(nullable = false, length = 30)
     private MeetingStatus status;
 
-    @Column(name = "thumbnail_image_url", length = 255)
+    @Column(name = "thumbnail_image_url", length = 2048)
     private String thumbnailImageUrl;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
