@@ -24,4 +24,11 @@ class LocationServiceTest {
 
         then(locationClient).should().search("여의도공원", 5);
     }
+
+    @Test
+    void reverseDelegatesCoordinates() {
+        locationService.reverse(37.5219, 126.9245);
+
+        then(locationClient).should().reverse(37.5219, 126.9245);
+    }
 }

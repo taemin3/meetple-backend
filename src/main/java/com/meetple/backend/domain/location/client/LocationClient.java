@@ -6,4 +6,6 @@ import java.util.List;
 public interface LocationClient {
 
     List<LocationSearchResponse> search(String query, int display);
+
+    LocationSearchResponse reverse(double latitude, double longitude);
 }
