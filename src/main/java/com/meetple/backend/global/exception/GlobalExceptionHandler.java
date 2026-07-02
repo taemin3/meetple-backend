@@ -7,6 +7,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -48,6 +49,11 @@ public class GlobalExceptionHandler {
                 .map(ConstraintViolation::getMessage)
                 .orElse(ErrorStatus.VALIDATION_ERROR.getMessage());
         return ApiResponse.error(ErrorStatus.VALIDATION_ERROR, errorMessage);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadableException(HttpMessageNotReadableException e) {
+        return ApiResponse.error(ErrorStatus.VALIDATION_ERROR);
     }
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)

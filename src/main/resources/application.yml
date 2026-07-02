@@ -26,3 +26,20 @@ naver:
     maps-base-url: ${NAVER_MAPS_BASE_URL:https://maps.apigw.ntruss.com}
     maps-client-id: ${NAVER_MAPS_CLIENT_ID:}
     maps-client-secret: ${NAVER_MAPS_CLIENT_SECRET:}
+
+image:
+  storage:
+    bucket: ${IMAGE_STORAGE_BUCKET:}
+    region: ${IMAGE_STORAGE_REGION:ap-northeast-2}
+    endpoint: ${IMAGE_STORAGE_ENDPOINT:}
+    public-base-url: ${IMAGE_STORAGE_PUBLIC_BASE_URL:}
+    access-key: ${IMAGE_STORAGE_ACCESS_KEY:}
+    secret-key: ${IMAGE_STORAGE_SECRET_KEY:}
+    key-prefix: ${IMAGE_STORAGE_KEY_PREFIX:images}
+    upload-url-expiration: ${IMAGE_STORAGE_UPLOAD_URL_EXPIRATION:5m}
+    max-size-bytes: ${IMAGE_STORAGE_MAX_SIZE_BYTES:5242880}
+    path-style-access-enabled: ${IMAGE_STORAGE_PATH_STYLE_ACCESS_ENABLED:false}
+    allowed-content-types:
+      - image/jpeg
+      - image/png
+      - image/webp

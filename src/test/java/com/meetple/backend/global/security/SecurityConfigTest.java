@@ -1,6 +1,7 @@
 package com.meetple.backend.global.security;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -94,6 +95,14 @@ class SecurityConfigTest {
         mockMvc.perform(get("/api/v1/locations/reverse")
                         .param("latitude", "37.5219")
                         .param("longitude", "126.9245"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.UNAUTHORIZED.getCode()));
+    }
+
+    @Test
+    void imageUploadUrlWithoutTokenReturnsUnauthorizedApiResponse() throws Exception {
+        mockMvc.perform(post("/api/v1/images/upload-url"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.code").value(ErrorStatus.UNAUTHORIZED.getCode()));
