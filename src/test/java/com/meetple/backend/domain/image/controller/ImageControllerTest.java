@@ -15,6 +15,7 @@ import com.meetple.backend.global.exception.GlobalExceptionHandler;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.response.SuccessStatus;
 import com.meetple.backend.global.security.AuthenticatedMember;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -87,6 +88,56 @@ class ImageControllerTest {
     }
 
     @Test
+    void createUploadUrlsReturnsApiResponse() throws Exception {
+        given(imageService.createUploadUrls(eq(1L), any()))
+                .willReturn(List.of(
+                        new ImageUploadUrlResponse(
+                                "https://upload.meetple.com/images/meeting/1/first.png",
+                                "https://cdn.meetple.com/images/meeting/1/first.png",
+                                "images/meeting/1/first.png",
+                                "PUT",
+                                Map.of("Content-Type", "image/png"),
+                                300L
+                        ),
+                        new ImageUploadUrlResponse(
+                                "https://upload.meetple.com/images/meeting/1/second.webp",
+                                "https://cdn.meetple.com/images/meeting/1/second.webp",
+                                "images/meeting/1/second.webp",
+                                "PUT",
+                                Map.of("Content-Type", "image/webp"),
+                                300L
+                        )
+                ));
+
+        mockMvc.perform(post("/api/v1/images/upload-urls")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "images": [
+                                    {
+                                      "purpose": "MEETING",
+                                      "fileName": "first.png",
+                                      "contentType": "image/png",
+                                      "contentLength": 512
+                                    },
+                                    {
+                                      "purpose": "MEETING",
+                                      "fileName": "second.webp",
+                                      "contentType": "image/webp",
+                                      "contentLength": 256
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value(SuccessStatus.OK.getCode()))
+                .andExpect(jsonPath("$.data[0].objectKey").value("images/meeting/1/first.png"))
+                .andExpect(jsonPath("$.data[1].objectKey").value("images/meeting/1/second.webp"));
+    }
+
+    @Test
     void createUploadUrlWithoutRequiredFieldReturnsValidationResponse() throws Exception {
         mockMvc.perform(post("/api/v1/images/upload-url")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -114,6 +165,38 @@ class ImageControllerTest {
                                   "fileName": "avatar.png",
                                   "contentType": "image/png",
                                   "contentLength": 512
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.VALIDATION_ERROR.getCode()));
+
+        verifyNoInteractions(imageService);
+    }
+
+    @Test
+    void createUploadUrlsWithoutImagesReturnsValidationResponse() throws Exception {
+        mockMvc.perform(post("/api/v1/images/upload-urls")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "images": []
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.VALIDATION_ERROR.getCode()));
+
+        verifyNoInteractions(imageService);
+    }
+
+    @Test
+    void createUploadUrlsWithNullImageReturnsValidationResponse() throws Exception {
+        mockMvc.perform(post("/api/v1/images/upload-urls")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "images": [null]
                                 }
                                 """))
                 .andExpect(status().isBadRequest())

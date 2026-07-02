@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.meetple.backend.domain.image.config.ImageStorageProperties;
 import com.meetple.backend.domain.image.dto.request.ImageUploadUrlRequest;
+import com.meetple.backend.domain.image.dto.request.ImageUploadUrlsRequest;
 import com.meetple.backend.domain.image.dto.response.ImageUploadUrlResponse;
 import com.meetple.backend.domain.image.entity.ImageUploadPurpose;
 import com.meetple.backend.domain.image.storage.ImageStorageClient;
@@ -12,6 +13,7 @@ import com.meetple.backend.domain.image.storage.ImageUploadObject;
 import com.meetple.backend.domain.image.storage.PresignedImageUpload;
 import com.meetple.backend.global.exception.BadRequestException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -75,6 +77,23 @@ class ImageServiceTest {
     }
 
     @Test
+    void createUploadUrlsReturnsPresignedUploadContracts() {
+        ImageUploadUrlsRequest request = new ImageUploadUrlsRequest(List.of(
+                new ImageUploadUrlRequest(ImageUploadPurpose.MEETING, "first.png", "image/png", 512L),
+                new ImageUploadUrlRequest(ImageUploadPurpose.MEETING, "second.webp", "image/webp", 256L)
+        ));
+
+        List<ImageUploadUrlResponse> responses = imageService.createUploadUrls(7L, request);
+
+        assertThat(responses).hasSize(2);
+        assertThat(responses).extracting(ImageUploadUrlResponse::objectKey)
+                .allSatisfy(objectKey -> assertThat(objectKey).startsWith("images/meeting/7/"));
+        assertThat(imageStorageClient.uploadObjects)
+                .extracting(ImageUploadObject::contentType)
+                .containsExactly("image/png", "image/webp");
+    }
+
+    @Test
     void createUploadUrlRejectsUnsupportedContentType() {
         ImageUploadUrlRequest request = new ImageUploadUrlRequest(
                 ImageUploadPurpose.PROFILE,
@@ -105,10 +124,12 @@ class ImageServiceTest {
     private static class CapturingImageStorageClient implements ImageStorageClient {
 
         private ImageUploadObject uploadObject;
+        private final List<ImageUploadObject> uploadObjects = new ArrayList<>();
 
         @Override
         public PresignedImageUpload createPresignedUpload(ImageUploadObject uploadObject) {
             this.uploadObject = uploadObject;
+            this.uploadObjects.add(uploadObject);
             return new PresignedImageUpload(
                     "https://upload.meetple.com/" + uploadObject.objectKey(),
                     "https://cdn.meetple.com/" + uploadObject.objectKey(),

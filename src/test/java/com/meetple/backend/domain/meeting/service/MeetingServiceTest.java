@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
@@ -15,7 +16,9 @@ import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
 import com.meetple.backend.domain.meeting.entity.Meeting;
+import com.meetple.backend.domain.meeting.entity.MeetingImage;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
+import com.meetple.backend.domain.meeting.repository.MeetingImageRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
@@ -28,6 +31,7 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -41,6 +45,9 @@ class MeetingServiceTest {
 
     @Mock
     private MeetingRepository meetingRepository;
+
+    @Mock
+    private MeetingImageRepository meetingImageRepository;
 
     @Mock
     private MemberRepository memberRepository;
@@ -74,6 +81,45 @@ class MeetingServiceTest {
         assertThat(response.capacity()).isEqualTo(10);
         assertThat(response.currentPeople()).isEqualTo(1);
         assertThat(response.status()).isEqualTo(MeetingStatus.RECRUITING);
+        assertThat(response.thumbnailImageUrl()).isEqualTo("https://cdn.meetple.com/images/meeting/1/first.png");
+        assertThat(response.imageUrls()).containsExactly(
+                "https://cdn.meetple.com/images/meeting/1/first.png",
+                "https://cdn.meetple.com/images/meeting/1/second.png"
+        );
+
+        ArgumentCaptor<List<MeetingImage>> imagesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(meetingImageRepository).saveAll(imagesCaptor.capture());
+        assertThat(imagesCaptor.getValue())
+                .extracting(MeetingImage::getImageUrl)
+                .containsExactly(
+                        "https://cdn.meetple.com/images/meeting/1/first.png",
+                        "https://cdn.meetple.com/images/meeting/1/second.png"
+                );
+    }
+
+    @Test
+    void updateMeetingReplacesImagesWhenImageUrlsAreProvided() {
+        Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+
+        UpdateMeetingRequest request = new UpdateMeetingRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of("https://cdn.meetple.com/images/meeting/1/updated.png")
+        );
+
+        MeetingResponse response = meetingService.updateMeeting(1L, 10L, request);
+
+        assertThat(response.thumbnailImageUrl()).isEqualTo("https://cdn.meetple.com/images/meeting/1/updated.png");
+        assertThat(response.imageUrls()).containsExactly("https://cdn.meetple.com/images/meeting/1/updated.png");
+        verify(meetingImageRepository).deleteByMeetingId(10L);
     }
 
     @Test
@@ -178,7 +224,11 @@ class MeetingServiceTest {
                 126.9245,
                 LocalDateTime.now().plusDays(7),
                 10,
-                "Run together at an easy pace."
+                "Run together at an easy pace.",
+                List.of(
+                        "https://cdn.meetple.com/images/meeting/1/first.png",
+                        "https://cdn.meetple.com/images/meeting/1/second.png"
+                )
         );
     }
 

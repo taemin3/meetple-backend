@@ -2,12 +2,14 @@ package com.meetple.backend.domain.image.service;
 
 import com.meetple.backend.domain.image.config.ImageStorageProperties;
 import com.meetple.backend.domain.image.dto.request.ImageUploadUrlRequest;
+import com.meetple.backend.domain.image.dto.request.ImageUploadUrlsRequest;
 import com.meetple.backend.domain.image.dto.response.ImageUploadUrlResponse;
 import com.meetple.backend.domain.image.entity.ImageUploadPurpose;
 import com.meetple.backend.domain.image.storage.ImageStorageClient;
 import com.meetple.backend.domain.image.storage.ImageUploadObject;
 import com.meetple.backend.domain.image.storage.PresignedImageUpload;
 import com.meetple.backend.global.exception.BadRequestException;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -27,6 +29,13 @@ public class ImageService {
 
     private final ImageStorageClient imageStorageClient;
     private final ImageStorageProperties properties;
+
+    public List<ImageUploadUrlResponse> createUploadUrls(Long memberId, ImageUploadUrlsRequest request) {
+        return request.images()
+                .stream()
+                .map(image -> createUploadUrl(memberId, image))
+                .toList();
+    }
 
     public ImageUploadUrlResponse createUploadUrl(Long memberId, ImageUploadUrlRequest request) {
         String contentType = normalizeContentType(request.contentType());

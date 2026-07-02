@@ -6,7 +6,9 @@ import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.NotBlank;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record UpdateMeetingRequest(
         @Size(max = 50, message = "모임 제목은 50자 이하여야 합니다.")
@@ -37,6 +39,37 @@ public record UpdateMeetingRequest(
         Integer capacity,
 
         @Size(max = 1000, message = "모임 소개는 1000자 이하여야 합니다.")
-        String description
+        String description,
+
+        @Size(max = 10, message = "이미지는 최대 10장까지 등록할 수 있습니다.")
+        List<
+                @NotBlank(message = "이미지 URL을 입력해주세요.")
+                @Size(max = 2048, message = "이미지 URL은 2048자 이하여야 합니다.")
+                String> imageUrls
 ) {
+
+    public UpdateMeetingRequest(
+            String title,
+            String category,
+            String locationName,
+            String address,
+            Double latitude,
+            Double longitude,
+            LocalDateTime scheduledAt,
+            Integer capacity,
+            String description
+    ) {
+        this(
+                title,
+                category,
+                locationName,
+                address,
+                latitude,
+                longitude,
+                scheduledAt,
+                capacity,
+                description,
+                null
+        );
+    }
 }
