@@ -25,11 +25,19 @@ class CategoryServiceTest {
     @Test
     void getCategoriesReturnsCategoryResponses() {
         given(categoryRepository.findAllByOrderByNameAsc())
-                .willReturn(List.of(Category.create("exercise"), Category.create("study")));
+                .willReturn(List.of(
+                        Category.create("exercise", "https://cdn.meetple.com/categories/exercise.png"),
+                        Category.create("study", "https://cdn.meetple.com/categories/study.png")
+                ));
 
         List<CategoryResponse> responses = categoryService.getCategories();
 
         assertThat(responses).extracting(CategoryResponse::name)
                 .containsExactly("exercise", "study");
+        assertThat(responses).extracting(CategoryResponse::defaultImageUrl)
+                .containsExactly(
+                        "https://cdn.meetple.com/categories/exercise.png",
+                        "https://cdn.meetple.com/categories/study.png"
+                );
     }
 }

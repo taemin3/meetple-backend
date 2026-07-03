@@ -4,10 +4,15 @@ import com.meetple.backend.domain.category.entity.Category;
 
 public record CategoryResponse(
         Long id,
-        String name
+        String name,
+        String defaultImageUrl
 ) {
 
     public static CategoryResponse from(Category category) {
-        return new CategoryResponse(category.getId(), category.getName());
+        return new CategoryResponse(
+                category.getId(),
+                category.getName(),
+                category.getDefaultImageUrl()
+        );
     }
 }

@@ -24,4 +24,16 @@ class CategoryRepositoryTest {
                 .extracting(Category::getName)
                 .containsExactly("exercise", "study");
     }
+
+    @Test
+    void savesDefaultImageUrl() {
+        categoryRepository.save(Category.create(
+                "exercise",
+                "https://cdn.meetple.com/categories/exercise.png"
+        ));
+
+        assertThat(categoryRepository.findAllByOrderByNameAsc())
+                .extracting(Category::getDefaultImageUrl)
+                .containsExactly("https://cdn.meetple.com/categories/exercise.png");
+    }
 }

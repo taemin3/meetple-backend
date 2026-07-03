@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.category.entity.Category;
@@ -62,7 +63,10 @@ class MeetingServiceTest {
     void createMeetingReturnsSavedMeetingResponse() {
         Member host = member(1L, "host@meetple.com", "host");
         Category category = category(1L, "exercise");
-        CreateMeetingRequest request = createRequest();
+        CreateMeetingRequest request = createRequestWithImageUrls(List.of(
+                "https://cdn.meetple.com/images/meeting/1/first.png",
+                "https://cdn.meetple.com/images/meeting/1/second.png"
+        ));
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(host));
         given(categoryRepository.findByName("exercise")).willReturn(Optional.of(category));
@@ -98,6 +102,32 @@ class MeetingServiceTest {
     }
 
     @Test
+    void createMeetingUsesCategoryDefaultImageWhenNoImagesAreProvided() {
+        Member host = member(1L, "host@meetple.com", "host");
+        Category category = category(
+                1L,
+                "exercise",
+                "https://cdn.meetple.com/categories/exercise.png"
+        );
+        CreateMeetingRequest request = createRequestWithImageUrls(List.of());
+
+        given(memberRepository.findById(1L)).willReturn(Optional.of(host));
+        given(categoryRepository.findByName("exercise")).willReturn(Optional.of(category));
+        given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> {
+            Meeting meeting = invocation.getArgument(0);
+            ReflectionTestUtils.setField(meeting, "id", 10L);
+            return meeting;
+        });
+
+        MeetingResponse response = meetingService.createMeeting(1L, request);
+
+        assertThat(response.thumbnailImageUrl())
+                .isEqualTo("https://cdn.meetple.com/categories/exercise.png");
+        assertThat(response.imageUrls()).isEmpty();
+        verify(meetingImageRepository, never()).saveAll(any());
+    }
+
+    @Test
     void updateMeetingReplacesImagesWhenImageUrlsAreProvided() {
         Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
@@ -119,6 +149,36 @@ class MeetingServiceTest {
 
         assertThat(response.thumbnailImageUrl()).isEqualTo("https://cdn.meetple.com/images/meeting/1/updated.png");
         assertThat(response.imageUrls()).containsExactly("https://cdn.meetple.com/images/meeting/1/updated.png");
+        verify(meetingImageRepository).deleteByMeetingId(10L);
+    }
+
+    @Test
+    void updateMeetingUsesCategoryDefaultImageWhenImagesAreCleared() {
+        Meeting meeting = meeting(
+                10L,
+                member(1L, "host@meetple.com", "host"),
+                category(1L, "exercise", "https://cdn.meetple.com/categories/exercise.png")
+        );
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+
+        UpdateMeetingRequest request = new UpdateMeetingRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of()
+        );
+
+        MeetingResponse response = meetingService.updateMeeting(1L, 10L, request);
+
+        assertThat(response.thumbnailImageUrl())
+                .isEqualTo("https://cdn.meetple.com/categories/exercise.png");
+        assertThat(response.imageUrls()).isEmpty();
         verify(meetingImageRepository).deleteByMeetingId(10L);
     }
 
@@ -215,6 +275,13 @@ class MeetingServiceTest {
     }
 
     private CreateMeetingRequest createRequest() {
+        return createRequestWithImageUrls(List.of(
+                "https://cdn.meetple.com/images/meeting/1/first.png",
+                "https://cdn.meetple.com/images/meeting/1/second.png"
+        ));
+    }
+
+    private CreateMeetingRequest createRequestWithImageUrls(List<String> imageUrls) {
         return new CreateMeetingRequest(
                 "Weekend running",
                 "exercise",
@@ -225,10 +292,7 @@ class MeetingServiceTest {
                 LocalDateTime.now().plusDays(7),
                 10,
                 "Run together at an easy pace.",
-                List.of(
-                        "https://cdn.meetple.com/images/meeting/1/first.png",
-                        "https://cdn.meetple.com/images/meeting/1/second.png"
-                )
+                imageUrls
         );
     }
 
@@ -267,7 +331,11 @@ class MeetingServiceTest {
     }
 
     private Category category(Long id, String name) {
-        Category category = Category.create(name);
+        return category(id, name, null);
+    }
+
+    private Category category(Long id, String name, String defaultImageUrl) {
+        Category category = Category.create(name, defaultImageUrl);
         ReflectionTestUtils.setField(category, "id", id);
         return category;
     }

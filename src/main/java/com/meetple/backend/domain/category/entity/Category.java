@@ -30,11 +30,23 @@ public class Category extends BaseTimeEntity {
     @Column(nullable = false, length = 50)
     private String name;
 
-    private Category(String name) {
+    @Column(name = "default_image_url", length = 2048)
+    private String defaultImageUrl;
+
+    private Category(String name, String defaultImageUrl) {
         this.name = name;
+        this.defaultImageUrl = normalizeOptionalText(defaultImageUrl);
     }
 
     public static Category create(String name) {
-        return new Category(name);
+        return new Category(name, null);
+    }
+
+    public static Category create(String name, String defaultImageUrl) {
+        return new Category(name, defaultImageUrl);
+    }
+
+    private static String normalizeOptionalText(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

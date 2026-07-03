@@ -32,6 +32,7 @@ public record MeetingResponse(
     }
 
     public static MeetingResponse from(Meeting meeting, List<String> imageUrls) {
+        List<String> resolvedImageUrls = imageUrls == null ? List.of() : imageUrls;
         return new MeetingResponse(
                 meeting.getId(),
                 meeting.getHost().getId(),
@@ -48,10 +49,24 @@ public record MeetingResponse(
                 meeting.getMaxPeople(),
                 meeting.getCurrentPeople(),
                 meeting.getStatus(),
-                meeting.getThumbnailImageUrl(),
-                imageUrls,
+                resolveThumbnailImageUrl(meeting, resolvedImageUrls),
+                resolvedImageUrls,
                 meeting.getCreatedAt(),
                 meeting.getUpdatedAt()
         );
+    }
+
+    private static String resolveThumbnailImageUrl(Meeting meeting, List<String> imageUrls) {
+        if (!imageUrls.isEmpty() && hasText(imageUrls.get(0))) {
+            return imageUrls.get(0);
+        }
+        if (hasText(meeting.getThumbnailImageUrl())) {
+            return meeting.getThumbnailImageUrl();
+        }
+        return meeting.getCategory().getDefaultImageUrl();
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }
