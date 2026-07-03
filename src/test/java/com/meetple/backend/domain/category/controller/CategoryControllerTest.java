@@ -33,8 +33,8 @@ class CategoryControllerTest {
     @Test
     void getCategoriesReturnsApiResponse() throws Exception {
         List<CategoryResponse> categories = List.of(
-                new CategoryResponse(1L, "exercise"),
-                new CategoryResponse(2L, "study")
+                new CategoryResponse(1L, "exercise", "https://cdn.meetple.com/categories/exercise.png"),
+                new CategoryResponse(2L, "study", "https://cdn.meetple.com/categories/study.png")
         );
         given(categoryService.getCategories()).willReturn(categories);
 
@@ -45,7 +45,11 @@ class CategoryControllerTest {
                 .andExpect(jsonPath("$.code").value(SuccessStatus.OK.getCode()))
                 .andExpect(jsonPath("$.data[0].id").value(1))
                 .andExpect(jsonPath("$.data[0].name").value("exercise"))
+                .andExpect(jsonPath("$.data[0].defaultImageUrl")
+                        .value("https://cdn.meetple.com/categories/exercise.png"))
                 .andExpect(jsonPath("$.data[1].id").value(2))
-                .andExpect(jsonPath("$.data[1].name").value("study"));
+                .andExpect(jsonPath("$.data[1].name").value("study"))
+                .andExpect(jsonPath("$.data[1].defaultImageUrl")
+                        .value("https://cdn.meetple.com/categories/study.png"));
     }
 }
