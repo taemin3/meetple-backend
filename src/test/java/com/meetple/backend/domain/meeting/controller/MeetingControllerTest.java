@@ -99,6 +99,12 @@ class MeetingControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.code").value(SuccessStatus.OK.getCode()))
                 .andExpect(jsonPath("$.data.content[0].id").value(10))
+                .andExpect(jsonPath("$.data.content[0].thumbnailImageUrl")
+                        .value("https://cdn.meetple.com/images/meeting/1/first.png"))
+                .andExpect(jsonPath("$.data.content[0].imageUrls[0]")
+                        .value("https://cdn.meetple.com/images/meeting/1/first.png"))
+                .andExpect(jsonPath("$.data.content[0].imageUrls[1]")
+                        .value("https://cdn.meetple.com/images/meeting/1/second.png"))
                 .andExpect(jsonPath("$.data.totalElements").value(1));
     }
 
@@ -130,6 +136,12 @@ class MeetingControllerTest {
                         .param("category", "exercise"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].categoryName").value("exercise"))
+                .andExpect(jsonPath("$.data.content[0].thumbnailImageUrl")
+                        .value("https://cdn.meetple.com/images/meeting/1/first.png"))
+                .andExpect(jsonPath("$.data.content[0].imageUrls[0]")
+                        .value("https://cdn.meetple.com/images/meeting/1/first.png"))
+                .andExpect(jsonPath("$.data.content[0].imageUrls[1]")
+                        .value("https://cdn.meetple.com/images/meeting/1/second.png"))
                 .andExpect(jsonPath("$.data.totalElements").value(1));
     }
 
@@ -140,7 +152,13 @@ class MeetingControllerTest {
         mockMvc.perform(get("/api/v1/meetings/10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(10))
-                .andExpect(jsonPath("$.data.hostId").value(1));
+                .andExpect(jsonPath("$.data.hostId").value(1))
+                .andExpect(jsonPath("$.data.thumbnailImageUrl")
+                        .value("https://cdn.meetple.com/images/meeting/1/first.png"))
+                .andExpect(jsonPath("$.data.imageUrls[0]")
+                        .value("https://cdn.meetple.com/images/meeting/1/first.png"))
+                .andExpect(jsonPath("$.data.imageUrls[1]")
+                        .value("https://cdn.meetple.com/images/meeting/1/second.png"));
     }
 
     @Test
