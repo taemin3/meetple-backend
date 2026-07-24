@@ -228,6 +228,19 @@ class MeetingServiceTest {
                 anyDouble(),
                 any()
         )).willReturn(new PageImpl<>(List.of(nearby), PageRequest.of(0, 20), 1));
+        given(meetingImageRepository.findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(any()))
+                .willReturn(List.of(
+                        MeetingImage.create(
+                                nearby,
+                                "https://cdn.meetple.com/images/meeting/10/first.png",
+                                0
+                        ),
+                        MeetingImage.create(
+                                nearby,
+                                "https://cdn.meetple.com/images/meeting/10/second.png",
+                                1
+                        )
+                ));
 
         PageResponse<MeetingResponse> response = meetingService.getNearbyMeetings(
                 new NearbyMeetingSearchRequest(37.5219, 126.9245, 1000, "exercise"),
@@ -237,6 +250,12 @@ class MeetingServiceTest {
         assertThat(response.totalElements()).isEqualTo(1);
         assertThat(response.content()).extracting(MeetingResponse::id)
                 .containsExactly(10L);
+        assertThat(response.content().getFirst().thumbnailImageUrl())
+                .isEqualTo("https://cdn.meetple.com/images/meeting/10/first.png");
+        assertThat(response.content().getFirst().imageUrls()).containsExactly(
+                "https://cdn.meetple.com/images/meeting/10/first.png",
+                "https://cdn.meetple.com/images/meeting/10/second.png"
+        );
     }
 
     @Test
