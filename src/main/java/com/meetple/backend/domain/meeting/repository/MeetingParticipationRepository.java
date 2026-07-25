@@ -32,6 +32,8 @@ public interface MeetingParticipationRepository extends JpaRepository<MeetingPar
 
     boolean existsByMeetingIdAndMemberId(Long meetingId, Long memberId);
 
+    boolean existsByMeetingId(Long meetingId);
+
     List<MeetingParticipation> findByMeetingId(Long meetingId);
 
     @EntityGraph(attributePaths = {"meeting", "member"})
@@ -50,5 +52,11 @@ public interface MeetingParticipationRepository extends JpaRepository<MeetingPar
             Long memberId,
             ParticipationStatus status,
             Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = "member")
+    List<MeetingParticipation> findByMeetingIdAndStatus(
+            Long meetingId,
+            ParticipationStatus status
     );
 }

@@ -18,6 +18,11 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
 
     List<Meeting> findByHostId(Long hostId);
 
+    List<Meeting> findByStatusInAndEndDateLessThanEqual(
+            List<MeetingStatus> statuses,
+            java.time.LocalDateTime endDate
+    );
+
     @Override
     @EntityGraph(attributePaths = {"host", "category"})
     Page<Meeting> findAll(Pageable pageable);

@@ -10,6 +10,7 @@ public record MeetingParticipationResponse(
         String meetingTitle,
         Long memberId,
         String memberNickname,
+        String memberProfileImageUrl,
         ParticipationStatus status,
         String message,
         LocalDateTime reviewedAt,
@@ -18,6 +19,35 @@ public record MeetingParticipationResponse(
         LocalDateTime updatedAt
 ) {
 
+    public MeetingParticipationResponse(
+            Long id,
+            Long meetingId,
+            String meetingTitle,
+            Long memberId,
+            String memberNickname,
+            ParticipationStatus status,
+            String message,
+            LocalDateTime reviewedAt,
+            LocalDateTime canceledAt,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt
+    ) {
+        this(
+                id,
+                meetingId,
+                meetingTitle,
+                memberId,
+                memberNickname,
+                null,
+                status,
+                message,
+                reviewedAt,
+                canceledAt,
+                createdAt,
+                updatedAt
+        );
+    }
+
     public static MeetingParticipationResponse from(MeetingParticipation participation) {
         return new MeetingParticipationResponse(
                 participation.getId(),
@@ -25,6 +55,7 @@ public record MeetingParticipationResponse(
                 participation.getMeeting().getTitle(),
                 participation.getMember().getId(),
                 participation.getMember().getNickname(),
+                participation.getMember().getProfileImageUrl(),
                 participation.getStatus(),
                 participation.getMessage(),
                 participation.getReviewedAt(),

@@ -45,8 +45,37 @@ public record UpdateMeetingRequest(
         List<
                 @NotBlank(message = "이미지 URL을 입력해주세요.")
                 @Size(max = 2048, message = "이미지 URL은 2048자 이하여야 합니다.")
-                String> imageUrls
+                String> imageUrls,
+
+        LocalDateTime endsAt
 ) {
+
+    public UpdateMeetingRequest(
+            String title,
+            String category,
+            String locationName,
+            String address,
+            Double latitude,
+            Double longitude,
+            LocalDateTime scheduledAt,
+            Integer capacity,
+            String description,
+            List<String> imageUrls
+    ) {
+        this(
+                title,
+                category,
+                locationName,
+                address,
+                latitude,
+                longitude,
+                scheduledAt,
+                capacity,
+                description,
+                imageUrls,
+                null
+        );
+    }
 
     public UpdateMeetingRequest(
             String title,
@@ -69,6 +98,7 @@ public record UpdateMeetingRequest(
                 scheduledAt,
                 capacity,
                 description,
+                null,
                 null
         );
     }
