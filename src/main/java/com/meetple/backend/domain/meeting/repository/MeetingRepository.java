@@ -23,6 +23,11 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
             java.time.LocalDateTime endDate
     );
 
+    List<Meeting> findByStatusInAndEndDateIsNullAndMeetingDateLessThanEqual(
+            List<MeetingStatus> statuses,
+            java.time.LocalDateTime meetingDate
+    );
+
     @Override
     @EntityGraph(attributePaths = {"host", "category"})
     Page<Meeting> findAll(Pageable pageable);

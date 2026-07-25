@@ -94,7 +94,9 @@ public record MeetingResponse(
                 meeting.getLatitude().doubleValue(),
                 meeting.getLongitude().doubleValue(),
                 meeting.getMeetingDate(),
-                meeting.getEndDate(),
+                meeting.getEndDate() == null
+                        ? meeting.getMeetingDate().plusHours(2)
+                        : meeting.getEndDate(),
                 meeting.getMaxPeople(),
                 meeting.getCurrentPeople(),
                 meeting.getStatus(),

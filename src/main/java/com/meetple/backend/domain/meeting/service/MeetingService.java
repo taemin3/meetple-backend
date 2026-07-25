@@ -24,6 +24,7 @@ import com.meetple.backend.global.response.PageResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -231,9 +232,16 @@ public class MeetingService {
 
     @Transactional
     public int completeEndedMeetings(LocalDateTime now) {
-        List<Meeting> endedMeetings = meetingRepository.findByStatusInAndEndDateLessThanEqual(
-                List.of(MeetingStatus.RECRUITING, MeetingStatus.FULL),
+        List<MeetingStatus> openStatuses = List.of(MeetingStatus.RECRUITING, MeetingStatus.FULL);
+        List<Meeting> endedMeetings = new ArrayList<>(meetingRepository.findByStatusInAndEndDateLessThanEqual(
+                openStatuses,
                 now
+        ));
+        endedMeetings.addAll(
+                meetingRepository.findByStatusInAndEndDateIsNullAndMeetingDateLessThanEqual(
+                        openStatuses,
+                        now.minusHours(2)
+                )
         );
         endedMeetings.forEach(Meeting::complete);
         return endedMeetings.size();
