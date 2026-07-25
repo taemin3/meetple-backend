@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -18,11 +19,16 @@ import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingImage;
+import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
+import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
+import com.meetple.backend.domain.meeting.repository.MeetingBookmarkRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingImageRepository;
+import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.notification.service.NotificationService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.response.PageResponse;
@@ -55,6 +61,15 @@ class MeetingServiceTest {
 
     @Mock
     private CategoryRepository categoryRepository;
+
+    @Mock
+    private MeetingParticipationRepository participationRepository;
+
+    @Mock
+    private MeetingBookmarkRepository bookmarkRepository;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private MeetingService meetingService;
@@ -272,6 +287,31 @@ class MeetingServiceTest {
         ))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("지원하지 않는 정렬 조건입니다.");
+    }
+
+    @Test
+    void cancelMeetingTruncatesNotificationMessageToColumnLength() {
+        Member host = member(1L, "host@meetple.com", "host");
+        Member participant = member(2L, "runner@meetple.com", "runner");
+        Meeting meeting = meeting(10L, host, category(1L, "exercise"));
+        MeetingParticipation participation = MeetingParticipation.apply(meeting, participant, null);
+        participation.approve();
+
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(participationRepository.findByMeetingIdAndStatus(10L, ParticipationStatus.APPROVED))
+                .willReturn(List.of(participation));
+
+        meetingService.cancelMeeting(1L, 10L, "a".repeat(500));
+
+        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+        verify(notificationService).notify(
+                eq(participant),
+                eq("MEETING_CANCELED"),
+                eq("모임 취소"),
+                messageCaptor.capture(),
+                eq(10L)
+        );
+        assertThat(messageCaptor.getValue()).hasSize(500);
     }
 
     private CreateMeetingRequest createRequest() {

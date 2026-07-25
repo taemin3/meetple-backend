@@ -70,7 +70,7 @@ public class MeetingParticipationService {
         Member member = getMember(memberId);
         ensureApplicantCanApply(meeting, memberId);
 
-        var existing = participationRepository.findByMeetingIdAndMemberId(meetingId, memberId);
+        var existing = participationRepository.findByMeetingIdAndMemberIdForUpdate(meetingId, memberId);
         if (existing.isPresent()) {
             MeetingParticipation participation = existing.get();
             if (participation.getStatus() == ParticipationStatus.CANCELED) {

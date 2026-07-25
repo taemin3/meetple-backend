@@ -11,14 +11,17 @@ import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.test.context.ActiveProfiles;
 
 @DataJpaTest
@@ -157,6 +160,20 @@ class MeetingRepositoryTest {
                 meeting.getId(),
                 participant.getId()
         )).isTrue();
+    }
+
+    @Test
+    void completionQueriesUsePessimisticWriteLock() throws NoSuchMethodException {
+        assertThat(MeetingRepository.class.getMethod(
+                "findByStatusInAndEndDateLessThanEqual",
+                List.class,
+                LocalDateTime.class
+        ).getAnnotation(Lock.class).value()).isEqualTo(LockModeType.PESSIMISTIC_WRITE);
+        assertThat(MeetingRepository.class.getMethod(
+                "findByStatusInAndEndDateIsNullAndMeetingDateLessThanEqual",
+                List.class,
+                LocalDateTime.class
+        ).getAnnotation(Lock.class).value()).isEqualTo(LockModeType.PESSIMISTIC_WRITE);
     }
 
     private Meeting createMeeting(Member host, Category category) {

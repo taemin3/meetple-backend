@@ -53,6 +53,7 @@ public class MeetingService {
     private static final String CAPACITY_TOO_SMALL_MESSAGE = "정원은 현재 인원보다 적을 수 없습니다.";
     private static final String INVALID_MEETING_STATUS_MESSAGE = "지원하지 않는 모임 상태입니다.";
     private static final String INVALID_SORT_PROPERTY_MESSAGE = "지원하지 않는 정렬 조건입니다.";
+    private static final int NOTIFICATION_MESSAGE_MAX_LENGTH = 500;
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
     private static final double METERS_PER_LATITUDE_DEGREE = 111_320.0;
     private static final Set<String> ALLOWED_SORT_PROPERTIES = Set.of(
@@ -219,7 +220,7 @@ public class MeetingService {
                         participation.getMember(),
                         "MEETING_CANCELED",
                         "모임 취소",
-                        meeting.getTitle() + " 모임이 취소되었습니다. 사유: " + normalizedReason,
+                        cancellationNotificationMessage(meeting.getTitle(), normalizedReason),
                         meetingId
                 ));
         return toResponse(meeting);
@@ -378,6 +379,13 @@ public class MeetingService {
             throw new BadRequestException(message);
         }
         return value.trim();
+    }
+
+    private String cancellationNotificationMessage(String meetingTitle, String reason) {
+        String message = meetingTitle + " 모임이 취소되었습니다. 사유: " + reason;
+        return message.length() <= NOTIFICATION_MESSAGE_MAX_LENGTH
+                ? message
+                : message.substring(0, NOTIFICATION_MESSAGE_MAX_LENGTH);
     }
 
     private MeetingStatus parseStatus(String status) {

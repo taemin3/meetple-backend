@@ -9,6 +9,7 @@ import com.meetple.backend.domain.meeting.entity.MeetingBookmark;
 import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.meeting.repository.MeetingBookmarkRepository;
+import com.meetple.backend.domain.meeting.repository.MeetingImageRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
@@ -18,10 +19,16 @@ import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,9 +37,21 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class MeetingEngagementService {
 
+    private static final String INVALID_SORT_PROPERTY_MESSAGE = "Unsupported sort property.";
+    private static final Set<String> MEETING_SORT_PROPERTIES = Set.of(
+            "id",
+            "title",
+            "meetingDate",
+            "currentPeople",
+            "maxPeople",
+            "status",
+            "updatedAt"
+    );
+
     private final MeetingRepository meetingRepository;
     private final MeetingParticipationRepository participationRepository;
     private final MeetingBookmarkRepository bookmarkRepository;
+    private final MeetingImageRepository meetingImageRepository;
     private final MemberRepository memberRepository;
 
     public MeetingEngagementResponse getEngagement(Long memberId, Long meetingId) {
@@ -84,14 +103,60 @@ public class MeetingEngagementService {
     }
 
     public PageResponse<MeetingResponse> getMyBookmarks(Long memberId, Pageable pageable) {
-        return PageResponse.from(
-                bookmarkRepository.findByMemberId(memberId, pageable)
-                        .map(bookmark -> MeetingResponse.from(bookmark.getMeeting()))
+        Page<MeetingBookmark> bookmarks = bookmarkRepository.findByMemberId(
+                memberId,
+                toBookmarkPageable(pageable)
         );
+        Map<Long, List<String>> imageUrlsByMeetingId = getImageUrlsByMeetingIds(
+                bookmarks.getContent()
+                        .stream()
+                        .map(bookmark -> bookmark.getMeeting().getId())
+                        .toList()
+        );
+        return PageResponse.from(bookmarks.map(bookmark -> MeetingResponse.from(
+                bookmark.getMeeting(),
+                imageUrlsByMeetingId.getOrDefault(bookmark.getMeeting().getId(), List.of())
+        )));
     }
 
     private Meeting getMeeting(Long meetingId) {
         return meetingRepository.findById(meetingId)
                 .orElseThrow(() -> new NotFoundException("Meeting not found."));
+    }
+
+    private Pageable toBookmarkPageable(Pageable pageable) {
+        if (pageable.isUnpaged()) {
+            return pageable;
+        }
+
+        List<Sort.Order> orders = pageable.getSort()
+                .stream()
+                .map(this::toBookmarkSortOrder)
+                .toList();
+        Sort sort = orders.isEmpty() ? Sort.unsorted() : Sort.by(orders);
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
+    }
+
+    private Sort.Order toBookmarkSortOrder(Sort.Order order) {
+        if ("createdAt".equals(order.getProperty())) {
+            return order;
+        }
+        if (MEETING_SORT_PROPERTIES.contains(order.getProperty())) {
+            return order.withProperty("meeting." + order.getProperty());
+        }
+        throw new BadRequestException(INVALID_SORT_PROPERTY_MESSAGE);
+    }
+
+    private Map<Long, List<String>> getImageUrlsByMeetingIds(List<Long> meetingIds) {
+        if (meetingIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, List<String>> imageUrlsByMeetingId = new HashMap<>();
+        meetingImageRepository.findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(meetingIds)
+                .forEach(image -> imageUrlsByMeetingId
+                        .computeIfAbsent(image.getMeeting().getId(), id -> new ArrayList<>())
+                        .add(image.getImageUrl()));
+        return imageUrlsByMeetingId;
     }
 }

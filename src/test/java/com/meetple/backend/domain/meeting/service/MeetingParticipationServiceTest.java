@@ -60,7 +60,7 @@ class MeetingParticipationServiceTest {
 
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
         given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
-        given(participationRepository.findByMeetingIdAndMemberId(10L, 2L)).willReturn(Optional.empty());
+        given(participationRepository.findByMeetingIdAndMemberIdForUpdate(10L, 2L)).willReturn(Optional.empty());
         given(participationRepository.saveAndFlush(any(MeetingParticipation.class))).willAnswer(invocation -> {
             MeetingParticipation participation = invocation.getArgument(0);
             ReflectionTestUtils.setField(participation, "id", 100L);
@@ -104,7 +104,7 @@ class MeetingParticipationServiceTest {
 
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
         given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
-        given(participationRepository.findByMeetingIdAndMemberId(10L, 2L))
+        given(participationRepository.findByMeetingIdAndMemberIdForUpdate(10L, 2L))
                 .willReturn(Optional.of(participation(100L, meeting, applicant)));
 
         assertThatThrownBy(() -> participationService.applyParticipation(
@@ -124,7 +124,7 @@ class MeetingParticipationServiceTest {
 
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
         given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
-        given(participationRepository.findByMeetingIdAndMemberId(10L, 2L)).willReturn(Optional.empty());
+        given(participationRepository.findByMeetingIdAndMemberIdForUpdate(10L, 2L)).willReturn(Optional.empty());
         given(participationRepository.saveAndFlush(any(MeetingParticipation.class)))
                 .willThrow(new DataIntegrityViolationException("duplicate participation"));
 
@@ -135,6 +135,29 @@ class MeetingParticipationServiceTest {
         ))
                 .isInstanceOf(ConflictException.class)
                 .hasMessage("Participation already exists.");
+    }
+
+    @Test
+    void applyParticipationReappliesCanceledParticipationWithLockingLookup() {
+        Member host = member(1L, "host@meetple.com", "host");
+        Member applicant = member(2L, "runner@meetple.com", "runner");
+        Meeting meeting = meeting(10L, host);
+        MeetingParticipation participation = participation(100L, meeting, applicant);
+        participation.cancel();
+
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
+        given(participationRepository.findByMeetingIdAndMemberIdForUpdate(10L, 2L))
+                .willReturn(Optional.of(participation));
+
+        MeetingParticipationResponse response = participationService.applyParticipation(
+                2L,
+                10L,
+                new CreateMeetingParticipationRequest("Apply again")
+        );
+
+        assertThat(response.status()).isEqualTo(ParticipationStatus.PENDING);
+        assertThat(response.message()).isEqualTo("Apply again");
     }
 
     @Test
