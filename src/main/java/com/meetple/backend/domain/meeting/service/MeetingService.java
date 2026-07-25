@@ -358,9 +358,9 @@ public class MeetingService {
         LocalDateTime startDate = chooseDateTime(request.scheduledAt(), meeting.getMeetingDate());
         LocalDateTime endDate = request.endsAt();
         if (endDate == null) {
-            endDate = request.scheduledAt() == null
+            endDate = request.scheduledAt() == null && meeting.getEndDate() != null
                     ? meeting.getEndDate()
-                    : request.scheduledAt().plusHours(2);
+                    : startDate.plusHours(2);
         }
         return resolveEndDate(startDate, endDate);
     }
