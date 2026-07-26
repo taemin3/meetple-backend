@@ -18,6 +18,18 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
 
     List<Meeting> findByHostId(Long hostId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    List<Meeting> findByStatusInAndEndDateLessThanEqual(
+            List<MeetingStatus> statuses,
+            java.time.LocalDateTime endDate
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    List<Meeting> findByStatusInAndEndDateIsNullAndMeetingDateLessThanEqual(
+            List<MeetingStatus> statuses,
+            java.time.LocalDateTime meetingDate
+    );
+
     @Override
     @EntityGraph(attributePaths = {"host", "category"})
     Page<Meeting> findAll(Pageable pageable);

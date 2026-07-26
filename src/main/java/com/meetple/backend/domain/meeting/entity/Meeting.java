@@ -65,6 +65,12 @@ public class Meeting extends BaseTimeEntity {
     @Column(name = "meeting_date", nullable = false)
     private LocalDateTime meetingDate;
 
+    @Column(name = "end_date")
+    private LocalDateTime endDate;
+
+    @Column(name = "cancel_reason", length = 500)
+    private String cancelReason;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private MeetingStatus status;
@@ -91,6 +97,7 @@ public class Meeting extends BaseTimeEntity {
             BigDecimal longitude,
             Integer maxPeople,
             LocalDateTime meetingDate,
+            LocalDateTime endDate,
             String thumbnailImageUrl
     ) {
         this.host = host;
@@ -104,6 +111,7 @@ public class Meeting extends BaseTimeEntity {
         this.maxPeople = maxPeople;
         this.currentPeople = 1;
         this.meetingDate = meetingDate;
+        this.endDate = endDate;
         this.thumbnailImageUrl = thumbnailImageUrl;
         this.status = MeetingStatus.RECRUITING;
     }
@@ -121,6 +129,36 @@ public class Meeting extends BaseTimeEntity {
             LocalDateTime meetingDate,
             String thumbnailImageUrl
     ) {
+        return create(
+                host,
+                category,
+                title,
+                content,
+                locationName,
+                address,
+                latitude,
+                longitude,
+                maxPeople,
+                meetingDate,
+                meetingDate.plusHours(2),
+                thumbnailImageUrl
+        );
+    }
+
+    public static Meeting create(
+            Member host,
+            Category category,
+            String title,
+            String content,
+            String locationName,
+            String address,
+            BigDecimal latitude,
+            BigDecimal longitude,
+            Integer maxPeople,
+            LocalDateTime meetingDate,
+            LocalDateTime endDate,
+            String thumbnailImageUrl
+    ) {
         return new Meeting(
                 host,
                 category,
@@ -132,6 +170,7 @@ public class Meeting extends BaseTimeEntity {
                 longitude,
                 maxPeople,
                 meetingDate,
+                endDate,
                 thumbnailImageUrl
         );
     }
@@ -140,8 +179,9 @@ public class Meeting extends BaseTimeEntity {
         this.status = MeetingStatus.COMPLETED;
     }
 
-    public void cancel() {
+    public void cancel(String reason) {
         this.status = MeetingStatus.CANCELED;
+        this.cancelReason = reason;
     }
 
     public void update(
@@ -153,7 +193,8 @@ public class Meeting extends BaseTimeEntity {
             BigDecimal latitude,
             BigDecimal longitude,
             Integer maxPeople,
-            LocalDateTime meetingDate
+            LocalDateTime meetingDate,
+            LocalDateTime endDate
     ) {
         this.category = category;
         this.title = title;
@@ -164,6 +205,7 @@ public class Meeting extends BaseTimeEntity {
         this.longitude = longitude;
         this.maxPeople = maxPeople;
         this.meetingDate = meetingDate;
+        this.endDate = endDate;
         updateRecruitmentStatusByCapacity();
     }
 

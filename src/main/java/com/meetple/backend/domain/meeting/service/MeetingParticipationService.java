@@ -10,12 +10,14 @@ import com.meetple.backend.domain.meeting.repository.MeetingParticipationReposit
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.notification.service.NotificationService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
 import java.util.Locale;
+import java.time.LocalDateTime;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -56,6 +58,7 @@ public class MeetingParticipationService {
     private final MeetingRepository meetingRepository;
     private final MeetingParticipationRepository participationRepository;
     private final MemberRepository memberRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public MeetingParticipationResponse applyParticipation(
@@ -67,7 +70,20 @@ public class MeetingParticipationService {
         Member member = getMember(memberId);
         ensureApplicantCanApply(meeting, memberId);
 
-        if (participationRepository.existsByMeetingIdAndMemberId(meetingId, memberId)) {
+        var existing = participationRepository.findByMeetingIdAndMemberIdForUpdate(meetingId, memberId);
+        if (existing.isPresent()) {
+            MeetingParticipation participation = existing.get();
+            if (participation.getStatus() == ParticipationStatus.CANCELED) {
+                participation.reapply(normalizeMessage(request == null ? null : request.message()));
+                notificationService.notify(
+                        meeting.getHost(),
+                        "PARTICIPATION_APPLIED",
+                        "새 참여 신청",
+                        member.getNickname() + "님이 " + meeting.getTitle() + " 모임에 참여를 신청했습니다.",
+                        meetingId
+                );
+                return MeetingParticipationResponse.from(participation);
+            }
             throw new ConflictException(DUPLICATE_PARTICIPATION_MESSAGE);
         }
 
@@ -78,7 +94,15 @@ public class MeetingParticipationService {
         );
 
         try {
-            return MeetingParticipationResponse.from(participationRepository.saveAndFlush(participation));
+            MeetingParticipation saved = participationRepository.saveAndFlush(participation);
+            notificationService.notify(
+                    meeting.getHost(),
+                    "PARTICIPATION_APPLIED",
+                    "새 참여 신청",
+                    member.getNickname() + "님이 " + meeting.getTitle() + " 모임에 참여를 신청했습니다.",
+                    meetingId
+            );
+            return MeetingParticipationResponse.from(saved);
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException(DUPLICATE_PARTICIPATION_MESSAGE);
         }
@@ -112,6 +136,13 @@ public class MeetingParticipationService {
 
         participation.approve();
         meeting.increaseCurrentPeople();
+        notificationService.notify(
+                participation.getMember(),
+                "PARTICIPATION_APPROVED",
+                "참여 승인",
+                meeting.getTitle() + " 모임 참여가 승인되었습니다.",
+                meetingId
+        );
         return MeetingParticipationResponse.from(participation);
     }
 
@@ -123,6 +154,13 @@ public class MeetingParticipationService {
         ensurePending(participation);
 
         participation.reject();
+        notificationService.notify(
+                participation.getMember(),
+                "PARTICIPATION_REJECTED",
+                "참여 거절",
+                meeting.getTitle() + " 모임 참여 신청이 거절되었습니다.",
+                meetingId
+        );
         return MeetingParticipationResponse.from(participation);
     }
 
@@ -132,11 +170,21 @@ public class MeetingParticipationService {
         MeetingParticipation participation = getParticipationForUpdate(meetingId, participationId);
         ensureApplicant(participation, memberId);
         ensureCancelable(participation);
+        if (!LocalDateTime.now().isBefore(meeting.getMeetingDate())) {
+            throw new BadRequestException("Participation cannot be canceled after the meeting starts.");
+        }
 
         if (participation.getStatus() == ParticipationStatus.APPROVED) {
             meeting.decreaseCurrentPeople();
         }
         participation.cancel();
+        notificationService.notify(
+                meeting.getHost(),
+                "PARTICIPATION_CANCELED",
+                "참여 취소",
+                participation.getMember().getNickname() + "님이 " + meeting.getTitle() + " 참여를 취소했습니다.",
+                meetingId
+        );
         return MeetingParticipationResponse.from(participation);
     }
 

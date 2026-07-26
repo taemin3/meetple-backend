@@ -10,9 +10,13 @@ import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingImage;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.repository.MeetingImageRepository;
+import com.meetple.backend.domain.meeting.repository.MeetingBookmarkRepository;
+import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
+import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.notification.service.NotificationService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.exception.NotFoundException;
@@ -20,6 +24,7 @@ import com.meetple.backend.global.response.PageResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -48,6 +53,7 @@ public class MeetingService {
     private static final String CAPACITY_TOO_SMALL_MESSAGE = "정원은 현재 인원보다 적을 수 없습니다.";
     private static final String INVALID_MEETING_STATUS_MESSAGE = "지원하지 않는 모임 상태입니다.";
     private static final String INVALID_SORT_PROPERTY_MESSAGE = "지원하지 않는 정렬 조건입니다.";
+    private static final int NOTIFICATION_MESSAGE_MAX_LENGTH = 500;
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
     private static final double METERS_PER_LATITUDE_DEGREE = 111_320.0;
     private static final Set<String> ALLOWED_SORT_PROPERTIES = Set.of(
@@ -65,6 +71,9 @@ public class MeetingService {
     private final MeetingImageRepository meetingImageRepository;
     private final MemberRepository memberRepository;
     private final CategoryRepository categoryRepository;
+    private final MeetingParticipationRepository participationRepository;
+    private final MeetingBookmarkRepository bookmarkRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public MeetingResponse createMeeting(Long memberId, CreateMeetingRequest request) {
@@ -72,6 +81,7 @@ public class MeetingService {
         Category category = getCategory(request.category());
         List<String> imageUrls = normalizeImageUrls(request.imageUrls());
 
+        LocalDateTime endDate = resolveEndDate(request.scheduledAt(), request.endsAt());
         Meeting meeting = Meeting.create(
                 host,
                 category,
@@ -83,6 +93,7 @@ public class MeetingService {
                 toBigDecimal(request.longitude()),
                 request.capacity(),
                 request.scheduledAt(),
+                endDate,
                 firstImageUrl(imageUrls)
         );
 
@@ -156,7 +167,8 @@ public class MeetingService {
                 request.latitude() == null ? meeting.getLatitude() : toBigDecimal(request.latitude()),
                 request.longitude() == null ? meeting.getLongitude() : toBigDecimal(request.longitude()),
                 capacity,
-                chooseDateTime(request.scheduledAt(), meeting.getMeetingDate())
+                chooseDateTime(request.scheduledAt(), meeting.getMeetingDate()),
+                resolveUpdatedEndDate(meeting, request)
         );
 
         if (request.imageUrls() != null) {
@@ -171,7 +183,15 @@ public class MeetingService {
 
     @Transactional
     public void deleteMeeting(Long memberId, Long meetingId) {
-        cancelMeeting(memberId, meetingId);
+        Meeting meeting = getMeetingEntity(meetingId);
+        ensureHost(meeting, memberId);
+        ensureOpen(meeting);
+        if (participationRepository.existsByMeetingId(meetingId)) {
+            throw new BadRequestException("참여 신청 내역이 있는 모임은 삭제할 수 없습니다.");
+        }
+        bookmarkRepository.deleteByMeetingId(meetingId);
+        meetingImageRepository.deleteByMeetingId(meetingId);
+        meetingRepository.delete(meeting);
     }
 
     @Transactional
@@ -179,19 +199,53 @@ public class MeetingService {
         Meeting meeting = getMeetingEntity(meetingId);
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
+        if (LocalDateTime.now().isBefore(meeting.getMeetingDate())) {
+            throw new BadRequestException("모임 시작 이후에만 완료할 수 있습니다.");
+        }
 
         meeting.complete();
         return toResponse(meeting);
     }
 
     @Transactional
-    public MeetingResponse cancelMeeting(Long memberId, Long meetingId) {
+    public MeetingResponse cancelMeeting(Long memberId, Long meetingId, String reason) {
         Meeting meeting = getMeetingEntity(meetingId);
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
 
-        meeting.cancel();
+        String normalizedReason = normalizeRequiredText(reason, "모임 취소 사유를 입력해주세요.");
+        meeting.cancel(normalizedReason);
+        participationRepository.findByMeetingIdAndStatus(meetingId, ParticipationStatus.APPROVED)
+                .forEach(participation -> notificationService.notify(
+                        participation.getMember(),
+                        "MEETING_CANCELED",
+                        "모임 취소",
+                        cancellationNotificationMessage(meeting.getTitle(), normalizedReason),
+                        meetingId
+                ));
         return toResponse(meeting);
+    }
+
+    @Transactional
+    public MeetingResponse cancelMeeting(Long memberId, Long meetingId) {
+        return cancelMeeting(memberId, meetingId, "모임장이 모임을 취소했습니다.");
+    }
+
+    @Transactional
+    public int completeEndedMeetings(LocalDateTime now) {
+        List<MeetingStatus> openStatuses = List.of(MeetingStatus.RECRUITING, MeetingStatus.FULL);
+        List<Meeting> endedMeetings = new ArrayList<>(meetingRepository.findByStatusInAndEndDateLessThanEqual(
+                openStatuses,
+                now
+        ));
+        endedMeetings.addAll(
+                meetingRepository.findByStatusInAndEndDateIsNullAndMeetingDateLessThanEqual(
+                        openStatuses,
+                        now.minusHours(2)
+                )
+        );
+        endedMeetings.forEach(Meeting::complete);
+        return endedMeetings.size();
     }
 
     private void saveMeetingImages(Meeting meeting, List<String> imageUrls) {
@@ -299,6 +353,39 @@ public class MeetingService {
 
     private LocalDateTime chooseDateTime(LocalDateTime value, LocalDateTime currentValue) {
         return value == null ? currentValue : value;
+    }
+
+    private LocalDateTime resolveEndDate(LocalDateTime startDate, LocalDateTime requestedEndDate) {
+        LocalDateTime endDate = requestedEndDate == null ? startDate.plusHours(2) : requestedEndDate;
+        if (!endDate.isAfter(startDate)) {
+            throw new BadRequestException("모임 종료 시각은 시작 시각 이후여야 합니다.");
+        }
+        return endDate;
+    }
+
+    private LocalDateTime resolveUpdatedEndDate(Meeting meeting, UpdateMeetingRequest request) {
+        LocalDateTime startDate = chooseDateTime(request.scheduledAt(), meeting.getMeetingDate());
+        LocalDateTime endDate = request.endsAt();
+        if (endDate == null) {
+            endDate = request.scheduledAt() == null && meeting.getEndDate() != null
+                    ? meeting.getEndDate()
+                    : startDate.plusHours(2);
+        }
+        return resolveEndDate(startDate, endDate);
+    }
+
+    private String normalizeRequiredText(String value, String message) {
+        if (!StringUtils.hasText(value)) {
+            throw new BadRequestException(message);
+        }
+        return value.trim();
+    }
+
+    private String cancellationNotificationMessage(String meetingTitle, String reason) {
+        String message = meetingTitle + " 모임이 취소되었습니다. 사유: " + reason;
+        return message.length() <= NOTIFICATION_MESSAGE_MAX_LENGTH
+                ? message
+                : message.substring(0, NOTIFICATION_MESSAGE_MAX_LENGTH);
     }
 
     private MeetingStatus parseStatus(String status) {

@@ -89,4 +89,11 @@ public class MeetingParticipation extends BaseTimeEntity {
         this.status = ParticipationStatus.CANCELED;
         this.canceledAt = LocalDateTime.now();
     }
+
+    public void reapply(String message) {
+        this.status = ParticipationStatus.PENDING;
+        this.message = message;
+        this.reviewedAt = null;
+        this.canceledAt = null;
+    }
 }

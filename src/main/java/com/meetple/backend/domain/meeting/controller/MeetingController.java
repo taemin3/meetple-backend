@@ -1,5 +1,6 @@
 package com.meetple.backend.domain.meeting.controller;
 
+import com.meetple.backend.domain.meeting.dto.request.CancelMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
@@ -122,11 +123,12 @@ public class MeetingController {
     @Operation(summary = "모임 취소", description = "로그인한 회원이 모임장인 모임을 취소합니다.")
     public ResponseEntity<ApiResponse<MeetingResponse>> cancelMeeting(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
-            @PathVariable Long meetingId
+            @PathVariable Long meetingId,
+            @Valid @RequestBody CancelMeetingRequest request
     ) {
         return ApiResponse.success(
                 SuccessStatus.OK,
-                meetingService.cancelMeeting(authenticatedMember.id(), meetingId)
+                meetingService.cancelMeeting(authenticatedMember.id(), meetingId, request.reason())
         );
     }
 }

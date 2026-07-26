@@ -208,9 +208,13 @@ class MeetingControllerTest {
 
     @Test
     void cancelMeetingReturnsApiResponse() throws Exception {
-        given(meetingService.cancelMeeting(1L, 10L)).willReturn(meetingResponse());
+        given(meetingService.cancelMeeting(1L, 10L, "일정 변경")).willReturn(meetingResponse());
 
-        mockMvc.perform(patch("/api/v1/meetings/10/cancel"))
+        mockMvc.perform(patch("/api/v1/meetings/10/cancel")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason":"일정 변경"}
+                                """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(10));
     }

@@ -18,14 +18,62 @@ public record MeetingResponse(
         Double latitude,
         Double longitude,
         LocalDateTime scheduledAt,
+        LocalDateTime endsAt,
         Integer capacity,
         Integer currentPeople,
         MeetingStatus status,
+        String cancelReason,
         String thumbnailImageUrl,
         List<String> imageUrls,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
+
+    public MeetingResponse(
+            Long id,
+            Long hostId,
+            String hostNickname,
+            Long categoryId,
+            String categoryName,
+            String title,
+            String description,
+            String locationName,
+            String address,
+            Double latitude,
+            Double longitude,
+            LocalDateTime scheduledAt,
+            Integer capacity,
+            Integer currentPeople,
+            MeetingStatus status,
+            String thumbnailImageUrl,
+            List<String> imageUrls,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt
+    ) {
+        this(
+                id,
+                hostId,
+                hostNickname,
+                categoryId,
+                categoryName,
+                title,
+                description,
+                locationName,
+                address,
+                latitude,
+                longitude,
+                scheduledAt,
+                scheduledAt == null ? null : scheduledAt.plusHours(2),
+                capacity,
+                currentPeople,
+                status,
+                null,
+                thumbnailImageUrl,
+                imageUrls,
+                createdAt,
+                updatedAt
+        );
+    }
 
     public static MeetingResponse from(Meeting meeting) {
         return from(meeting, List.of());
@@ -46,9 +94,13 @@ public record MeetingResponse(
                 meeting.getLatitude().doubleValue(),
                 meeting.getLongitude().doubleValue(),
                 meeting.getMeetingDate(),
+                meeting.getEndDate() == null
+                        ? meeting.getMeetingDate().plusHours(2)
+                        : meeting.getEndDate(),
                 meeting.getMaxPeople(),
                 meeting.getCurrentPeople(),
                 meeting.getStatus(),
+                meeting.getCancelReason(),
                 resolveThumbnailImageUrl(meeting, resolvedImageUrls),
                 resolvedImageUrls,
                 meeting.getCreatedAt(),

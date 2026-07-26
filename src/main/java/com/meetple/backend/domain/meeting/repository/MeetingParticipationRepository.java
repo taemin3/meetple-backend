@@ -30,7 +30,22 @@ public interface MeetingParticipationRepository extends JpaRepository<MeetingPar
 
     Optional<MeetingParticipation> findByMeetingIdAndMemberId(Long meetingId, Long memberId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"meeting", "member"})
+    @Query("""
+            select p
+            from MeetingParticipation p
+            where p.meeting.id = :meetingId
+              and p.member.id = :memberId
+            """)
+    Optional<MeetingParticipation> findByMeetingIdAndMemberIdForUpdate(
+            @Param("meetingId") Long meetingId,
+            @Param("memberId") Long memberId
+    );
+
     boolean existsByMeetingIdAndMemberId(Long meetingId, Long memberId);
+
+    boolean existsByMeetingId(Long meetingId);
 
     List<MeetingParticipation> findByMeetingId(Long meetingId);
 
@@ -50,5 +65,11 @@ public interface MeetingParticipationRepository extends JpaRepository<MeetingPar
             Long memberId,
             ParticipationStatus status,
             Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = "member")
+    List<MeetingParticipation> findByMeetingIdAndStatus(
+            Long meetingId,
+            ParticipationStatus status
     );
 }

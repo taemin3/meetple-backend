@@ -15,6 +15,7 @@ import com.meetple.backend.domain.meeting.repository.MeetingParticipationReposit
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.notification.service.NotificationService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.ForbiddenException;
@@ -45,6 +46,9 @@ class MeetingParticipationServiceTest {
     @Mock
     private MemberRepository memberRepository;
 
+    @Mock
+    private NotificationService notificationService;
+
     @InjectMocks
     private MeetingParticipationService participationService;
 
@@ -56,7 +60,7 @@ class MeetingParticipationServiceTest {
 
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
         given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
-        given(participationRepository.existsByMeetingIdAndMemberId(10L, 2L)).willReturn(false);
+        given(participationRepository.findByMeetingIdAndMemberIdForUpdate(10L, 2L)).willReturn(Optional.empty());
         given(participationRepository.saveAndFlush(any(MeetingParticipation.class))).willAnswer(invocation -> {
             MeetingParticipation participation = invocation.getArgument(0);
             ReflectionTestUtils.setField(participation, "id", 100L);
@@ -100,7 +104,8 @@ class MeetingParticipationServiceTest {
 
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
         given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
-        given(participationRepository.existsByMeetingIdAndMemberId(10L, 2L)).willReturn(true);
+        given(participationRepository.findByMeetingIdAndMemberIdForUpdate(10L, 2L))
+                .willReturn(Optional.of(participation(100L, meeting, applicant)));
 
         assertThatThrownBy(() -> participationService.applyParticipation(
                 2L,
@@ -119,7 +124,7 @@ class MeetingParticipationServiceTest {
 
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
         given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
-        given(participationRepository.existsByMeetingIdAndMemberId(10L, 2L)).willReturn(false);
+        given(participationRepository.findByMeetingIdAndMemberIdForUpdate(10L, 2L)).willReturn(Optional.empty());
         given(participationRepository.saveAndFlush(any(MeetingParticipation.class)))
                 .willThrow(new DataIntegrityViolationException("duplicate participation"));
 
@@ -130,6 +135,29 @@ class MeetingParticipationServiceTest {
         ))
                 .isInstanceOf(ConflictException.class)
                 .hasMessage("Participation already exists.");
+    }
+
+    @Test
+    void applyParticipationReappliesCanceledParticipationWithLockingLookup() {
+        Member host = member(1L, "host@meetple.com", "host");
+        Member applicant = member(2L, "runner@meetple.com", "runner");
+        Meeting meeting = meeting(10L, host);
+        MeetingParticipation participation = participation(100L, meeting, applicant);
+        participation.cancel();
+
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
+        given(participationRepository.findByMeetingIdAndMemberIdForUpdate(10L, 2L))
+                .willReturn(Optional.of(participation));
+
+        MeetingParticipationResponse response = participationService.applyParticipation(
+                2L,
+                10L,
+                new CreateMeetingParticipationRequest("Apply again")
+        );
+
+        assertThat(response.status()).isEqualTo(ParticipationStatus.PENDING);
+        assertThat(response.message()).isEqualTo("Apply again");
     }
 
     @Test
