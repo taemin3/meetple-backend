@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Category", description = "Category API")
+@Tag(name = "Category", description = "카테고리 API")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/categories")
