@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "HealthCheck", description = "HealthCheck 관련 API 입니다.")
+@Tag(name = "HealthCheck", description = "서버 상태 확인 API")
 @RestController
 @RequestMapping()
 public class HealthCheckController {
@@ -23,11 +23,11 @@ public class HealthCheckController {
     @GetMapping("/health")
     /* Swagger 작성예시     */
     @Operation(
-            summary = "HealthCheck API",
-            description = "서버 상태 체크 API입니다."
+            summary = "서버 상태 확인",
+            description = "서버의 정상 동작 여부를 확인합니다."
     )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "서버 상태 OK"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "서버 정상"),
     })
 
     // - 데이터 없이 응답 코드 + 메시지만 반환할 경우 사용

@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "MeetingParticipation", description = "Meeting participation API")
+@Tag(name = "MeetingParticipation", description = "모임 참여 신청 API")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/meetings/{meetingId}/participations")
@@ -37,7 +37,7 @@ public class MeetingParticipationController {
 
     @PostMapping
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Apply to meeting", description = "Create a participation request for a meeting.")
+    @Operation(summary = "모임 참여 신청", description = "모임에 참여 신청을 생성합니다.")
     public ResponseEntity<ApiResponse<MeetingParticipationResponse>> applyParticipation(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable Long meetingId,
@@ -51,7 +51,7 @@ public class MeetingParticipationController {
 
     @GetMapping
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Get participation requests", description = "Get participation requests for a hosted meeting.")
+    @Operation(summary = "모임 참여 신청 목록 조회", description = "모임장이 자신이 개설한 모임의 참여 신청 목록을 조회합니다.")
     public ResponseEntity<ApiResponse<PageResponse<MeetingParticipationResponse>>> getMeetingParticipations(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable Long meetingId,
@@ -66,7 +66,7 @@ public class MeetingParticipationController {
 
     @PatchMapping("/{participationId}/approve")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Approve participation", description = "Approve a pending participation request.")
+    @Operation(summary = "모임 참여 신청 승인", description = "대기 중인 모임 참여 신청을 승인합니다.")
     public ResponseEntity<ApiResponse<MeetingParticipationResponse>> approveParticipation(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable Long meetingId,
@@ -80,7 +80,7 @@ public class MeetingParticipationController {
 
     @PatchMapping("/{participationId}/reject")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Reject participation", description = "Reject a pending participation request.")
+    @Operation(summary = "모임 참여 신청 거절", description = "대기 중인 모임 참여 신청을 거절합니다.")
     public ResponseEntity<ApiResponse<MeetingParticipationResponse>> rejectParticipation(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable Long meetingId,
@@ -94,7 +94,7 @@ public class MeetingParticipationController {
 
     @PatchMapping("/{participationId}/cancel")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "Cancel participation", description = "Cancel own pending or approved participation.")
+    @Operation(summary = "모임 참여 취소", description = "본인의 대기 중이거나 승인된 모임 참여를 취소합니다.")
     public ResponseEntity<ApiResponse<MeetingParticipationResponse>> cancelParticipation(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable Long meetingId,
