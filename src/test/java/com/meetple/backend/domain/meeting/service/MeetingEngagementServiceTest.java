@@ -136,10 +136,9 @@ class MeetingEngagementServiceTest {
                 Sort.by(Sort.Order.desc("meeting.meetingDate"))
         );
 
-        given(participationRepository.findByMemberIdAndStatusAndMeetingStatusIn(
+        given(participationRepository.findByMemberIdAndStatus(
                 2L,
                 ParticipationStatus.APPROVED,
-                List.of(MeetingStatus.RECRUITING, MeetingStatus.FULL),
                 repositoryRequest
         )).willReturn(new PageImpl<>(List.of(participation), repositoryRequest, 1));
         given(meetingImageRepository.findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(List.of(10L)))
@@ -148,10 +147,9 @@ class MeetingEngagementServiceTest {
         PageResponse<MeetingResponse> response = engagementService.getMyJoinedMeetings(2L, request);
 
         assertThat(response.content()).singleElement().extracting(MeetingResponse::id).isEqualTo(10L);
-        verify(participationRepository).findByMemberIdAndStatusAndMeetingStatusIn(
+        verify(participationRepository).findByMemberIdAndStatus(
                 2L,
                 ParticipationStatus.APPROVED,
-                List.of(MeetingStatus.RECRUITING, MeetingStatus.FULL),
                 repositoryRequest
         );
     }

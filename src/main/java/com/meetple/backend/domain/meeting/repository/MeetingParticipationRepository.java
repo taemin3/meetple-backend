@@ -64,6 +64,13 @@ public interface MeetingParticipationRepository extends JpaRepository<MeetingPar
     Page<MeetingParticipation> findByMemberId(Long memberId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"meeting", "meeting.host", "meeting.category", "member"})
+    Page<MeetingParticipation> findByMemberIdAndStatus(
+            Long memberId,
+            ParticipationStatus status,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"meeting", "meeting.host", "meeting.category", "member"})
     Page<MeetingParticipation> findByMemberIdAndStatusAndMeetingStatusIn(
             Long memberId,
             ParticipationStatus status,

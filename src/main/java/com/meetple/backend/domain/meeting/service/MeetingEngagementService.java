@@ -131,13 +131,11 @@ public class MeetingEngagementService {
     }
 
     public PageResponse<MeetingResponse> getMyJoinedMeetings(Long memberId, Pageable pageable) {
-        Page<MeetingParticipation> participations =
-                participationRepository.findByMemberIdAndStatusAndMeetingStatusIn(
-                        memberId,
-                        ParticipationStatus.APPROVED,
-                        ACTIVE_MEETING_STATUSES,
-                        toJoinedMeetingPageable(pageable)
-                );
+        Page<MeetingParticipation> participations = participationRepository.findByMemberIdAndStatus(
+                memberId,
+                ParticipationStatus.APPROVED,
+                toJoinedMeetingPageable(pageable)
+        );
         Page<Meeting> meetings = participations.map(MeetingParticipation::getMeeting);
         return toMeetingPageResponse(meetings);
     }
