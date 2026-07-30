@@ -17,4 +17,6 @@ public interface MeetingBookmarkRepository extends JpaRepository<MeetingBookmark
 
     @EntityGraph(attributePaths = {"meeting", "meeting.host", "meeting.category"})
     Page<MeetingBookmark> findByMemberId(Long memberId, Pageable pageable);
+
+    long countByMemberId(Long memberId);
 }

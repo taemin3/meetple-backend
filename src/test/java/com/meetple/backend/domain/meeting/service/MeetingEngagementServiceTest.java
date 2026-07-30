@@ -10,6 +10,9 @@ import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingBookmark;
 import com.meetple.backend.domain.meeting.entity.MeetingImage;
+import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
+import com.meetple.backend.domain.meeting.entity.MeetingStatus;
+import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.meeting.repository.MeetingBookmarkRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingImageRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
@@ -98,6 +101,80 @@ class MeetingEngagementServiceTest {
         ))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("Unsupported sort property.");
+    }
+
+    @Test
+    void getMyHostedMeetingsIncludesImages() {
+        Member host = member(1L, "host@meetple.com", "host");
+        Meeting meeting = meeting(10L, host);
+        MeetingImage image = MeetingImage.create(meeting, "https://cdn.meetple.com/hosted.png", 0);
+        PageRequest request = PageRequest.of(0, 20, Sort.by(Sort.Order.desc("createdAt")));
+
+        given(meetingRepository.findByHostId(1L, request))
+                .willReturn(new PageImpl<>(List.of(meeting), request, 1));
+        given(meetingImageRepository.findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(List.of(10L)))
+                .willReturn(List.of(image));
+
+        PageResponse<MeetingResponse> response = engagementService.getMyHostedMeetings(1L, request);
+
+        assertThat(response.content()).singleElement().satisfies(item ->
+                assertThat(item.thumbnailImageUrl()).isEqualTo("https://cdn.meetple.com/hosted.png")
+        );
+    }
+
+    @Test
+    void getMyJoinedMeetingsLoadsApprovedParticipationsAndTranslatesSort() {
+        Member host = member(1L, "host@meetple.com", "host");
+        Member member = member(2L, "member@meetple.com", "member");
+        Meeting meeting = meeting(10L, host);
+        MeetingParticipation participation = MeetingParticipation.apply(meeting, member, null);
+        participation.approve();
+        PageRequest request = PageRequest.of(0, 20, Sort.by(Sort.Order.desc("meetingDate")));
+        PageRequest repositoryRequest = PageRequest.of(
+                0,
+                20,
+                Sort.by(Sort.Order.desc("meeting.meetingDate"))
+        );
+
+        given(participationRepository.findByMemberIdAndStatusAndMeetingStatusIn(
+                2L,
+                ParticipationStatus.APPROVED,
+                List.of(MeetingStatus.RECRUITING, MeetingStatus.FULL),
+                repositoryRequest
+        )).willReturn(new PageImpl<>(List.of(participation), repositoryRequest, 1));
+        given(meetingImageRepository.findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(List.of(10L)))
+                .willReturn(List.of());
+
+        PageResponse<MeetingResponse> response = engagementService.getMyJoinedMeetings(2L, request);
+
+        assertThat(response.content()).singleElement().extracting(MeetingResponse::id).isEqualTo(10L);
+        verify(participationRepository).findByMemberIdAndStatusAndMeetingStatusIn(
+                2L,
+                ParticipationStatus.APPROVED,
+                List.of(MeetingStatus.RECRUITING, MeetingStatus.FULL),
+                repositoryRequest
+        );
+    }
+
+    @Test
+    void getMyApplicationsReturnsApplicationsForCurrentMember() {
+        Member host = member(1L, "host@meetple.com", "host");
+        Member member = member(2L, "member@meetple.com", "member");
+        Meeting meeting = meeting(10L, host);
+        MeetingParticipation participation = MeetingParticipation.apply(meeting, member, "Join me");
+        ReflectionTestUtils.setField(participation, "id", 100L);
+        PageRequest request = PageRequest.of(0, 20, Sort.by(Sort.Order.desc("createdAt")));
+
+        given(participationRepository.findByMemberId(2L, request))
+                .willReturn(new PageImpl<>(List.of(participation), request, 1));
+
+        var response = engagementService.getMyApplications(2L, request);
+
+        assertThat(response.content()).singleElement().satisfies(item -> {
+            assertThat(item.id()).isEqualTo(100L);
+            assertThat(item.meetingId()).isEqualTo(10L);
+            assertThat(item.meetingTitle()).isEqualTo("Weekend running");
+        });
     }
 
     private Meeting meeting(Long id, Member host) {

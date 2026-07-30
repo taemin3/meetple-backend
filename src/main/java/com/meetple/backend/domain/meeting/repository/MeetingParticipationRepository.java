@@ -1,6 +1,7 @@
 package com.meetple.backend.domain.meeting.repository;
 
 import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
+import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import jakarta.persistence.LockModeType;
 import java.util.List;
@@ -59,12 +60,21 @@ public interface MeetingParticipationRepository extends JpaRepository<MeetingPar
             Pageable pageable
     );
 
+    @EntityGraph(attributePaths = {"meeting", "meeting.host", "meeting.category", "member"})
     Page<MeetingParticipation> findByMemberId(Long memberId, Pageable pageable);
 
-    Page<MeetingParticipation> findByMemberIdAndStatus(
+    @EntityGraph(attributePaths = {"meeting", "meeting.host", "meeting.category", "member"})
+    Page<MeetingParticipation> findByMemberIdAndStatusAndMeetingStatusIn(
             Long memberId,
             ParticipationStatus status,
+            List<MeetingStatus> meetingStatuses,
             Pageable pageable
+    );
+
+    long countByMemberIdAndStatusAndMeetingStatusIn(
+            Long memberId,
+            ParticipationStatus status,
+            List<MeetingStatus> meetingStatuses
     );
 
     @EntityGraph(attributePaths = "member")

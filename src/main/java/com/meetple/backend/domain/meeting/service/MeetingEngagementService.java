@@ -7,6 +7,7 @@ import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingBookmark;
 import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
+import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.meeting.repository.MeetingBookmarkRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingImageRepository;
@@ -37,6 +38,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class MeetingEngagementService {
 
+    private static final List<MeetingStatus> ACTIVE_MEETING_STATUSES = List.of(
+            MeetingStatus.RECRUITING,
+            MeetingStatus.FULL
+    );
     private static final String INVALID_SORT_PROPERTY_MESSAGE = "Unsupported sort property.";
     private static final Set<String> MEETING_SORT_PROPERTIES = Set.of(
             "id",
@@ -119,6 +124,32 @@ public class MeetingEngagementService {
         )));
     }
 
+    public PageResponse<MeetingResponse> getMyHostedMeetings(Long memberId, Pageable pageable) {
+        validateMeetingSort(pageable);
+        Page<Meeting> meetings = meetingRepository.findByHostId(memberId, pageable);
+        return toMeetingPageResponse(meetings);
+    }
+
+    public PageResponse<MeetingResponse> getMyJoinedMeetings(Long memberId, Pageable pageable) {
+        Page<MeetingParticipation> participations =
+                participationRepository.findByMemberIdAndStatusAndMeetingStatusIn(
+                        memberId,
+                        ParticipationStatus.APPROVED,
+                        ACTIVE_MEETING_STATUSES,
+                        toJoinedMeetingPageable(pageable)
+                );
+        Page<Meeting> meetings = participations.map(MeetingParticipation::getMeeting);
+        return toMeetingPageResponse(meetings);
+    }
+
+    public PageResponse<MeetingParticipationResponse> getMyApplications(Long memberId, Pageable pageable) {
+        validateParticipationSort(pageable);
+        return PageResponse.from(
+                participationRepository.findByMemberId(memberId, pageable)
+                        .map(MeetingParticipationResponse::from)
+        );
+    }
+
     private Meeting getMeeting(Long meetingId) {
         return meetingRepository.findById(meetingId)
                 .orElseThrow(() -> new NotFoundException("Meeting not found."));
@@ -145,6 +176,53 @@ public class MeetingEngagementService {
             return order.withProperty("meeting." + order.getProperty());
         }
         throw new BadRequestException(INVALID_SORT_PROPERTY_MESSAGE);
+    }
+
+    private PageResponse<MeetingResponse> toMeetingPageResponse(Page<Meeting> meetings) {
+        Map<Long, List<String>> imageUrlsByMeetingId = getImageUrlsByMeetingIds(
+                meetings.getContent().stream().map(Meeting::getId).toList()
+        );
+        return PageResponse.from(meetings.map(meeting -> MeetingResponse.from(
+                meeting,
+                imageUrlsByMeetingId.getOrDefault(meeting.getId(), List.of())
+        )));
+    }
+
+    private Pageable toJoinedMeetingPageable(Pageable pageable) {
+        if (pageable.isUnpaged()) {
+            return pageable;
+        }
+        validateMeetingSort(pageable);
+        List<Sort.Order> orders = pageable.getSort()
+                .stream()
+                .map(order -> order.withProperty("meeting." + order.getProperty()))
+                .toList();
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(orders));
+    }
+
+    private void validateMeetingSort(Pageable pageable) {
+        for (Sort.Order order : pageable.getSort()) {
+            if (!MEETING_SORT_PROPERTIES.contains(order.getProperty())
+                    && !"createdAt".equals(order.getProperty())) {
+                throw new BadRequestException(INVALID_SORT_PROPERTY_MESSAGE);
+            }
+        }
+    }
+
+    private void validateParticipationSort(Pageable pageable) {
+        Set<String> allowedProperties = Set.of(
+                "id",
+                "status",
+                "createdAt",
+                "updatedAt",
+                "reviewedAt",
+                "canceledAt"
+        );
+        for (Sort.Order order : pageable.getSort()) {
+            if (!allowedProperties.contains(order.getProperty())) {
+                throw new BadRequestException(INVALID_SORT_PROPERTY_MESSAGE);
+            }
+        }
     }
 
     private Map<Long, List<String>> getImageUrlsByMeetingIds(List<Long> meetingIds) {
