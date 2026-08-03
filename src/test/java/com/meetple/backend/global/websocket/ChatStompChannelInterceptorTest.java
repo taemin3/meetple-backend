@@ -82,6 +82,25 @@ class ChatStompChannelInterceptorTest {
     }
 
     @Test
+    void stompCommandAuthenticatesAccessTokenAndStoresSessionToken() {
+        Authentication authentication = authentication(1L);
+        given(jwtTokenProvider.getAuthentication(ACCESS_TOKEN)).willReturn(authentication);
+        given(jwtTokenProvider.getAccessTokenSession(ACCESS_TOKEN))
+                .willReturn(new JwtTokenSession(1L, "session-1"));
+        given(refreshTokenRepository.existsByMemberIdAndSessionId(1L, "session-1"))
+                .willReturn(true);
+        StompHeaderAccessor accessor = accessor(StompCommand.STOMP, null, null);
+        accessor.setNativeHeader("Authorization", "Bearer " + ACCESS_TOKEN);
+
+        Message<?> intercepted = interceptor.preSend(message(accessor), null);
+        StompHeaderAccessor interceptedAccessor = StompHeaderAccessor.wrap(intercepted);
+
+        assertThat(interceptedAccessor.getUser()).isEqualTo(authentication);
+        assertThat(interceptedAccessor.getSessionAttributes())
+                .containsEntry("chatAccessToken", ACCESS_TOKEN);
+    }
+
+    @Test
     void subscribeChecksTokenSessionAndRoomAccess() {
         stubActiveSession();
         StompHeaderAccessor accessor = accessor(
@@ -153,9 +172,12 @@ class ChatStompChannelInterceptorTest {
         connectSession();
         given(chatAccessPolicy.getAccessibleMeeting(1L, 10L))
                 .willThrow(new ForbiddenException("채팅방 입장 권한이 없습니다."));
-        Message<?> result = interceptor.preSend(outboundMessage(10L), null);
+        Message<?> revokedRoomResult = interceptor.preSend(outboundMessage(10L), null);
+        Message<?> otherRoomResult = interceptor.preSend(outboundMessage(11L), null);
 
-        assertThat(result).isNull();
+        assertThat(revokedRoomResult).isNull();
+        assertThat(otherRoomResult).isNotNull();
+        verify(chatAccessPolicy).getAccessibleMeeting(1L, 11L);
     }
 
     @Test
@@ -200,7 +222,7 @@ class ChatStompChannelInterceptorTest {
     ) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(command);
         Map<String, Object> sessionAttributes = new HashMap<>();
-        if (command != StompCommand.CONNECT) {
+        if (command != StompCommand.CONNECT && command != StompCommand.STOMP) {
             sessionAttributes.put("chatAccessToken", ACCESS_TOKEN);
         }
         accessor.setSessionAttributes(sessionAttributes);

@@ -2,14 +2,21 @@ package com.meetple.backend.domain.chat.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.chat.dto.request.SendChatMessageRequest;
 import com.meetple.backend.domain.chat.dto.response.ChatMessageResponse;
+import com.meetple.backend.domain.chat.service.ChatMessageSendResult;
 import com.meetple.backend.domain.chat.service.ChatService;
 import com.meetple.backend.domain.member.entity.MemberRole;
 import com.meetple.backend.global.exception.ForbiddenException;
+import com.meetple.backend.global.response.ApiResponse;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.InOrder;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -52,16 +60,47 @@ class ChatWebSocketControllerTest {
                 "안녕하세요",
                 LocalDateTime.of(2026, 8, 4, 0, 0)
         );
-        given(chatService.sendMessage(1L, 10L, request)).willReturn(savedMessage);
+        given(chatService.sendMessage(1L, 10L, request))
+                .willReturn(new ChatMessageSendResult(savedMessage, true));
 
         controller.sendMessage(10L, request, authentication());
 
         InOrder inOrder = inOrder(chatService, messagingTemplate);
         inOrder.verify(chatService).sendMessage(1L, 10L, request);
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
         inOrder.verify(messagingTemplate).convertAndSend(
-                "/topic/chat/rooms/10",
-                savedMessage
+                eq("/topic/chat/rooms/10"),
+                payloadCaptor.capture()
         );
+        assertThat(payloadCaptor.getValue()).isInstanceOf(ApiResponse.class);
+        ApiResponse<?> response = (ApiResponse<?>) payloadCaptor.getValue();
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getSuccess()).isTrue();
+        assertThat(response.getCode()).isEqualTo(20000);
+        assertThat(response.getData()).isEqualTo(savedMessage);
+    }
+
+    @Test
+    void duplicateMessageIsNotBroadcastAgain() {
+        UUID clientMessageId = UUID.randomUUID();
+        SendChatMessageRequest request = new SendChatMessageRequest(clientMessageId, "안녕하세요");
+        ChatMessageResponse existingMessage = new ChatMessageResponse(
+                100L,
+                10L,
+                7L,
+                clientMessageId,
+                1L,
+                "member",
+                null,
+                "안녕하세요",
+                LocalDateTime.of(2026, 8, 4, 0, 0)
+        );
+        given(chatService.sendMessage(1L, 10L, request))
+                .willReturn(new ChatMessageSendResult(existingMessage, false));
+
+        controller.sendMessage(10L, request, authentication());
+
+        verify(messagingTemplate, never()).convertAndSend(anyString(), any(Object.class));
     }
 
     @Test

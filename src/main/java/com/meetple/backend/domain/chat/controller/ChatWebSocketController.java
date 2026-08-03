@@ -2,10 +2,12 @@ package com.meetple.backend.domain.chat.controller;
 
 import com.meetple.backend.domain.chat.dto.request.SendChatMessageRequest;
 import com.meetple.backend.domain.chat.dto.response.ChatMessageResponse;
+import com.meetple.backend.domain.chat.service.ChatMessageSendResult;
 import com.meetple.backend.domain.chat.service.ChatService;
 import com.meetple.backend.global.exception.BaseException;
 import com.meetple.backend.global.response.ApiResponse;
 import com.meetple.backend.global.response.ErrorStatus;
+import com.meetple.backend.global.response.SuccessStatus;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import jakarta.validation.Valid;
 import java.security.Principal;
@@ -36,11 +38,17 @@ public class ChatWebSocketController {
     public void sendMessage(
             @DestinationVariable Long roomId,
             @Valid SendChatMessageRequest request,
-        Principal principal
+            Principal principal
     ) {
         AuthenticatedMember member = authenticatedMember(principal);
-        ChatMessageResponse savedMessage = chatService.sendMessage(member.id(), roomId, request);
-        messagingTemplate.convertAndSend(ROOM_TOPIC_PREFIX + roomId, savedMessage);
+        ChatMessageSendResult result = chatService.sendMessage(member.id(), roomId, request);
+        if (result.created()) {
+            ApiResponse<ChatMessageResponse> response = ApiResponse.successBody(
+                    SuccessStatus.OK,
+                    result.message()
+            );
+            messagingTemplate.convertAndSend(ROOM_TOPIC_PREFIX + roomId, response);
+        }
     }
 
     @MessageExceptionHandler(BaseException.class)

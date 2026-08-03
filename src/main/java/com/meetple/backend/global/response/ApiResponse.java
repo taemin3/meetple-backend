@@ -17,14 +17,18 @@ public class ApiResponse<T> {
     private final T data;
 
     public static <T> ResponseEntity<ApiResponse<T>> success(SuccessStatus successStatus, T data) {
-        ApiResponse<T> response = ApiResponse.<T>builder()
+        ApiResponse<T> response = successBody(successStatus, data);
+        return ResponseEntity.status(successStatus.getStatusCode()).body(response);
+    }
+
+    public static <T> ApiResponse<T> successBody(SuccessStatus successStatus, T data) {
+        return ApiResponse.<T>builder()
                 .status(successStatus.getStatusCode())
                 .success(true)
                 .code(successStatus.getCode())
                 .message(successStatus.getMessage())
                 .data(data)
                 .build();
-        return ResponseEntity.status(successStatus.getStatusCode()).body(response);
     }
 
     public static ResponseEntity<ApiResponse<Void>> successOnly(SuccessStatus successStatus) {

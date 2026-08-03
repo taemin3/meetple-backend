@@ -63,7 +63,7 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
             return authorizeOutboundMessageIfNecessary(message);
         }
 
-        if (command == StompCommand.CONNECT) {
+        if (command == StompCommand.CONNECT || command == StompCommand.STOMP) {
             StompHeaderAccessor mutableAccessor = mutableAccessor(message, accessor);
             mutableAccessor.setLeaveMutable(true);
             authenticate(mutableAccessor);
@@ -177,13 +177,18 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
 
         try {
             validateTokenSession(session.accessToken(), session.memberId());
+        } catch (JwtException | IllegalArgumentException exception) {
+            removeAuthenticatedSession(sessionId);
+            return null;
+        }
+
+        try {
             chatAccessPolicy.getAccessibleMeeting(
                     session.memberId(),
                     Long.valueOf(matcher.group(1))
             );
             return message;
-        } catch (JwtException | IllegalArgumentException | BaseException exception) {
-            removeAuthenticatedSession(sessionId);
+        } catch (BaseException exception) {
             return null;
         }
     }

@@ -77,14 +77,15 @@ class ChatServiceTest {
                     return saved;
                 });
 
-        var response = chatService.sendMessage(
+        var result = chatService.sendMessage(
                 1L,
                 10L,
                 new SendChatMessageRequest(clientMessageId, "  hello  ")
         );
 
-        assertThat(response.sequence()).isEqualTo(8L);
-        assertThat(response.content()).isEqualTo("hello");
+        assertThat(result.created()).isTrue();
+        assertThat(result.message().sequence()).isEqualTo(8L);
+        assertThat(result.message().content()).isEqualTo("hello");
         ArgumentCaptor<ChatMessage> captor = ArgumentCaptor.forClass(ChatMessage.class);
         verify(messageRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getRoomSequence()).isEqualTo(8L);
@@ -106,14 +107,15 @@ class ChatServiceTest {
                 clientMessageId
         )).willReturn(Optional.of(existing));
 
-        var response = chatService.sendMessage(
+        var result = chatService.sendMessage(
                 1L,
                 10L,
                 new SendChatMessageRequest(clientMessageId, "hello")
         );
 
-        assertThat(response.id()).isEqualTo(30L);
-        assertThat(response.sequence()).isEqualTo(3L);
+        assertThat(result.created()).isFalse();
+        assertThat(result.message().id()).isEqualTo(30L);
+        assertThat(result.message().sequence()).isEqualTo(3L);
         verify(messageRepository, never()).saveAndFlush(any(ChatMessage.class));
     }
 
