@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -110,7 +111,7 @@ public class ChatService {
     }
 
     @Transactional
-    public ChatMessageResponse sendMessage(
+    public ChatMessageSendResult sendMessage(
             Long memberId,
             Long meetingId,
             SendChatMessageRequest request
@@ -120,11 +121,14 @@ public class ChatService {
         Meeting meeting = getAccessibleMeetingForUpdate(memberId, meetingId);
         accessPolicy.ensureCanSend(meeting);
 
-        ChatMessage message = messageRepository.findByMeetingIdAndSenderIdAndClientMessageId(
+        Optional<ChatMessage> existingMessage =
+                messageRepository.findByMeetingIdAndSenderIdAndClientMessageId(
                         meetingId,
                         memberId,
                         request.clientMessageId()
-                )
+                );
+        boolean created = existingMessage.isEmpty();
+        ChatMessage message = existingMessage
                 .orElseGet(() -> saveMessage(memberId, meeting, request));
         advanceReadState(
                 meeting,
@@ -132,7 +136,7 @@ public class ChatService {
                 message::getSender,
                 message.getRoomSequence()
         );
-        return ChatMessageResponse.from(message);
+        return new ChatMessageSendResult(ChatMessageResponse.from(message), created);
     }
 
     @Transactional
