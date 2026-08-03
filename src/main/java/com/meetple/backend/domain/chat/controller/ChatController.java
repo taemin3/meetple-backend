@@ -1,9 +1,7 @@
 package com.meetple.backend.domain.chat.controller;
 
 import com.meetple.backend.domain.chat.dto.request.MarkChatRoomReadRequest;
-import com.meetple.backend.domain.chat.dto.request.SendChatMessageRequest;
 import com.meetple.backend.domain.chat.dto.response.ChatMessagePageResponse;
-import com.meetple.backend.domain.chat.dto.response.ChatMessageResponse;
 import com.meetple.backend.domain.chat.dto.response.ChatReadStateResponse;
 import com.meetple.backend.domain.chat.dto.response.ChatRoomSummaryResponse;
 import com.meetple.backend.domain.chat.service.ChatService;
@@ -26,13 +24,12 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Chat", description = "모임 채팅 저장 및 조회 API")
+@Tag(name = "Chat", description = "모임 채팅 조회 및 읽음 상태 API")
 @Validated
 @RestController
 @RequiredArgsConstructor
@@ -73,19 +70,6 @@ public class ChatController {
                         afterSequence,
                         size
                 )
-        );
-    }
-
-    @PostMapping("/{roomId}/messages")
-    @Operation(summary = "채팅 메시지 저장")
-    public ResponseEntity<ApiResponse<ChatMessageResponse>> sendMessage(
-            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
-            @PathVariable Long roomId,
-            @Valid @RequestBody SendChatMessageRequest request
-    ) {
-        return ApiResponse.success(
-                SuccessStatus.OK,
-                chatService.sendMessage(authenticatedMember.id(), roomId, request)
         );
     }
 

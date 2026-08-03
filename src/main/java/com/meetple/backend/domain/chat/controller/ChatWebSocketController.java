@@ -1,6 +1,7 @@
 package com.meetple.backend.domain.chat.controller;
 
 import com.meetple.backend.domain.chat.dto.request.SendChatMessageRequest;
+import com.meetple.backend.domain.chat.dto.response.ChatMessageResponse;
 import com.meetple.backend.domain.chat.service.ChatService;
 import com.meetple.backend.global.exception.BaseException;
 import com.meetple.backend.global.response.ApiResponse;
@@ -14,6 +15,7 @@ import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.support.MethodArgumentNotValidException;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
@@ -25,16 +27,20 @@ import org.springframework.stereotype.Controller;
 @RequiredArgsConstructor
 public class ChatWebSocketController {
 
+    private static final String ROOM_TOPIC_PREFIX = "/topic/chat/rooms/";
+
     private final ChatService chatService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @MessageMapping("/chat/rooms/{roomId}/messages")
     public void sendMessage(
             @DestinationVariable Long roomId,
             @Valid SendChatMessageRequest request,
-            Principal principal
+        Principal principal
     ) {
         AuthenticatedMember member = authenticatedMember(principal);
-        chatService.sendMessage(member.id(), roomId, request);
+        ChatMessageResponse savedMessage = chatService.sendMessage(member.id(), roomId, request);
+        messagingTemplate.convertAndSend(ROOM_TOPIC_PREFIX + roomId, savedMessage);
     }
 
     @MessageExceptionHandler(BaseException.class)
