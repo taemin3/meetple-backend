@@ -10,6 +10,7 @@ import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
 import com.meetple.backend.domain.member.entity.MemberRole;
+import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
@@ -22,6 +23,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.Message;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
@@ -61,10 +64,11 @@ class ChatStompChannelInterceptorTest {
         StompHeaderAccessor accessor = accessor(StompCommand.CONNECT, null, null);
         accessor.setNativeHeader("Authorization", "Bearer " + ACCESS_TOKEN);
 
-        interceptor.preSend(message(accessor), null);
+        Message<?> intercepted = interceptor.preSend(message(accessor), null);
+        StompHeaderAccessor interceptedAccessor = StompHeaderAccessor.wrap(intercepted);
 
-        assertThat(accessor.getUser()).isEqualTo(authentication);
-        assertThat(accessor.getSessionAttributes())
+        assertThat(interceptedAccessor.getUser()).isEqualTo(authentication);
+        assertThat(interceptedAccessor.getSessionAttributes())
                 .containsEntry("chatAccessToken", ACCESS_TOKEN);
     }
 
@@ -135,11 +139,49 @@ class ChatStompChannelInterceptorTest {
                 .hasMessage("유효하지 않은 토큰입니다.");
     }
 
+    @Test
+    void outboundRoomMessageRevalidatesTokenAndRoomAccess() {
+        connectSession();
+        Message<?> result = interceptor.preSend(outboundMessage(10L), null);
+
+        assertThat(result).isNotNull();
+        verify(chatAccessPolicy).getAccessibleMeeting(1L, 10L);
+    }
+
+    @Test
+    void outboundRoomMessageIsDroppedAfterParticipationAccessIsRevoked() {
+        connectSession();
+        given(chatAccessPolicy.getAccessibleMeeting(1L, 10L))
+                .willThrow(new ForbiddenException("채팅방 입장 권한이 없습니다."));
+        Message<?> result = interceptor.preSend(outboundMessage(10L), null);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void outboundRoomMessageIsDroppedAfterLogout() {
+        connectSession();
+        given(accessTokenBlacklistRepository.exists(ACCESS_TOKEN)).willReturn(true);
+        Message<?> result = interceptor.preSend(outboundMessage(10L), null);
+
+        assertThat(result).isNull();
+        verify(chatAccessPolicy, never()).getAccessibleMeeting(1L, 10L);
+    }
+
     private void stubActiveSession() {
         given(jwtTokenProvider.getAccessTokenSession(ACCESS_TOKEN))
                 .willReturn(new JwtTokenSession(1L, "session-1"));
         given(refreshTokenRepository.existsByMemberIdAndSessionId(1L, "session-1"))
                 .willReturn(true);
+    }
+
+    private void connectSession() {
+        Authentication authentication = authentication(1L);
+        given(jwtTokenProvider.getAuthentication(ACCESS_TOKEN)).willReturn(authentication);
+        stubActiveSession();
+        StompHeaderAccessor accessor = accessor(StompCommand.CONNECT, null, null);
+        accessor.setNativeHeader("Authorization", "Bearer " + ACCESS_TOKEN);
+        interceptor.preSend(message(accessor), null);
     }
 
     private Authentication authentication(Long memberId) {
@@ -154,24 +196,34 @@ class ChatStompChannelInterceptorTest {
     private StompHeaderAccessor accessor(
             StompCommand command,
             String destination,
-            Authentication authentication
+        Authentication authentication
     ) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(command);
-        accessor.setSessionAttributes(new HashMap<>(Map.of(
-                "chatAccessToken",
-                ACCESS_TOKEN
-        )));
+        Map<String, Object> sessionAttributes = new HashMap<>();
+        if (command != StompCommand.CONNECT) {
+            sessionAttributes.put("chatAccessToken", ACCESS_TOKEN);
+        }
+        accessor.setSessionAttributes(sessionAttributes);
+        accessor.setSessionId("session-1");
         if (destination != null) {
             accessor.setDestination(destination);
         }
         if (authentication != null) {
             accessor.setUser(authentication);
         }
-        accessor.setLeaveMutable(true);
         return accessor;
     }
 
     private Message<byte[]> message(StompHeaderAccessor accessor) {
+        return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+    }
+
+    private Message<byte[]> outboundMessage(Long roomId) {
+        SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.create(
+                SimpMessageType.MESSAGE
+        );
+        accessor.setDestination("/topic/chat/rooms/" + roomId);
+        accessor.setSessionId("session-1");
         return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
     }
 }

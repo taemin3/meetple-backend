@@ -3,7 +3,6 @@ package com.meetple.backend.global.websocket;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.meetple.backend.domain.chat.dto.response.ChatWebSocketErrorResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
@@ -26,15 +25,12 @@ class ChatStompErrorHandlerTest {
         );
 
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
-        ChatWebSocketErrorResponse response = objectMapper.readValue(
-                message.getPayload(),
-                ChatWebSocketErrorResponse.class
-        );
+        var response = objectMapper.readTree(message.getPayload());
         assertThat(accessor.getCommand()).isEqualTo(StompCommand.ERROR);
-        assertThat(response.status()).isEqualTo(401);
-        assertThat(response.success()).isFalse();
-        assertThat(response.code()).isEqualTo(12410);
-        assertThat(response.message()).isEqualTo("유효하지 않은 토큰입니다.");
+        assertThat(response.get("status").asInt()).isEqualTo(401);
+        assertThat(response.get("success").asBoolean()).isFalse();
+        assertThat(response.get("code").asInt()).isEqualTo(12410);
+        assertThat(response.get("message").asText()).isEqualTo("유효하지 않은 토큰입니다.");
     }
 
     @Test
@@ -44,12 +40,10 @@ class ChatStompErrorHandlerTest {
                 new AccessDeniedException("denied")
         );
 
-        ChatWebSocketErrorResponse response = objectMapper.readValue(
-                message.getPayload(),
-                ChatWebSocketErrorResponse.class
-        );
-        assertThat(response.status()).isEqualTo(403);
-        assertThat(response.code()).isEqualTo(10302);
-        assertThat(response.message()).isEqualTo("접근 권한이 없어 접근이 거부되었습니다.");
+        var response = objectMapper.readTree(message.getPayload());
+        assertThat(response.get("status").asInt()).isEqualTo(403);
+        assertThat(response.get("code").asInt()).isEqualTo(10302);
+        assertThat(response.get("message").asText())
+                .isEqualTo("접근 권한이 없어 접근이 거부되었습니다.");
     }
 }

@@ -3,19 +3,24 @@ package com.meetple.backend.global.websocket;
 import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
+import com.meetple.backend.global.exception.BaseException;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
 import io.jsonwebtoken.JwtException;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
@@ -41,6 +46,8 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
     private final AccessTokenBlacklistRepository accessTokenBlacklistRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final ChatAccessPolicy chatAccessPolicy;
+    private final Map<String, AuthenticatedSession> authenticatedSessions =
+            new ConcurrentHashMap<>();
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -49,20 +56,35 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
                 StompHeaderAccessor.class
         );
         if (accessor == null) {
-            return message;
+            return authorizeOutboundMessageIfNecessary(message);
         }
         StompCommand command = accessor.getCommand();
         if (command == null) {
-            return message;
+            return authorizeOutboundMessageIfNecessary(message);
         }
 
         if (command == StompCommand.CONNECT) {
-            authenticate(accessor);
+            StompHeaderAccessor mutableAccessor = mutableAccessor(message, accessor);
+            mutableAccessor.setLeaveMutable(true);
+            authenticate(mutableAccessor);
+            return MessageBuilder.createMessage(
+                    message.getPayload(),
+                    mutableAccessor.getMessageHeaders()
+            );
+        }
+
+        if (command == StompCommand.DISCONNECT) {
+            removeAuthenticatedSession(accessor.getSessionId());
             return message;
+        }
+
+        if (command == StompCommand.MESSAGE) {
+            return authorizeOutboundMessage(message, accessor);
         }
 
         if (command == StompCommand.SUBSCRIBE || command == StompCommand.SEND) {
             AuthenticatedMember member = validateAuthenticatedSession(accessor);
+            rememberAuthenticatedSession(accessor, member.id());
             if (command == StompCommand.SUBSCRIBE) {
                 authorizeSubscription(member.id(), accessor.getDestination());
             } else {
@@ -77,9 +99,11 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
         String accessToken = resolveAccessToken(accessor);
         try {
             Authentication authentication = jwtTokenProvider.getAuthentication(accessToken);
-            validateTokenSession(accessToken, authenticatedMember(authentication).id());
+            AuthenticatedMember member = authenticatedMember(authentication);
+            validateTokenSession(accessToken, member.id());
             accessor.setUser(authentication);
             sessionAttributes(accessor).put(ACCESS_TOKEN_SESSION_ATTRIBUTE, accessToken);
+            rememberAuthenticatedSession(accessor, member.id(), accessToken);
         } catch (JwtException | IllegalArgumentException e) {
             throw invalidToken(e);
         }
@@ -129,6 +153,52 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
         extractRoomId(destination, MESSAGE_SEND_PATTERN);
     }
 
+    private Message<?> authorizeOutboundMessage(
+            Message<?> message,
+            SimpMessageHeaderAccessor accessor
+    ) {
+        String destination = accessor.getDestination();
+        if (!StringUtils.hasText(destination)) {
+            return message;
+        }
+        Matcher matcher = ROOM_SUBSCRIPTION_PATTERN.matcher(destination);
+        if (!matcher.matches()) {
+            return message;
+        }
+
+        String sessionId = accessor.getSessionId();
+        if (!StringUtils.hasText(sessionId)) {
+            return null;
+        }
+        AuthenticatedSession session = authenticatedSessions.get(sessionId);
+        if (session == null) {
+            return null;
+        }
+
+        try {
+            validateTokenSession(session.accessToken(), session.memberId());
+            chatAccessPolicy.getAccessibleMeeting(
+                    session.memberId(),
+                    Long.valueOf(matcher.group(1))
+            );
+            return message;
+        } catch (JwtException | IllegalArgumentException | BaseException exception) {
+            removeAuthenticatedSession(sessionId);
+            return null;
+        }
+    }
+
+    private Message<?> authorizeOutboundMessageIfNecessary(Message<?> message) {
+        SimpMessageHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(
+                message,
+                SimpMessageHeaderAccessor.class
+        );
+        if (accessor == null || accessor.getMessageType() != SimpMessageType.MESSAGE) {
+            return message;
+        }
+        return authorizeOutboundMessage(message, accessor);
+    }
+
     private Long extractRoomId(String destination, Pattern pattern) {
         if (!StringUtils.hasText(destination)) {
             throw new AccessDeniedException("허용되지 않은 STOMP 목적지입니다.");
@@ -174,10 +244,53 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
         return attributes;
     }
 
+    private StompHeaderAccessor mutableAccessor(
+            Message<?> message,
+            StompHeaderAccessor accessor
+    ) {
+        if (accessor.isMutable()) {
+            return accessor;
+        }
+        return StompHeaderAccessor.wrap(message);
+    }
+
+    private void rememberAuthenticatedSession(
+            StompHeaderAccessor accessor,
+            Long memberId
+    ) {
+        Object accessToken = sessionAttributes(accessor).get(ACCESS_TOKEN_SESSION_ATTRIBUTE);
+        if (accessToken instanceof String token) {
+            rememberAuthenticatedSession(accessor, memberId, token);
+        }
+    }
+
+    private void rememberAuthenticatedSession(
+            StompHeaderAccessor accessor,
+            Long memberId,
+            String accessToken
+    ) {
+        String sessionId = accessor.getSessionId();
+        if (StringUtils.hasText(sessionId)) {
+            authenticatedSessions.put(
+                    sessionId,
+                    new AuthenticatedSession(memberId, accessToken)
+            );
+        }
+    }
+
+    private void removeAuthenticatedSession(String sessionId) {
+        if (StringUtils.hasText(sessionId)) {
+            authenticatedSessions.remove(sessionId);
+        }
+    }
+
     private BadCredentialsException invalidToken(Exception cause) {
         if (cause == null) {
             return new BadCredentialsException(ErrorStatus.INVALID_TOKEN.getMessage());
         }
         return new BadCredentialsException(ErrorStatus.INVALID_TOKEN.getMessage(), cause);
+    }
+
+    private record AuthenticatedSession(Long memberId, String accessToken) {
     }
 }

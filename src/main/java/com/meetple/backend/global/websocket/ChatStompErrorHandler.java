@@ -2,13 +2,14 @@ package com.meetple.backend.global.websocket;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.meetple.backend.domain.chat.dto.response.ChatWebSocketErrorResponse;
 import com.meetple.backend.global.exception.BaseException;
+import com.meetple.backend.global.response.ApiResponse;
 import com.meetple.backend.global.response.ErrorStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.messaging.Message;
+import org.springframework.messaging.handler.annotation.support.MethodArgumentNotValidException;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
@@ -29,10 +30,10 @@ public class ChatStompErrorHandler extends StompSubProtocolErrorHandler {
             Message<byte[]> clientMessage,
             Throwable exception
     ) {
-        ChatWebSocketErrorResponse response = toErrorResponse(exception);
+        ApiResponse<Void> response = toErrorResponse(exception);
         try {
             StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.ERROR);
-            accessor.setMessage(response.message());
+            accessor.setMessage(response.getMessage());
             accessor.setContentType(MediaType.APPLICATION_JSON);
             accessor.setLeaveMutable(true);
             return MessageBuilder.createMessage(
@@ -45,31 +46,34 @@ public class ChatStompErrorHandler extends StompSubProtocolErrorHandler {
         }
     }
 
-    private ChatWebSocketErrorResponse toErrorResponse(Throwable exception) {
+    private ApiResponse<Void> toErrorResponse(Throwable exception) {
         Throwable cause = findKnownCause(exception);
         if (cause instanceof BaseException baseException) {
-            return new ChatWebSocketErrorResponse(
+            return ApiResponse.errorBody(
                     baseException.getStatusCode(),
-                    false,
                     baseException.getErrorCode(),
                     baseException.getResponseMessage()
             );
         }
+        if (cause instanceof MethodArgumentNotValidException) {
+            return ApiResponse.errorBody(ErrorStatus.VALIDATION_ERROR);
+        }
         if (cause instanceof BadCredentialsException) {
-            return from(ErrorStatus.INVALID_TOKEN);
+            return ApiResponse.errorBody(ErrorStatus.INVALID_TOKEN);
         }
         if (cause instanceof AccessDeniedException) {
-            return from(ErrorStatus.ACCESS_DENIED);
+            return ApiResponse.errorBody(ErrorStatus.ACCESS_DENIED);
         }
 
         log.error("STOMP 프레임 처리 중 오류가 발생했습니다.", exception);
-        return from(ErrorStatus.INTERNAL_SERVER_ERROR);
+        return ApiResponse.errorBody(ErrorStatus.INTERNAL_SERVER_ERROR);
     }
 
     private Throwable findKnownCause(Throwable exception) {
         Throwable current = exception;
         while (current != null) {
             if (current instanceof BaseException
+                    || current instanceof MethodArgumentNotValidException
                     || current instanceof BadCredentialsException
                     || current instanceof AccessDeniedException) {
                 return current;
@@ -79,12 +83,4 @@ public class ChatStompErrorHandler extends StompSubProtocolErrorHandler {
         return exception;
     }
 
-    private ChatWebSocketErrorResponse from(ErrorStatus errorStatus) {
-        return new ChatWebSocketErrorResponse(
-                errorStatus.getStatusCode(),
-                false,
-                errorStatus.getCode(),
-                errorStatus.getMessage()
-        );
-    }
 }

@@ -42,22 +42,30 @@ public class ApiResponse<T> {
     }
 
     public static ResponseEntity<ApiResponse<Void>> error(ErrorStatus errorStatus, String message) {
-        ApiResponse<Void> response = ApiResponse.<Void>builder()
-                .status(errorStatus.getStatusCode())
-                .success(false)
-                .code(errorStatus.getCode())
-                .message(message)
-                .build();
+        ApiResponse<Void> response = errorBody(errorStatus, message);
         return ResponseEntity.status(errorStatus.getStatusCode()).body(response);
     }
 
     public static ResponseEntity<ApiResponse<Void>> error(int status, int code, String message) {
+        ApiResponse<Void> response = errorBody(status, code, message);
+        return ResponseEntity.status(status).body(response);
+    }
+
+    public static ApiResponse<Void> errorBody(ErrorStatus errorStatus) {
+        return errorBody(errorStatus, errorStatus.getMessage());
+    }
+
+    public static ApiResponse<Void> errorBody(ErrorStatus errorStatus, String message) {
+        return errorBody(errorStatus.getStatusCode(), errorStatus.getCode(), message);
+    }
+
+    public static ApiResponse<Void> errorBody(int status, int code, String message) {
         ApiResponse<Void> response = ApiResponse.<Void>builder()
                 .status(status)
                 .success(false)
                 .code(code)
                 .message(message)
                 .build();
-        return ResponseEntity.status(status).body(response);
+        return response;
     }
 }

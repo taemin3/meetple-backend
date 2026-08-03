@@ -12,6 +12,7 @@ import com.meetple.backend.domain.chat.dto.request.MarkChatRoomReadRequest;
 import com.meetple.backend.domain.chat.dto.request.SendChatMessageRequest;
 import com.meetple.backend.domain.chat.entity.ChatMessage;
 import com.meetple.backend.domain.chat.entity.ChatReadState;
+import com.meetple.backend.domain.chat.event.ChatMessageCreatedEvent;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
 import com.meetple.backend.domain.chat.repository.ChatReadStateRepository;
 import com.meetple.backend.domain.chat.repository.ChatUnreadCountProjection;
@@ -31,6 +32,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -52,6 +54,9 @@ class ChatServiceTest {
 
     @Mock
     private ChatAccessPolicy accessPolicy;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private ChatService chatService;
@@ -91,6 +96,10 @@ class ChatServiceTest {
         ArgumentCaptor<ChatReadState> readStateCaptor = ArgumentCaptor.forClass(ChatReadState.class);
         verify(readStateRepository).save(readStateCaptor.capture());
         assertThat(readStateCaptor.getValue().getLastReadSequence()).isEqualTo(8L);
+        ArgumentCaptor<ChatMessageCreatedEvent> eventCaptor =
+                ArgumentCaptor.forClass(ChatMessageCreatedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().message()).isEqualTo(response);
     }
 
     @Test

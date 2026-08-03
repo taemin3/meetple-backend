@@ -48,6 +48,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registration.interceptors(chatStompChannelInterceptor);
     }
 
+    @Override
+    public void configureClientOutboundChannel(ChannelRegistration registration) {
+        registration.interceptors(chatStompChannelInterceptor);
+    }
+
     @Bean
     public ThreadPoolTaskScheduler chatMessageBrokerTaskScheduler() {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();

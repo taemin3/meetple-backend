@@ -8,6 +8,7 @@ import com.meetple.backend.domain.chat.dto.response.ChatReadStateResponse;
 import com.meetple.backend.domain.chat.dto.response.ChatRoomSummaryResponse;
 import com.meetple.backend.domain.chat.entity.ChatMessage;
 import com.meetple.backend.domain.chat.entity.ChatReadState;
+import com.meetple.backend.domain.chat.event.ChatMessageCreatedEvent;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
 import com.meetple.backend.domain.chat.repository.ChatReadStateRepository;
 import com.meetple.backend.domain.chat.repository.ChatUnreadCountProjection;
@@ -26,6 +27,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -45,6 +47,7 @@ public class ChatService {
     private final MeetingRepository meetingRepository;
     private final MemberRepository memberRepository;
     private final ChatAccessPolicy accessPolicy;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PageResponse<ChatRoomSummaryResponse> getRooms(Long memberId, Pageable pageable) {
         validatePageable(pageable);
@@ -132,7 +135,9 @@ public class ChatService {
                 message::getSender,
                 message.getRoomSequence()
         );
-        return ChatMessageResponse.from(message);
+        ChatMessageResponse response = ChatMessageResponse.from(message);
+        eventPublisher.publishEvent(new ChatMessageCreatedEvent(response));
+        return response;
     }
 
     @Transactional
