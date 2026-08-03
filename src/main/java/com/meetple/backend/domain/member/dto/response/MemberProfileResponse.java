@@ -9,17 +9,28 @@ public record MemberProfileResponse(
         String nickname,
         String profileImageUrl,
         String region,
-        MemberRole role
+        MemberRole role,
+        long createdMeetingsCount,
+        long joinedMeetingsCount,
+        long likedMeetingsCount
 ) {
 
-    public static MemberProfileResponse from(Member member) {
+    public static MemberProfileResponse from(
+            Member member,
+            long createdMeetingsCount,
+            long joinedMeetingsCount,
+            long likedMeetingsCount
+    ) {
         return new MemberProfileResponse(
                 member.getId(),
                 member.getEmail(),
                 member.getNickname(),
                 member.getProfileImageUrl(),
                 member.getRegion(),
-                member.getRole()
+                member.getRole(),
+                createdMeetingsCount,
+                joinedMeetingsCount,
+                likedMeetingsCount
         );
     }
 }

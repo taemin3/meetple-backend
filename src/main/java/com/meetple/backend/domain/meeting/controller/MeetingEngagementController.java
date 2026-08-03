@@ -2,6 +2,7 @@ package com.meetple.backend.domain.meeting.controller;
 
 import com.meetple.backend.domain.meeting.dto.response.MeetingEngagementResponse;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
+import com.meetple.backend.domain.meeting.dto.response.MeetingParticipationResponse;
 import com.meetple.backend.domain.meeting.service.MeetingEngagementService;
 import com.meetple.backend.global.config.OpenApiConfig;
 import com.meetple.backend.global.response.ApiResponse;
@@ -73,6 +74,42 @@ public class MeetingEngagementController {
         return ApiResponse.success(
                 SuccessStatus.OK,
                 engagementService.getMyBookmarks(authenticatedMember.id(), pageable)
+        );
+    }
+
+    @GetMapping("/api/v1/users/me/meetings/hosted")
+    @Operation(summary = "내가 만든 모임 조회")
+    public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> getMyHostedMeetings(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                engagementService.getMyHostedMeetings(authenticatedMember.id(), pageable)
+        );
+    }
+
+    @GetMapping("/api/v1/users/me/meetings/joined")
+    @Operation(summary = "참여 중인 모임 조회")
+    public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> getMyJoinedMeetings(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                engagementService.getMyJoinedMeetings(authenticatedMember.id(), pageable)
+        );
+    }
+
+    @GetMapping("/api/v1/users/me/applications")
+    @Operation(summary = "내 참여 신청 내역 조회")
+    public ResponseEntity<ApiResponse<PageResponse<MeetingParticipationResponse>>> getMyApplications(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                engagementService.getMyApplications(authenticatedMember.id(), pageable)
         );
     }
 }
