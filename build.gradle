@@ -24,6 +24,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.security:spring-security-crypto'
+	implementation 'org.flywaydb:flyway-core'
+	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
 	implementation platform('software.amazon.awssdk:bom:2.29.52')
 	implementation 'software.amazon.awssdk:auth'
