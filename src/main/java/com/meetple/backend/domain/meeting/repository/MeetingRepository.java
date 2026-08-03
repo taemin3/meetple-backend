@@ -23,6 +23,41 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
 
     long countByHostId(Long hostId);
 
+    @Query(
+            value = """
+                    select m.*
+                    from meetings m
+                    left join (
+                        select meeting_id, max(created_at) as last_message_at
+                        from chat_messages
+                        group by meeting_id
+                    ) chat_activity on chat_activity.meeting_id = m.id
+                    where m.host_id = :memberId
+                       or exists (
+                            select 1
+                            from meeting_participations p
+                            where p.meeting_id = m.id
+                              and p.member_id = :memberId
+                              and p.status = 'APPROVED'
+                       )
+                    order by coalesce(chat_activity.last_message_at, m.created_at) desc, m.id desc
+                    """,
+            countQuery = """
+                    select count(*)
+                    from meetings m
+                    where m.host_id = :memberId
+                       or exists (
+                            select 1
+                            from meeting_participations p
+                            where p.meeting_id = m.id
+                              and p.member_id = :memberId
+                              and p.status = 'APPROVED'
+                       )
+                    """,
+            nativeQuery = true
+    )
+    Page<Meeting> findChatAccessibleMeetings(@Param("memberId") Long memberId, Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<Meeting> findByStatusInAndEndDateLessThanEqual(
             List<MeetingStatus> statuses,
