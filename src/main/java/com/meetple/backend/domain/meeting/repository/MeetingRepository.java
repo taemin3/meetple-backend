@@ -27,11 +27,6 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
             value = """
                     select m.*
                     from meetings m
-                    left join (
-                        select meeting_id, max(created_at) as last_message_at
-                        from chat_messages
-                        group by meeting_id
-                    ) chat_activity on chat_activity.meeting_id = m.id
                     where m.host_id = :memberId
                        or exists (
                             select 1
@@ -40,7 +35,13 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                               and p.member_id = :memberId
                               and p.status = 'APPROVED'
                        )
-                    order by coalesce(chat_activity.last_message_at, m.created_at) desc, m.id desc
+                    order by coalesce((
+                        select cm.created_at
+                        from chat_messages cm
+                        where cm.meeting_id = m.id
+                        order by cm.room_sequence desc
+                        limit 1
+                    ), m.created_at) desc, m.id desc
                     """,
             countQuery = """
                     select count(*)

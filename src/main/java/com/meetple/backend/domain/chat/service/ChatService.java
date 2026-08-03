@@ -10,6 +10,7 @@ import com.meetple.backend.domain.chat.entity.ChatMessage;
 import com.meetple.backend.domain.chat.entity.ChatReadState;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
 import com.meetple.backend.domain.chat.repository.ChatReadStateRepository;
+import com.meetple.backend.domain.chat.repository.ChatUnreadCountProjection;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
@@ -20,6 +21,10 @@ import com.meetple.backend.global.response.PageResponse;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -44,7 +49,15 @@ public class ChatService {
     public PageResponse<ChatRoomSummaryResponse> getRooms(Long memberId, Pageable pageable) {
         validatePageable(pageable);
         Page<Meeting> meetings = meetingRepository.findChatAccessibleMeetings(memberId, pageable);
-        return PageResponse.from(meetings.map(meeting -> toRoomSummary(memberId, meeting)));
+        List<Long> meetingIds = meetings.stream().map(Meeting::getId).toList();
+        Map<Long, ChatMessageResponse> lastMessages = getLastMessages(meetingIds);
+        Map<Long, Long> unreadCounts = getUnreadCounts(memberId, meetingIds);
+
+        return PageResponse.from(meetings.map(meeting -> toRoomSummary(
+                meeting,
+                lastMessages.get(meeting.getId()),
+                unreadCounts.getOrDefault(meeting.getId(), 0L)
+        )));
     }
 
     public ChatMessagePageResponse getMessages(
@@ -104,18 +117,22 @@ public class ChatService {
     ) {
         validateMessageRequest(request);
 
-        Meeting meeting = meetingRepository.findByIdForUpdate(meetingId)
-                .orElseThrow(() -> new NotFoundException("모임을 찾을 수 없습니다."));
-        accessPolicy.ensureCanAccess(memberId, meeting);
+        Meeting meeting = getAccessibleMeetingForUpdate(memberId, meetingId);
         accessPolicy.ensureCanSend(meeting);
 
-        return messageRepository.findByMeetingIdAndSenderIdAndClientMessageId(
+        ChatMessage message = messageRepository.findByMeetingIdAndSenderIdAndClientMessageId(
                         meetingId,
                         memberId,
                         request.clientMessageId()
                 )
-                .map(ChatMessageResponse::from)
                 .orElseGet(() -> saveMessage(memberId, meeting, request));
+        advanceReadState(
+                meeting,
+                memberId,
+                message::getSender,
+                message.getRoomSequence()
+        );
+        return ChatMessageResponse.from(message);
     }
 
     @Transactional
@@ -124,7 +141,7 @@ public class ChatService {
             Long meetingId,
             MarkChatRoomReadRequest request
     ) {
-        Meeting meeting = accessPolicy.getAccessibleMeeting(memberId, meetingId);
+        Meeting meeting = getAccessibleMeetingForUpdate(memberId, meetingId);
         long latestSequence = messageRepository.findTopByMeetingIdOrderByRoomSequenceDesc(meetingId)
                 .map(ChatMessage::getRoomSequence)
                 .orElse(0L);
@@ -134,28 +151,21 @@ public class ChatService {
             );
         }
 
-        ChatReadState readState = readStateRepository.findByMeetingIdAndMemberId(meetingId, memberId)
-                .orElseGet(() -> ChatReadState.create(meeting, getMember(memberId), 0L));
-        readState.markRead(request.lastReadSequence());
-        ChatReadState saved = readStateRepository.save(readState);
+        ChatReadState saved = advanceReadState(
+                meeting,
+                memberId,
+                () -> getMember(memberId),
+                request.lastReadSequence()
+        );
 
         return new ChatReadStateResponse(meetingId, memberId, saved.getLastReadSequence());
     }
 
-    private ChatRoomSummaryResponse toRoomSummary(Long memberId, Meeting meeting) {
-        ChatMessageResponse lastMessage = messageRepository
-                .findTopByMeetingIdOrderByRoomSequenceDesc(meeting.getId())
-                .map(ChatMessageResponse::from)
-                .orElse(null);
-        long lastReadSequence = readStateRepository
-                .findByMeetingIdAndMemberId(meeting.getId(), memberId)
-                .map(ChatReadState::getLastReadSequence)
-                .orElse(0L);
-        long unreadCount = messageRepository.countByMeetingIdAndRoomSequenceGreaterThan(
-                meeting.getId(),
-                lastReadSequence
-        );
-
+    private ChatRoomSummaryResponse toRoomSummary(
+            Meeting meeting,
+            ChatMessageResponse lastMessage,
+            long unreadCount
+    ) {
         return new ChatRoomSummaryResponse(
                 meeting.getId(),
                 meeting.getId(),
@@ -168,7 +178,7 @@ public class ChatService {
         );
     }
 
-    private ChatMessageResponse saveMessage(
+    private ChatMessage saveMessage(
             Long memberId,
             Meeting meeting,
             SendChatMessageRequest request
@@ -184,7 +194,47 @@ public class ChatService {
                 request.clientMessageId(),
                 request.content()
         );
-        return ChatMessageResponse.from(messageRepository.saveAndFlush(message));
+        return messageRepository.saveAndFlush(message);
+    }
+
+    private Meeting getAccessibleMeetingForUpdate(Long memberId, Long meetingId) {
+        Meeting meeting = meetingRepository.findByIdForUpdate(meetingId)
+                .orElseThrow(() -> new NotFoundException("모임을 찾을 수 없습니다."));
+        accessPolicy.ensureCanAccess(memberId, meeting);
+        return meeting;
+    }
+
+    private ChatReadState advanceReadState(
+            Meeting meeting,
+            Long memberId,
+            Supplier<Member> memberSupplier,
+            Long sequence
+    ) {
+        ChatReadState readState = readStateRepository
+                .findByMeetingIdAndMemberId(meeting.getId(), memberId)
+                .orElseGet(() -> ChatReadState.create(meeting, memberSupplier.get(), 0L));
+        readState.markRead(sequence);
+        return readStateRepository.save(readState);
+    }
+
+    private Map<Long, ChatMessageResponse> getLastMessages(List<Long> meetingIds) {
+        if (meetingIds.isEmpty()) {
+            return Map.of();
+        }
+        return messageRepository.findLatestByMeetingIds(meetingIds).stream()
+                .map(ChatMessageResponse::from)
+                .collect(Collectors.toMap(ChatMessageResponse::roomId, Function.identity()));
+    }
+
+    private Map<Long, Long> getUnreadCounts(Long memberId, List<Long> meetingIds) {
+        if (meetingIds.isEmpty()) {
+            return Map.of();
+        }
+        return messageRepository.countUnreadByMeetingIds(memberId, meetingIds).stream()
+                .collect(Collectors.toMap(
+                        ChatUnreadCountProjection::getMeetingId,
+                        ChatUnreadCountProjection::getUnreadCount
+                ));
     }
 
     private Member getMember(Long memberId) {

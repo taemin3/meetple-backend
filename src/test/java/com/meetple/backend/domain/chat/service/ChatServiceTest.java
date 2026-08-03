@@ -14,6 +14,7 @@ import com.meetple.backend.domain.chat.entity.ChatMessage;
 import com.meetple.backend.domain.chat.entity.ChatReadState;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
 import com.meetple.backend.domain.chat.repository.ChatReadStateRepository;
+import com.meetple.backend.domain.chat.repository.ChatUnreadCountProjection;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
@@ -31,6 +32,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -86,6 +88,9 @@ class ChatServiceTest {
         ArgumentCaptor<ChatMessage> captor = ArgumentCaptor.forClass(ChatMessage.class);
         verify(messageRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getRoomSequence()).isEqualTo(8L);
+        ArgumentCaptor<ChatReadState> readStateCaptor = ArgumentCaptor.forClass(ChatReadState.class);
+        verify(readStateRepository).save(readStateCaptor.capture());
+        assertThat(readStateCaptor.getValue().getLastReadSequence()).isEqualTo(8L);
     }
 
     @Test
@@ -137,6 +142,39 @@ class ChatServiceTest {
     }
 
     @Test
+    void getRoomsLoadsSummariesInBatch() {
+        Member host = member(1L, "host");
+        Meeting firstMeeting = meeting(10L, host);
+        Meeting secondMeeting = meeting(11L, host);
+        PageRequest pageable = PageRequest.of(0, 20);
+        ChatMessage latestMessage = message(
+                20L,
+                firstMeeting,
+                host,
+                2L,
+                UUID.randomUUID(),
+                "latest"
+        );
+        ChatUnreadCountProjection unreadCount = unreadCount(10L, 2L);
+        given(meetingRepository.findChatAccessibleMeetings(1L, pageable))
+                .willReturn(new PageImpl<>(List.of(firstMeeting, secondMeeting), pageable, 2));
+        given(messageRepository.findLatestByMeetingIds(List.of(10L, 11L)))
+                .willReturn(List.of(latestMessage));
+        given(messageRepository.countUnreadByMeetingIds(1L, List.of(10L, 11L)))
+                .willReturn(List.of(unreadCount));
+
+        var response = chatService.getRooms(1L, pageable);
+
+        assertThat(response.content()).hasSize(2);
+        assertThat(response.content().get(0).lastMessage().sequence()).isEqualTo(2L);
+        assertThat(response.content().get(0).unreadCount()).isEqualTo(2L);
+        assertThat(response.content().get(1).lastMessage()).isNull();
+        assertThat(response.content().get(1).unreadCount()).isZero();
+        verify(messageRepository).findLatestByMeetingIds(List.of(10L, 11L));
+        verify(messageRepository).countUnreadByMeetingIds(1L, List.of(10L, 11L));
+    }
+
+    @Test
     void afterCursorReturnsCatchUpMessagesInAscendingOrder() {
         Member host = member(1L, "host");
         Meeting meeting = meeting(10L, host);
@@ -161,7 +199,7 @@ class ChatServiceTest {
     void markReadRejectsSequenceBeyondLatestMessage() {
         Member host = member(1L, "host");
         Meeting meeting = meeting(10L, host);
-        given(accessPolicy.getAccessibleMeeting(1L, 10L)).willReturn(meeting);
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
         given(messageRepository.findTopByMeetingIdOrderByRoomSequenceDesc(10L))
                 .willReturn(Optional.of(message(
                         2L,
@@ -186,7 +224,7 @@ class ChatServiceTest {
         Member host = member(1L, "host");
         Meeting meeting = meeting(10L, host);
         ChatReadState readState = ChatReadState.create(meeting, host, 5L);
-        given(accessPolicy.getAccessibleMeeting(1L, 10L)).willReturn(meeting);
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
         given(messageRepository.findTopByMeetingIdOrderByRoomSequenceDesc(10L))
                 .willReturn(Optional.of(message(
                         6L,
@@ -203,6 +241,8 @@ class ChatServiceTest {
         var response = chatService.markRead(1L, 10L, new MarkChatRoomReadRequest(3L));
 
         assertThat(response.lastReadSequence()).isEqualTo(5L);
+        verify(meetingRepository).findByIdForUpdate(10L);
+        verify(accessPolicy).ensureCanAccess(1L, meeting);
     }
 
     private ChatMessage message(
@@ -222,6 +262,20 @@ class ChatServiceTest {
         );
         ReflectionTestUtils.setField(message, "id", id);
         return message;
+    }
+
+    private ChatUnreadCountProjection unreadCount(Long meetingId, Long unreadCount) {
+        return new ChatUnreadCountProjection() {
+            @Override
+            public Long getMeetingId() {
+                return meetingId;
+            }
+
+            @Override
+            public Long getUnreadCount() {
+                return unreadCount;
+            }
+        };
     }
 
     private Meeting meeting(Long id, Member host) {

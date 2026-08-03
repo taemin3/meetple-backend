@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
 import com.meetple.backend.domain.chat.entity.ChatMessage;
+import com.meetple.backend.domain.chat.entity.ChatReadState;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
@@ -14,6 +15,7 @@ import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +30,9 @@ class ChatRepositoryTest {
 
     @Autowired
     private ChatMessageRepository messageRepository;
+
+    @Autowired
+    private ChatReadStateRepository readStateRepository;
 
     @Autowired
     private MeetingRepository meetingRepository;
@@ -124,6 +129,66 @@ class ChatRepositoryTest {
 
         assertThat(older).extracting(ChatMessage::getRoomSequence).containsExactly(3L, 2L);
         assertThat(newer).extracting(ChatMessage::getRoomSequence).containsExactly(3L, 4L);
+    }
+
+    @Test
+    void summaryQueriesReturnLatestMessagesAndUnreadCountsInBatch() {
+        Member host = memberRepository.save(member("host"));
+        Category category = categoryRepository.save(Category.create("exercise"));
+        Meeting firstMeeting = meetingRepository.save(meeting(host, category, "first"));
+        Meeting secondMeeting = meetingRepository.save(meeting(host, category, "second"));
+        messageRepository.save(ChatMessage.create(
+                firstMeeting,
+                host,
+                1L,
+                UUID.randomUUID(),
+                "first"
+        ));
+        messageRepository.save(ChatMessage.create(
+                firstMeeting,
+                host,
+                2L,
+                UUID.randomUUID(),
+                "latest"
+        ));
+        readStateRepository.save(ChatReadState.create(firstMeeting, host, 1L));
+        messageRepository.flush();
+        readStateRepository.flush();
+
+        List<Long> meetingIds = List.of(firstMeeting.getId(), secondMeeting.getId());
+        var latestMessages = messageRepository.findLatestByMeetingIds(meetingIds);
+        var unreadCounts = messageRepository.countUnreadByMeetingIds(host.getId(), meetingIds);
+
+        assertThat(latestMessages).singleElement()
+                .extracting(ChatMessage::getRoomSequence)
+                .isEqualTo(2L);
+        assertThat(unreadCounts).singleElement().satisfies(unreadCount -> {
+            assertThat(unreadCount.getMeetingId()).isEqualTo(firstMeeting.getId());
+            assertThat(unreadCount.getUnreadCount()).isEqualTo(1L);
+        });
+    }
+
+    @Test
+    void deletingMeetingCascadesChatDataInJpaGeneratedSchema() {
+        Member host = memberRepository.save(member("host"));
+        Category category = categoryRepository.save(Category.create("exercise"));
+        Meeting meeting = meetingRepository.save(meeting(host, category, "running"));
+        messageRepository.save(ChatMessage.create(
+                meeting,
+                host,
+                1L,
+                UUID.randomUUID(),
+                "message"
+        ));
+        readStateRepository.save(ChatReadState.create(meeting, host, 1L));
+        messageRepository.flush();
+        readStateRepository.flush();
+
+        meetingRepository.delete(meeting);
+        meetingRepository.flush();
+
+        assertThat(messageRepository.findAll()).isEmpty();
+        assertThat(readStateRepository.findAll()).isEmpty();
     }
 
     private Member member(String nickname) {
