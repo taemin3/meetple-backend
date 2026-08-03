@@ -15,10 +15,11 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ChatAccessPolicy {
 
-    private static final String MEETING_NOT_FOUND_MESSAGE = "Meeting not found.";
+    private static final String MEETING_NOT_FOUND_MESSAGE = "모임을 찾을 수 없습니다.";
     private static final String CHAT_ACCESS_DENIED_MESSAGE =
-            "Only the meeting host and approved participants can access this chat room.";
-    private static final String CHAT_READ_ONLY_MESSAGE = "This chat room is read-only.";
+            "모임 주최자와 승인된 참여자만 채팅방에 입장할 수 있습니다.";
+    private static final String CHAT_READ_ONLY_MESSAGE =
+            "종료되거나 취소된 모임의 채팅방에서는 메시지를 보낼 수 없습니다.";
 
     private final MeetingRepository meetingRepository;
     private final MeetingParticipationRepository participationRepository;

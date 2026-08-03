@@ -102,7 +102,8 @@ class ChatControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("메시지 내용을 입력해주세요."));
     }
 
     private ChatMessageResponse messageResponse() {

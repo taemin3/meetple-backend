@@ -105,7 +105,7 @@ public class ChatService {
         validateMessageRequest(request);
 
         Meeting meeting = meetingRepository.findByIdForUpdate(meetingId)
-                .orElseThrow(() -> new NotFoundException("Meeting not found."));
+                .orElseThrow(() -> new NotFoundException("모임을 찾을 수 없습니다."));
         accessPolicy.ensureCanAccess(memberId, meeting);
         accessPolicy.ensureCanSend(meeting);
 
@@ -129,7 +129,9 @@ public class ChatService {
                 .map(ChatMessage::getRoomSequence)
                 .orElse(0L);
         if (request.lastReadSequence() > latestSequence) {
-            throw new BadRequestException("lastReadSequence cannot exceed the latest message sequence.");
+            throw new BadRequestException(
+                    "lastReadSequence는 최신 메시지 순서를 초과할 수 없습니다."
+            );
         }
 
         ChatReadState readState = readStateRepository.findByMeetingIdAndMemberId(meetingId, memberId)
@@ -187,42 +189,44 @@ public class ChatService {
 
     private Member getMember(Long memberId) {
         return memberRepository.findById(memberId)
-                .orElseThrow(() -> new NotFoundException("Member not found."));
+                .orElseThrow(() -> new NotFoundException("회원을 찾을 수 없습니다."));
     }
 
     private void validatePageable(Pageable pageable) {
         if (pageable.getPageSize() < 1 || pageable.getPageSize() > MAX_PAGE_SIZE) {
-            throw new BadRequestException("Page size must be between 1 and 100.");
+            throw new BadRequestException("페이지 크기는 1 이상 100 이하여야 합니다.");
         }
         if (pageable.getSort().isSorted()) {
-            throw new BadRequestException("Chat room sorting is fixed by recent activity.");
+            throw new BadRequestException("채팅방 목록은 최근 활동순으로만 정렬할 수 있습니다.");
         }
     }
 
     private void validateMessageCursor(Long beforeSequence, Long afterSequence, int size) {
         if (beforeSequence != null && afterSequence != null) {
-            throw new BadRequestException("beforeSequence and afterSequence cannot be used together.");
+            throw new BadRequestException(
+                    "beforeSequence와 afterSequence는 동시에 사용할 수 없습니다."
+            );
         }
         if (beforeSequence != null && beforeSequence < 1) {
-            throw new BadRequestException("beforeSequence must be positive.");
+            throw new BadRequestException("beforeSequence는 1 이상이어야 합니다.");
         }
         if (afterSequence != null && afterSequence < 0) {
-            throw new BadRequestException("afterSequence must not be negative.");
+            throw new BadRequestException("afterSequence는 0 이상이어야 합니다.");
         }
         if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new BadRequestException("Message page size must be between 1 and 100.");
+            throw new BadRequestException("메시지 페이지 크기는 1 이상 100 이하여야 합니다.");
         }
     }
 
     private void validateMessageRequest(SendChatMessageRequest request) {
         if (request == null || request.clientMessageId() == null) {
-            throw new BadRequestException("clientMessageId is required.");
+            throw new BadRequestException("clientMessageId를 입력해주세요.");
         }
         if (request.content() == null || request.content().trim().isEmpty()) {
-            throw new BadRequestException("Message content is required.");
+            throw new BadRequestException("메시지 내용을 입력해주세요.");
         }
         if (request.content().trim().length() > MAX_MESSAGE_LENGTH) {
-            throw new BadRequestException("Message content must be at most 1000 characters.");
+            throw new BadRequestException("메시지 내용은 1000자 이하여야 합니다.");
         }
     }
 }

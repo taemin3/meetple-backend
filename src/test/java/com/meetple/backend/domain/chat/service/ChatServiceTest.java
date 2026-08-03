@@ -178,7 +178,7 @@ class ChatServiceTest {
                 new MarkChatRoomReadRequest(3L)
         ))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("cannot exceed");
+                .hasMessage("lastReadSequence는 최신 메시지 순서를 초과할 수 없습니다.");
     }
 
     @Test

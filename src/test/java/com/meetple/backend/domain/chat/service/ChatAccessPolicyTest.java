@@ -58,7 +58,7 @@ class ChatAccessPolicyTest {
 
         assertThatThrownBy(() -> accessPolicy.ensureCanAccess(2L, meeting))
                 .isInstanceOf(ForbiddenException.class)
-                .hasMessageContaining("approved participants");
+                .hasMessage("모임 주최자와 승인된 참여자만 채팅방에 입장할 수 있습니다.");
     }
 
     @Test
@@ -68,7 +68,7 @@ class ChatAccessPolicyTest {
 
         assertThatThrownBy(() -> accessPolicy.ensureCanSend(meeting))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessage("This chat room is read-only.");
+                .hasMessage("종료되거나 취소된 모임의 채팅방에서는 메시지를 보낼 수 없습니다.");
     }
 
     private Meeting meeting(Long id, Member host) {
