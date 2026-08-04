@@ -279,7 +279,7 @@ public class ChatService {
         if (request.content() == null || request.content().trim().isEmpty()) {
             throw new BadRequestException("메시지 내용을 입력해주세요.");
         }
-        if (request.content().trim().length() > MAX_MESSAGE_LENGTH) {
+        if (request.content().length() > MAX_MESSAGE_LENGTH) {
             throw new BadRequestException("메시지 내용은 1000자 이하여야 합니다.");
         }
     }

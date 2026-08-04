@@ -57,7 +57,7 @@ class ChatServiceTest {
     private ChatService chatService;
 
     @Test
-    void sendMessageAllocatesNextRoomSequenceAndTrimsContent() {
+    void sendMessageAllocatesNextRoomSequenceAndPreservesContent() {
         Member host = member(1L, "host");
         Meeting meeting = meeting(10L, host);
         UUID clientMessageId = UUID.randomUUID();
@@ -85,13 +85,37 @@ class ChatServiceTest {
 
         assertThat(result.created()).isTrue();
         assertThat(result.message().sequence()).isEqualTo(8L);
-        assertThat(result.message().content()).isEqualTo("hello");
+        assertThat(result.message().content()).isEqualTo("  hello  ");
         ArgumentCaptor<ChatMessage> captor = ArgumentCaptor.forClass(ChatMessage.class);
         verify(messageRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getRoomSequence()).isEqualTo(8L);
         ArgumentCaptor<ChatReadState> readStateCaptor = ArgumentCaptor.forClass(ChatReadState.class);
         verify(readStateRepository).save(readStateCaptor.capture());
         assertThat(readStateCaptor.getValue().getLastReadSequence()).isEqualTo(8L);
+    }
+
+    @Test
+    void sendMessageRejectsWhitespaceOnlyContent() {
+        assertThatThrownBy(() -> chatService.sendMessage(
+                1L,
+                10L,
+                new SendChatMessageRequest(UUID.randomUUID(), " \n  ")
+        ))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("메시지 내용을 입력해주세요.");
+    }
+
+    @Test
+    void sendMessageCountsSurroundingWhitespaceInLengthLimit() {
+        String content = " " + "a".repeat(999) + " ";
+
+        assertThatThrownBy(() -> chatService.sendMessage(
+                1L,
+                10L,
+                new SendChatMessageRequest(UUID.randomUUID(), content)
+        ))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("메시지 내용은 1000자 이하여야 합니다.");
     }
 
     @Test
