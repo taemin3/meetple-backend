@@ -86,6 +86,6 @@ public class ChatMessage extends BaseTimeEntity {
             UUID clientMessageId,
             String content
     ) {
-        return new ChatMessage(meeting, sender, roomSequence, clientMessageId, content.trim());
+        return new ChatMessage(meeting, sender, roomSequence, clientMessageId, content);
     }
 }
