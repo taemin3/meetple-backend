@@ -16,6 +16,7 @@ import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
+import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import java.util.Locale;
 import java.time.LocalDateTime;
 import java.util.Set;
@@ -24,6 +25,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -59,6 +61,7 @@ public class MeetingParticipationService {
     private final MeetingParticipationRepository participationRepository;
     private final MemberRepository memberRepository;
     private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public MeetingParticipationResponse applyParticipation(
@@ -174,7 +177,8 @@ public class MeetingParticipationService {
             throw new BadRequestException("Participation cannot be canceled after the meeting starts.");
         }
 
-        if (participation.getStatus() == ParticipationStatus.APPROVED) {
+        boolean wasApproved = participation.getStatus() == ParticipationStatus.APPROVED;
+        if (wasApproved) {
             meeting.decreaseCurrentPeople();
         }
         participation.cancel();
@@ -184,6 +188,49 @@ public class MeetingParticipationService {
                 "참여 취소",
                 participation.getMember().getNickname() + "님이 " + meeting.getTitle() + " 참여를 취소했습니다.",
                 meetingId
+        );
+        if (wasApproved) {
+            eventPublisher.publishEvent(
+                    ChatSessionInvalidationEvent.participationCanceled(
+                            meetingId,
+                            participation.getMember().getId()
+                    )
+            );
+        }
+        return MeetingParticipationResponse.from(participation);
+    }
+
+    @Transactional
+    public MeetingParticipationResponse revokeApproval(
+            Long hostId,
+            Long meetingId,
+            Long participationId
+    ) {
+        Meeting meeting = getMeetingForUpdate(meetingId);
+        MeetingParticipation participation = getParticipationForUpdate(
+                meetingId,
+                participationId
+        );
+        ensureHost(meeting, hostId);
+        ensureApproved(participation);
+        if (!LocalDateTime.now().isBefore(meeting.getMeetingDate())) {
+            throw new BadRequestException("Participation approval cannot be revoked after the meeting starts.");
+        }
+
+        meeting.decreaseCurrentPeople();
+        participation.cancel();
+        notificationService.notify(
+                participation.getMember(),
+                "PARTICIPATION_APPROVAL_REVOKED",
+                "참여 승인 취소",
+                meeting.getTitle() + " 모임 참여 승인이 취소되었습니다.",
+                meetingId
+        );
+        eventPublisher.publishEvent(
+                ChatSessionInvalidationEvent.participationApprovalRevoked(
+                        meetingId,
+                        participation.getMember().getId()
+                )
         );
         return MeetingParticipationResponse.from(participation);
     }
@@ -235,6 +282,12 @@ public class MeetingParticipationService {
     private void ensurePending(MeetingParticipation participation) {
         if (participation.getStatus() != ParticipationStatus.PENDING) {
             throw new BadRequestException(PENDING_ONLY_MESSAGE);
+        }
+    }
+
+    private void ensureApproved(MeetingParticipation participation) {
+        if (participation.getStatus() != ParticipationStatus.APPROVED) {
+            throw new BadRequestException("Only approved participation can be revoked.");
         }
     }
 

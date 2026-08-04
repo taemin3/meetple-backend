@@ -20,6 +20,8 @@ public class ChatAccessPolicy {
             "모임 주최자와 승인된 참여자만 채팅방에 입장할 수 있습니다.";
     private static final String CHAT_READ_ONLY_MESSAGE =
             "종료되거나 취소된 모임의 채팅방에서는 메시지를 보낼 수 없습니다.";
+    private static final String CHAT_REALTIME_CLOSED_MESSAGE =
+            "취소된 모임의 실시간 채팅에는 연결할 수 없습니다.";
 
     private final MeetingRepository meetingRepository;
     private final MeetingParticipationRepository participationRepository;
@@ -28,6 +30,14 @@ public class ChatAccessPolicy {
         Meeting meeting = meetingRepository.findById(meetingId)
                 .orElseThrow(() -> new NotFoundException(MEETING_NOT_FOUND_MESSAGE));
         ensureCanAccess(memberId, meeting);
+        return meeting;
+    }
+
+    public Meeting getRealtimeAccessibleMeeting(Long memberId, Long meetingId) {
+        Meeting meeting = getAccessibleMeeting(memberId, meetingId);
+        if (meeting.getStatus() == MeetingStatus.CANCELED) {
+            throw new ForbiddenException(CHAT_REALTIME_CLOSED_MESSAGE);
+        }
         return meeting;
     }
 

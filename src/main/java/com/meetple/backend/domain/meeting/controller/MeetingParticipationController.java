@@ -105,4 +105,22 @@ public class MeetingParticipationController {
                 participationService.cancelParticipation(authenticatedMember.id(), meetingId, participationId)
         );
     }
+
+    @PatchMapping("/{participationId}/revoke")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(summary = "모임 참여 승인 취소", description = "모임장이 승인된 참여자의 승인을 취소합니다.")
+    public ResponseEntity<ApiResponse<MeetingParticipationResponse>> revokeApproval(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PathVariable Long meetingId,
+            @PathVariable Long participationId
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                participationService.revokeApproval(
+                        authenticatedMember.id(),
+                        meetingId,
+                        participationId
+                )
+        );
+    }
 }

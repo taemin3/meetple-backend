@@ -17,6 +17,7 @@ import com.meetple.backend.global.security.JwtTokenSession;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -49,6 +50,9 @@ class ChatStompChannelInterceptorTest {
 
     @Mock
     private ChatAccessPolicy chatAccessPolicy;
+
+    @Mock
+    private LocalChatWebSocketSessionRegistry sessionRegistry;
 
     @InjectMocks
     private ChatStompChannelInterceptor interceptor;
@@ -111,7 +115,7 @@ class ChatStompChannelInterceptorTest {
 
         interceptor.preSend(message(accessor), null);
 
-        verify(chatAccessPolicy).getAccessibleMeeting(1L, 10L);
+        verify(chatAccessPolicy).getRealtimeAccessibleMeeting(1L, 10L);
     }
 
     @Test
@@ -127,7 +131,7 @@ class ChatStompChannelInterceptorTest {
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessage("허용되지 않은 STOMP 목적지입니다.");
 
-        verify(chatAccessPolicy, never()).getAccessibleMeeting(1L, 10L);
+        verify(chatAccessPolicy, never()).getRealtimeAccessibleMeeting(1L, 10L);
     }
 
     @Test
@@ -204,6 +208,14 @@ class ChatStompChannelInterceptorTest {
         StompHeaderAccessor accessor = accessor(StompCommand.CONNECT, null, null);
         accessor.setNativeHeader("Authorization", "Bearer " + ACCESS_TOKEN);
         interceptor.preSend(message(accessor), null);
+        given(sessionRegistry.getAuthenticatedSession("session-1"))
+                .willReturn(Optional.of(
+                        new LocalChatWebSocketSessionRegistry.AuthenticatedSession(
+                                1L,
+                                "session-1",
+                                ACCESS_TOKEN
+                        )
+                ));
     }
 
     private Authentication authentication(Long memberId) {

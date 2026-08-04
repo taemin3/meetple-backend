@@ -32,6 +32,8 @@ import com.meetple.backend.domain.notification.service.NotificationService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.response.PageResponse;
+import com.meetple.backend.global.websocket.ChatAccessRevocationReason;
+import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -43,6 +45,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -70,6 +73,9 @@ class MeetingServiceTest {
 
     @Mock
     private NotificationService notificationService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private MeetingService meetingService;
@@ -331,6 +337,13 @@ class MeetingServiceTest {
                 eq(10L)
         );
         assertThat(messageCaptor.getValue()).hasSize(500);
+        ArgumentCaptor<ChatSessionInvalidationEvent> eventCaptor = ArgumentCaptor.forClass(
+                ChatSessionInvalidationEvent.class
+        );
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().roomId()).isEqualTo(10L);
+        assertThat(eventCaptor.getValue().reason())
+                .isEqualTo(ChatAccessRevocationReason.MEETING_CANCELED);
     }
 
     private CreateMeetingRequest createRequest() {

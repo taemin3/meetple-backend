@@ -19,3 +19,7 @@ jwt:
   secret: test-jwt-secret-key-for-meetple-backend-1234567890
   access-token-expiration-seconds: 3600
   refresh-token-expiration-seconds: 1209600
+
+chat:
+  session-invalidation:
+    redis-enabled: false

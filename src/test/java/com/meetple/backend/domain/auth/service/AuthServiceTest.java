@@ -27,6 +27,7 @@ import com.meetple.backend.global.exception.UnauthorizedException;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
+import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import java.time.Duration;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -57,6 +59,9 @@ class AuthServiceTest {
 
     @Mock
     private AccessTokenBlacklistRepository accessTokenBlacklistRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private AuthService authService;
@@ -206,9 +211,19 @@ class AuthServiceTest {
 
         authService.logout(request, "Bearer access-token");
 
-        InOrder inOrder = inOrder(accessTokenBlacklistRepository, refreshTokenRepository);
+        InOrder inOrder = inOrder(
+                accessTokenBlacklistRepository,
+                refreshTokenRepository,
+                eventPublisher
+        );
         inOrder.verify(accessTokenBlacklistRepository).save("access-token", Duration.ofMinutes(10));
         inOrder.verify(refreshTokenRepository).deleteByMemberIdAndSessionId(1L, "session-id");
+        ArgumentCaptor<ChatSessionInvalidationEvent> eventCaptor = ArgumentCaptor.forClass(
+                ChatSessionInvalidationEvent.class
+        );
+        inOrder.verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().memberId()).isEqualTo(1L);
+        assertThat(eventCaptor.getValue().loginSessionId()).isEqualTo("session-id");
     }
 
     @Test
@@ -284,6 +299,11 @@ class AuthServiceTest {
         authService.logoutAll("Bearer access-token");
 
         verify(refreshTokenRepository).deleteAllByMemberId(1L);
+        ArgumentCaptor<ChatSessionInvalidationEvent> eventCaptor = ArgumentCaptor.forClass(
+                ChatSessionInvalidationEvent.class
+        );
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().memberId()).isEqualTo(1L);
     }
 
     @Test

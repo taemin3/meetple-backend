@@ -21,6 +21,7 @@ import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
+import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -33,6 +34,7 @@ import java.util.Set;
 import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -74,6 +76,7 @@ public class MeetingService {
     private final MeetingParticipationRepository participationRepository;
     private final MeetingBookmarkRepository bookmarkRepository;
     private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public MeetingResponse createMeeting(Long memberId, CreateMeetingRequest request) {
@@ -215,6 +218,9 @@ public class MeetingService {
 
         String normalizedReason = normalizeRequiredText(reason, "모임 취소 사유를 입력해주세요.");
         meeting.cancel(normalizedReason);
+        eventPublisher.publishEvent(
+                ChatSessionInvalidationEvent.meetingCanceled(meetingId)
+        );
         participationRepository.findByMeetingIdAndStatus(meetingId, ParticipationStatus.APPROVED)
                 .forEach(participation -> notificationService.notify(
                         participation.getMember(),

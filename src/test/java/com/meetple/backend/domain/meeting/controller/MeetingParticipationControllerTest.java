@@ -139,6 +139,19 @@ class MeetingParticipationControllerTest {
         verify(participationService).cancelParticipation(2L, 10L, 100L);
     }
 
+    @Test
+    void revokeApprovalReturnsApiResponse() throws Exception {
+        given(participationService.revokeApproval(2L, 10L, 100L))
+                .willReturn(participationResponse(ParticipationStatus.CANCELED));
+
+        mockMvc.perform(patch("/api/v1/meetings/10/participations/100/revoke"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(100))
+                .andExpect(jsonPath("$.data.status").value("CANCELED"));
+
+        verify(participationService).revokeApproval(2L, 10L, 100L);
+    }
+
     private void authenticate() {
         AuthenticatedMember authenticatedMember = new AuthenticatedMember(
                 2L,

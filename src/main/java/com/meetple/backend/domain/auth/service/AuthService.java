@@ -16,12 +16,14 @@ import com.meetple.backend.global.exception.UnauthorizedException;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
+import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import io.jsonwebtoken.JwtException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +45,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenRepository refreshTokenRepository;
     private final AccessTokenBlacklistRepository accessTokenBlacklistRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public AuthMemberResponse signup(SignupRequest request) {
@@ -113,6 +116,10 @@ public class AuthService {
                 refreshTokenSession.memberId(),
                 refreshTokenSession.sessionId()
         );
+        eventPublisher.publishEvent(ChatSessionInvalidationEvent.loginSession(
+                refreshTokenSession.memberId(),
+                refreshTokenSession.sessionId()
+        ));
     }
 
     public void logoutAll(String authorizationHeader) {
@@ -120,6 +127,9 @@ public class AuthService {
         JwtTokenSession accessTokenSession = parseAccessTokenSession(accessToken);
 
         refreshTokenRepository.deleteAllByMemberId(accessTokenSession.memberId());
+        eventPublisher.publishEvent(
+                ChatSessionInvalidationEvent.member(accessTokenSession.memberId())
+        );
     }
 
     private Member saveMember(Member member) {

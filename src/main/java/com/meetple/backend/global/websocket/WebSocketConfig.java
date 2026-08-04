@@ -8,7 +8,9 @@ import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+import org.springframework.web.socket.handler.WebSocketHandlerDecorator;
 
 @Configuration
 @EnableWebSocketMessageBroker
@@ -24,6 +26,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final ChatStompChannelInterceptor chatStompChannelInterceptor;
     private final ChatStompErrorHandler chatStompErrorHandler;
+    private final LocalChatWebSocketSessionRegistry sessionRegistry;
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
@@ -51,6 +54,36 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureClientOutboundChannel(ChannelRegistration registration) {
         registration.interceptors(chatStompChannelInterceptor);
+    }
+
+    @Override
+    public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
+        registration.addDecoratorFactory(handler -> new WebSocketHandlerDecorator(handler) {
+            @Override
+            public void afterConnectionEstablished(
+                    org.springframework.web.socket.WebSocketSession session
+            ) throws Exception {
+                sessionRegistry.registerTransport(session);
+                try {
+                    super.afterConnectionEstablished(session);
+                } catch (Exception exception) {
+                    sessionRegistry.remove(session.getId());
+                    throw exception;
+                }
+            }
+
+            @Override
+            public void afterConnectionClosed(
+                    org.springframework.web.socket.WebSocketSession session,
+                    org.springframework.web.socket.CloseStatus closeStatus
+            ) throws Exception {
+                try {
+                    super.afterConnectionClosed(session, closeStatus);
+                } finally {
+                    sessionRegistry.remove(session.getId());
+                }
+            }
+        });
     }
 
     @Bean
