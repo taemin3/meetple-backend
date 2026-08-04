@@ -106,6 +106,21 @@ class ChatServiceTest {
     }
 
     @Test
+    void sendMessageRejectsNulCharacterAnywhere() {
+        String nul = Character.toString(0);
+
+        for (String content : List.of(nul + "hello", "hello" + nul + "world", "hello" + nul)) {
+            assertThatThrownBy(() -> chatService.sendMessage(
+                    1L,
+                    10L,
+                    new SendChatMessageRequest(UUID.randomUUID(), content)
+            ))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessage("메시지에 허용되지 않는 문자가 포함되어 있습니다.");
+        }
+    }
+
+    @Test
     void sendMessageCountsSurroundingWhitespaceInLengthLimit() {
         String content = " " + "a".repeat(999) + " ";
 

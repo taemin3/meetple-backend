@@ -279,6 +279,9 @@ public class ChatService {
         if (request.content() == null || request.content().trim().isEmpty()) {
             throw new BadRequestException("메시지 내용을 입력해주세요.");
         }
+        if (request.content().indexOf('\0') >= 0) {
+            throw new BadRequestException("메시지에 허용되지 않는 문자가 포함되어 있습니다.");
+        }
         if (request.content().length() > MAX_MESSAGE_LENGTH) {
             throw new BadRequestException("메시지 내용은 1000자 이하여야 합니다.");
         }
