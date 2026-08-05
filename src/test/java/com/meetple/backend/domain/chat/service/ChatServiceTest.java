@@ -15,6 +15,7 @@ import com.meetple.backend.domain.chat.entity.ChatReadState;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
 import com.meetple.backend.domain.chat.repository.ChatReadStateRepository;
 import com.meetple.backend.domain.chat.repository.ChatUnreadCountProjection;
+import com.meetple.backend.domain.chat.realtime.ChatMessageFanOutEvent;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
@@ -33,6 +34,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -52,6 +54,9 @@ class ChatServiceTest {
 
     @Mock
     private ChatAccessPolicy accessPolicy;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private ChatService chatService;
@@ -92,6 +97,10 @@ class ChatServiceTest {
         ArgumentCaptor<ChatReadState> readStateCaptor = ArgumentCaptor.forClass(ChatReadState.class);
         verify(readStateRepository).save(readStateCaptor.capture());
         assertThat(readStateCaptor.getValue().getLastReadSequence()).isEqualTo(8L);
+        ArgumentCaptor<ChatMessageFanOutEvent> eventCaptor =
+                ArgumentCaptor.forClass(ChatMessageFanOutEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().message()).isEqualTo(result.message());
     }
 
     @Test
@@ -156,6 +165,7 @@ class ChatServiceTest {
         assertThat(result.message().id()).isEqualTo(30L);
         assertThat(result.message().sequence()).isEqualTo(3L);
         verify(messageRepository, never()).saveAndFlush(any(ChatMessage.class));
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
