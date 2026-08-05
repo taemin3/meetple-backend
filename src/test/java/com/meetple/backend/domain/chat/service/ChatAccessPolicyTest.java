@@ -14,6 +14,7 @@ import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -69,6 +70,17 @@ class ChatAccessPolicyTest {
         assertThatThrownBy(() -> accessPolicy.ensureCanSend(meeting))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("종료되거나 취소된 모임의 채팅방에서는 메시지를 보낼 수 없습니다.");
+    }
+
+    @Test
+    void canceledMeetingRejectsNewRealtimeSubscription() {
+        Meeting meeting = meeting(10L, member(1L, "host"));
+        meeting.cancel("일정 변경");
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+
+        assertThatThrownBy(() -> accessPolicy.getRealtimeAccessibleMeeting(1L, 10L))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessage("취소된 모임의 실시간 채팅에는 연결할 수 없습니다.");
     }
 
     private Meeting meeting(Long id, Member host) {

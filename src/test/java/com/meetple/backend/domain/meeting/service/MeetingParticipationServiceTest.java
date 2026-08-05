@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingParticipationRequest;
@@ -20,6 +21,8 @@ import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.response.PageResponse;
+import com.meetple.backend.global.websocket.ChatAccessRevocationReason;
+import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,9 +30,11 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -48,6 +53,9 @@ class MeetingParticipationServiceTest {
 
     @Mock
     private NotificationService notificationService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private MeetingParticipationService participationService;
@@ -271,6 +279,43 @@ class MeetingParticipationServiceTest {
         assertThat(response.status()).isEqualTo(ParticipationStatus.CANCELED);
         assertThat(meeting.getCurrentPeople()).isEqualTo(1);
         assertThat(participation.getCanceledAt()).isNotNull();
+        ArgumentCaptor<ChatSessionInvalidationEvent> eventCaptor = ArgumentCaptor.forClass(
+                ChatSessionInvalidationEvent.class
+        );
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().roomId()).isEqualTo(10L);
+        assertThat(eventCaptor.getValue().memberId()).isEqualTo(2L);
+        assertThat(eventCaptor.getValue().reason())
+                .isEqualTo(ChatAccessRevocationReason.PARTICIPATION_CANCELED);
+    }
+
+    @Test
+    void revokeApprovalCancelsParticipationAndPublishesInvalidation() {
+        Member host = member(1L, "host@meetple.com", "host");
+        Member applicant = member(2L, "runner@meetple.com", "runner");
+        Meeting meeting = meeting(10L, host);
+        MeetingParticipation participation = participation(100L, meeting, applicant);
+        participation.approve();
+        meeting.increaseCurrentPeople();
+
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
+        given(participationRepository.findByIdAndMeetingIdForUpdate(100L, 10L))
+                .willReturn(Optional.of(participation));
+
+        MeetingParticipationResponse response = participationService.revokeApproval(
+                1L,
+                10L,
+                100L
+        );
+
+        assertThat(response.status()).isEqualTo(ParticipationStatus.CANCELED);
+        assertThat(meeting.getCurrentPeople()).isEqualTo(1);
+        ArgumentCaptor<ChatSessionInvalidationEvent> eventCaptor = ArgumentCaptor.forClass(
+                ChatSessionInvalidationEvent.class
+        );
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().reason())
+                .isEqualTo(ChatAccessRevocationReason.PARTICIPATION_APPROVAL_REVOKED);
     }
 
     @Test
