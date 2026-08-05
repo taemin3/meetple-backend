@@ -23,3 +23,5 @@ jwt:
 chat:
   session-invalidation:
     redis-enabled: false
+  message-fan-out:
+    redis-enabled: false
