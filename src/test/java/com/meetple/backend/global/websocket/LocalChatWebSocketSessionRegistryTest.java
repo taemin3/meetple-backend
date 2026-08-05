@@ -5,7 +5,6 @@ import static org.mockito.BDDMockito.given;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.socket.WebSocketSession;
 
@@ -62,34 +61,34 @@ class LocalChatWebSocketSessionRegistryTest {
 
     @Test
     void invalidationExcludesSessionsCreatedAfterEventOccurred() {
-        ChatSessionInvalidationEvent memberEvent = occurredAt(
-                ChatSessionInvalidationEvent.member(1L),
-                Instant.EPOCH
-        );
-        ChatSessionInvalidationEvent roomMemberEvent = occurredAt(
-                ChatSessionInvalidationEvent.participationCanceled(10L, 1L),
-                Instant.EPOCH
-        );
+        ChatSessionInvalidationEvent memberEvent =
+                ChatSessionInvalidationEvent.member(1L)
+                        .withOccurredAt(Instant.EPOCH);
+        ChatSessionInvalidationEvent roomMemberEvent =
+                ChatSessionInvalidationEvent.participationCanceled(10L, 1L)
+                        .withOccurredAt(Instant.EPOCH);
         register("ws-1", 1L, "login-1", 10L);
 
         assertThat(registry.findTargets(memberEvent)).isEmpty();
         assertThat(registry.findTargets(roomMemberEvent)).isEmpty();
     }
 
-    private ChatSessionInvalidationEvent occurredAt(
-            ChatSessionInvalidationEvent event,
-            Instant occurredAt
-    ) {
-        return new ChatSessionInvalidationEvent(
-                event.schemaVersion(),
-                UUID.randomUUID(),
-                event.target(),
-                event.memberId(),
-                event.loginSessionId(),
-                event.roomId(),
-                event.reason(),
-                occurredAt
-        );
+    @Test
+    void postCommitCutoffIncludesSubscriptionOpenedDuringTransaction() {
+        ChatSessionInvalidationEvent eventPublishedInsideTransaction =
+                ChatSessionInvalidationEvent.participationCanceled(10L, 1L)
+                        .withOccurredAt(Instant.EPOCH);
+        register("ws-1", 1L, "login-1", 10L);
+
+        ChatSessionInvalidationEvent eventHandledAfterCommit =
+                eventPublishedInsideTransaction.withOccurredAt(
+                        Instant.now().plusSeconds(1)
+                );
+
+        assertThat(registry.findTargets(eventPublishedInsideTransaction)).isEmpty();
+        assertThat(registry.findTargets(eventHandledAfterCommit))
+                .extracting(LocalChatWebSocketSessionRegistry.SessionSnapshot::webSocketSessionId)
+                .containsExactly("ws-1");
     }
 
     private void register(

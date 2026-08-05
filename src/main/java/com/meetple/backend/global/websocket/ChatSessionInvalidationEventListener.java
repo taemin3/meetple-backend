@@ -1,5 +1,6 @@
 package com.meetple.backend.global.websocket;
 
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -17,7 +18,10 @@ public class ChatSessionInvalidationEventListener {
             fallbackExecution = true
     )
     public void handle(ChatSessionInvalidationEvent event) {
-        invalidationService.invalidateLocalSessions(event);
-        redisPublisher.publish(event);
+        ChatSessionInvalidationEvent committedEvent = event.withOccurredAt(
+                Instant.now()
+        );
+        invalidationService.invalidateLocalSessions(committedEvent);
+        redisPublisher.publish(committedEvent);
     }
 }

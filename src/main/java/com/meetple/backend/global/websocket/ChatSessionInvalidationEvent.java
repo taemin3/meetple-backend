@@ -16,6 +16,19 @@ public record ChatSessionInvalidationEvent(
 
     private static final int CURRENT_SCHEMA_VERSION = 1;
 
+    public ChatSessionInvalidationEvent withOccurredAt(Instant occurredAt) {
+        return new ChatSessionInvalidationEvent(
+                schemaVersion,
+                eventId,
+                target,
+                memberId,
+                loginSessionId,
+                roomId,
+                reason,
+                occurredAt
+        );
+    }
+
     public static ChatSessionInvalidationEvent loginSession(
             Long memberId,
             String loginSessionId
