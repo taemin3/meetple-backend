@@ -3,7 +3,9 @@ package com.meetple.backend.global.websocket;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.socket.WebSocketSession;
 
@@ -56,6 +58,38 @@ class LocalChatWebSocketSessionRegistryTest {
         assertThat(registry.findTargets(
                 ChatSessionInvalidationEvent.meetingCanceled(10L)
         )).isEmpty();
+    }
+
+    @Test
+    void invalidationExcludesSessionsCreatedAfterEventOccurred() {
+        ChatSessionInvalidationEvent memberEvent = occurredAt(
+                ChatSessionInvalidationEvent.member(1L),
+                Instant.EPOCH
+        );
+        ChatSessionInvalidationEvent roomMemberEvent = occurredAt(
+                ChatSessionInvalidationEvent.participationCanceled(10L, 1L),
+                Instant.EPOCH
+        );
+        register("ws-1", 1L, "login-1", 10L);
+
+        assertThat(registry.findTargets(memberEvent)).isEmpty();
+        assertThat(registry.findTargets(roomMemberEvent)).isEmpty();
+    }
+
+    private ChatSessionInvalidationEvent occurredAt(
+            ChatSessionInvalidationEvent event,
+            Instant occurredAt
+    ) {
+        return new ChatSessionInvalidationEvent(
+                event.schemaVersion(),
+                UUID.randomUUID(),
+                event.target(),
+                event.memberId(),
+                event.loginSessionId(),
+                event.roomId(),
+                event.reason(),
+                occurredAt
+        );
     }
 
     private void register(

@@ -1,5 +1,6 @@
 package com.meetple.backend.global.websocket;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -7,9 +8,11 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -49,7 +52,11 @@ class ChatSessionInvalidationServiceTest {
                         1L,
                         "login-1",
                         "principal-1",
-                        List.of(10L)
+                        Instant.EPOCH,
+                        List.of(new LocalChatWebSocketSessionRegistry.RoomSubscription(
+                                10L,
+                                Instant.EPOCH
+                        ))
                 );
         given(sessionRegistry.findTargets(event)).willReturn(List.of(session));
         given(transportSession.isOpen()).willReturn(true);
@@ -69,5 +76,39 @@ class ChatSessionInvalidationServiceTest {
         );
         verify(transportSession).close(CloseStatus.POLICY_VIOLATION);
         verify(sessionRegistry).remove("ws-1");
+    }
+
+    @Test
+    void throttlesDeduplicationCleanupAfterThreshold() throws Exception {
+        ChatSessionInvalidationService service = new ChatSessionInvalidationService(
+                new LocalChatWebSocketSessionRegistry(),
+                messagingTemplate,
+                taskScheduler
+        );
+        for (int index = 0; index < 10_000; index++) {
+            service.invalidateLocalSessions(
+                    ChatSessionInvalidationEvent.meetingCanceled(10L)
+            );
+        }
+        AtomicReference<Instant> nextCleanupAt = nextCleanupAt(service);
+        Instant scheduledCleanupAt = nextCleanupAt.get();
+
+        service.invalidateLocalSessions(
+                ChatSessionInvalidationEvent.meetingCanceled(10L)
+        );
+
+        assertThat(scheduledCleanupAt).isAfter(Instant.now());
+        assertThat(nextCleanupAt.get()).isEqualTo(scheduledCleanupAt);
+    }
+
+    @SuppressWarnings("unchecked")
+    private AtomicReference<Instant> nextCleanupAt(
+            ChatSessionInvalidationService service
+    ) throws Exception {
+        Field field = ChatSessionInvalidationService.class.getDeclaredField(
+                "nextEventCleanupAt"
+        );
+        field.setAccessible(true);
+        return (AtomicReference<Instant>) field.get(service);
     }
 }

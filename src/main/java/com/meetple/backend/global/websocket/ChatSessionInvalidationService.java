@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
@@ -23,11 +24,15 @@ public class ChatSessionInvalidationService {
     private static final Duration CLOSE_GRACE_PERIOD = Duration.ofMillis(250);
     private static final Duration EVENT_DEDUPLICATION_TTL = Duration.ofMinutes(10);
     private static final int EVENT_DEDUPLICATION_CLEANUP_THRESHOLD = 10_000;
+    private static final Duration EVENT_DEDUPLICATION_CLEANUP_INTERVAL =
+            Duration.ofMinutes(1);
 
     private final LocalChatWebSocketSessionRegistry sessionRegistry;
     private final SimpMessagingTemplate messagingTemplate;
     private final TaskScheduler taskScheduler;
     private final Map<UUID, Instant> handledEventIds = new ConcurrentHashMap<>();
+    private final AtomicReference<Instant> nextEventCleanupAt =
+            new AtomicReference<>(Instant.EPOCH);
 
     public ChatSessionInvalidationService(
             LocalChatWebSocketSessionRegistry sessionRegistry,
@@ -40,10 +45,11 @@ public class ChatSessionInvalidationService {
     }
 
     public void invalidateLocalSessions(ChatSessionInvalidationEvent event) {
-        if (handledEventIds.putIfAbsent(event.eventId(), Instant.now()) != null) {
+        Instant handledAt = Instant.now();
+        if (handledEventIds.putIfAbsent(event.eventId(), handledAt) != null) {
             return;
         }
-        cleanupHandledEventsIfNecessary();
+        cleanupHandledEventsIfNecessary(handledAt);
 
         ChatAccessRevokedMessage message = ChatAccessRevokedMessage.from(event);
         sessionRegistry.findTargets(event).forEach(session -> {
@@ -110,11 +116,19 @@ public class ChatSessionInvalidationService {
         }
     }
 
-    private void cleanupHandledEventsIfNecessary() {
+    private void cleanupHandledEventsIfNecessary(Instant now) {
         if (handledEventIds.size() < EVENT_DEDUPLICATION_CLEANUP_THRESHOLD) {
             return;
         }
-        Instant expirationBoundary = Instant.now().minus(EVENT_DEDUPLICATION_TTL);
+        Instant scheduledCleanupAt = nextEventCleanupAt.get();
+        if (now.isBefore(scheduledCleanupAt)
+                || !nextEventCleanupAt.compareAndSet(
+                        scheduledCleanupAt,
+                        now.plus(EVENT_DEDUPLICATION_CLEANUP_INTERVAL)
+                )) {
+            return;
+        }
+        Instant expirationBoundary = now.minus(EVENT_DEDUPLICATION_TTL);
         handledEventIds.entrySet().removeIf(
                 entry -> entry.getValue().isBefore(expirationBoundary)
         );

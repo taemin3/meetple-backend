@@ -1,5 +1,6 @@
 package com.meetple.backend.global.websocket;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,7 +34,8 @@ public class LocalChatWebSocketSessionRegistry {
                     memberId,
                     loginSessionId,
                     accessToken,
-                    principalName
+                    principalName,
+                    Instant.now()
             );
         }
     }
@@ -45,7 +47,7 @@ public class LocalChatWebSocketSessionRegistry {
     ) {
         SessionRegistration registration = sessions.get(webSocketSessionId);
         if (registration != null && StringUtils.hasText(subscriptionId)) {
-            registration.subscribe(subscriptionId, roomId);
+            registration.subscribe(subscriptionId, roomId, Instant.now());
         }
     }
 
@@ -91,29 +93,50 @@ public class LocalChatWebSocketSessionRegistry {
             Long memberId,
             String loginSessionId,
             String principalName,
-            List<Long> roomIds
+            Instant authenticatedAt,
+            List<RoomSubscription> roomSubscriptions
     ) {
 
         private boolean matches(ChatSessionInvalidationEvent event) {
             return switch (event.target()) {
                 case LOGIN_SESSION -> memberId.equals(event.memberId())
-                        && loginSessionId.equals(event.loginSessionId());
-                case MEMBER -> memberId.equals(event.memberId());
+                        && loginSessionId.equals(event.loginSessionId())
+                        && existedAt(event.occurredAt());
+                case MEMBER -> memberId.equals(event.memberId())
+                        && existedAt(event.occurredAt());
                 case ROOM_MEMBER -> memberId.equals(event.memberId())
-                        && roomIds.contains(event.roomId());
-                case ROOM -> roomIds.contains(event.roomId());
+                        && subscribedAt(event.roomId(), event.occurredAt());
+                case ROOM -> subscribedAt(event.roomId(), event.occurredAt());
             };
         }
+
+        private boolean existedAt(Instant occurredAt) {
+            return !authenticatedAt.isAfter(occurredAt);
+        }
+
+        private boolean subscribedAt(Long roomId, Instant occurredAt) {
+            return roomSubscriptions.stream()
+                    .anyMatch(subscription -> subscription.roomId().equals(roomId)
+                            && !subscription.subscribedAt().isAfter(occurredAt));
+        }
+    }
+
+    public record RoomSubscription(
+            Long roomId,
+            Instant subscribedAt
+    ) {
     }
 
     private static final class SessionRegistration {
 
         private final WebSocketSession transportSession;
-        private final Map<String, Long> roomsBySubscription = new ConcurrentHashMap<>();
+        private final Map<String, RoomSubscription> roomsBySubscription =
+                new ConcurrentHashMap<>();
         private volatile Long memberId;
         private volatile String loginSessionId;
         private volatile String accessToken;
         private volatile String principalName;
+        private volatile Instant authenticatedAt;
 
         private SessionRegistration(WebSocketSession transportSession) {
             this.transportSession = transportSession;
@@ -123,16 +146,25 @@ public class LocalChatWebSocketSessionRegistry {
                 Long memberId,
                 String loginSessionId,
                 String accessToken,
-                String principalName
+                String principalName,
+                Instant authenticatedAt
         ) {
             this.memberId = memberId;
             this.loginSessionId = loginSessionId;
             this.accessToken = accessToken;
             this.principalName = principalName;
+            this.authenticatedAt = authenticatedAt;
         }
 
-        private void subscribe(String subscriptionId, Long roomId) {
-            roomsBySubscription.put(subscriptionId, roomId);
+        private void subscribe(
+                String subscriptionId,
+                Long roomId,
+                Instant subscribedAt
+        ) {
+            roomsBySubscription.put(
+                    subscriptionId,
+                    new RoomSubscription(roomId, subscribedAt)
+            );
         }
 
         private void unsubscribe(String subscriptionId) {
@@ -155,7 +187,8 @@ public class LocalChatWebSocketSessionRegistry {
         private Optional<SessionSnapshot> snapshot() {
             if (memberId == null
                     || !StringUtils.hasText(loginSessionId)
-                    || !StringUtils.hasText(principalName)) {
+                    || !StringUtils.hasText(principalName)
+                    || authenticatedAt == null) {
                 return Optional.empty();
             }
             return Optional.of(new SessionSnapshot(
@@ -164,6 +197,7 @@ public class LocalChatWebSocketSessionRegistry {
                     memberId,
                     loginSessionId,
                     principalName,
+                    authenticatedAt,
                     List.copyOf(roomsBySubscription.values())
             ));
         }
