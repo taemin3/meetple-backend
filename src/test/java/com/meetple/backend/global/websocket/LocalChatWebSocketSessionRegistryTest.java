@@ -105,12 +105,14 @@ class LocalChatWebSocketSessionRegistryTest {
                 memberId,
                 loginSessionId,
                 "access-token-" + webSocketSessionId,
-                "principal-" + memberId
+                "principal-" + memberId,
+                Instant.now()
         );
         registry.subscribe(
                 webSocketSessionId,
                 "subscription-" + webSocketSessionId,
-                roomId
+                roomId,
+                Instant.now()
         );
     }
 }

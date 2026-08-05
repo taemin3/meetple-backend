@@ -26,7 +26,8 @@ public class LocalChatWebSocketSessionRegistry {
             Long memberId,
             String loginSessionId,
             String accessToken,
-            String principalName
+            String principalName,
+            Instant authenticatedAt
     ) {
         SessionRegistration registration = sessions.get(webSocketSessionId);
         if (registration != null) {
@@ -35,7 +36,7 @@ public class LocalChatWebSocketSessionRegistry {
                     loginSessionId,
                     accessToken,
                     principalName,
-                    Instant.now()
+                    authenticatedAt
             );
         }
     }
@@ -43,11 +44,12 @@ public class LocalChatWebSocketSessionRegistry {
     public void subscribe(
             String webSocketSessionId,
             String subscriptionId,
-            Long roomId
+            Long roomId,
+            Instant subscribedAt
     ) {
         SessionRegistration registration = sessions.get(webSocketSessionId);
         if (registration != null && StringUtils.hasText(subscriptionId)) {
-            registration.subscribe(subscriptionId, roomId, Instant.now());
+            registration.subscribe(subscriptionId, roomId, subscribedAt);
         }
     }
 

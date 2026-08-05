@@ -2,7 +2,10 @@ package com.meetple.backend.global.websocket;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -14,12 +17,14 @@ import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -74,6 +79,17 @@ class ChatStompChannelInterceptorTest {
         assertThat(interceptedAccessor.getUser()).isEqualTo(authentication);
         assertThat(interceptedAccessor.getSessionAttributes())
                 .containsEntry("chatAccessToken", ACCESS_TOKEN);
+        InOrder inOrder = inOrder(sessionRegistry, refreshTokenRepository);
+        inOrder.verify(sessionRegistry).authenticate(
+                eq("session-1"),
+                eq(1L),
+                eq("session-1"),
+                eq(ACCESS_TOKEN),
+                eq(authentication.getName()),
+                any(Instant.class)
+        );
+        inOrder.verify(refreshTokenRepository)
+                .existsByMemberIdAndSessionId(1L, "session-1");
     }
 
     @Test
@@ -105,6 +121,30 @@ class ChatStompChannelInterceptorTest {
     }
 
     @Test
+    void connectRemovesPendingAuthenticationWhenTokenSessionIsInvalid() {
+        Authentication authentication = authentication(1L);
+        given(jwtTokenProvider.getAuthentication(ACCESS_TOKEN)).willReturn(authentication);
+        given(jwtTokenProvider.getAccessTokenSession(ACCESS_TOKEN))
+                .willReturn(new JwtTokenSession(1L, "session-1"));
+        StompHeaderAccessor accessor = accessor(StompCommand.CONNECT, null, null);
+        accessor.setNativeHeader("Authorization", "Bearer " + ACCESS_TOKEN);
+
+        assertThatThrownBy(() -> interceptor.preSend(message(accessor), null))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessage("유효하지 않은 토큰입니다.");
+
+        verify(sessionRegistry).authenticate(
+                eq("session-1"),
+                eq(1L),
+                eq("session-1"),
+                eq(ACCESS_TOKEN),
+                eq(authentication.getName()),
+                any(Instant.class)
+        );
+        verify(sessionRegistry).remove("session-1");
+    }
+
+    @Test
     void subscribeChecksTokenSessionAndRoomAccess() {
         stubActiveSession();
         StompHeaderAccessor accessor = accessor(
@@ -115,7 +155,32 @@ class ChatStompChannelInterceptorTest {
 
         interceptor.preSend(message(accessor), null);
 
-        verify(chatAccessPolicy).getRealtimeAccessibleMeeting(1L, 10L);
+        InOrder inOrder = inOrder(sessionRegistry, chatAccessPolicy);
+        inOrder.verify(sessionRegistry).subscribe(
+                eq("session-1"),
+                eq("subscription-1"),
+                eq(10L),
+                any(Instant.class)
+        );
+        inOrder.verify(chatAccessPolicy).getRealtimeAccessibleMeeting(1L, 10L);
+    }
+
+    @Test
+    void subscribeRollsBackPendingRegistrationWhenRoomAccessIsDenied() {
+        stubActiveSession();
+        given(chatAccessPolicy.getRealtimeAccessibleMeeting(1L, 10L))
+                .willThrow(new ForbiddenException("채팅방 입장 권한이 없습니다."));
+        StompHeaderAccessor accessor = accessor(
+                StompCommand.SUBSCRIBE,
+                "/topic/chat/rooms/10",
+                authentication(1L)
+        );
+
+        assertThatThrownBy(() -> interceptor.preSend(message(accessor), null))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessage("채팅방 입장 권한이 없습니다.");
+
+        verify(sessionRegistry).unsubscribe("session-1", "subscription-1");
     }
 
     @Test
@@ -241,6 +306,9 @@ class ChatStompChannelInterceptorTest {
         accessor.setSessionId("session-1");
         if (destination != null) {
             accessor.setDestination(destination);
+        }
+        if (command == StompCommand.SUBSCRIBE) {
+            accessor.setSubscriptionId("subscription-1");
         }
         if (authentication != null) {
             accessor.setUser(authentication);
