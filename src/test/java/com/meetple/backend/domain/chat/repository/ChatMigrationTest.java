@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 class ChatMigrationTest {
 
     @Test
-    void migrationAdoptsExistingSchemaAndCreatesChatTables() throws Exception {
+    void migrationsAdoptExistingSchemaAndCreateManagedTables() throws Exception {
         String url = "jdbc:h2:mem:chat-migration;MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
         try (var connection = DriverManager.getConnection(url, "sa", "");
              var statement = connection.createStatement()) {
@@ -26,10 +26,11 @@ class ChatMigrationTest {
 
         var result = flyway.migrate();
 
-        assertThat(result.migrationsExecuted).isEqualTo(1);
+        assertThat(result.migrationsExecuted).isEqualTo(2);
         try (var connection = DriverManager.getConnection(url, "sa", "")) {
             assertThat(tableExists(connection, "CHAT_MESSAGES")).isTrue();
             assertThat(tableExists(connection, "CHAT_READ_STATES")).isTrue();
+            assertThat(tableExists(connection, "OUTBOX_EVENTS")).isTrue();
         }
     }
 
