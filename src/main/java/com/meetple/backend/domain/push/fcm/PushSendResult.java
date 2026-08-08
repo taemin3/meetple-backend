@@ -4,9 +4,13 @@ import java.util.List;
 
 public record PushSendResult(
         List<Long> sentTargetIds,
-        List<Long> invalidTargetIds,
+        List<InvalidPushTarget> invalidTargets,
         List<PushSendFailure> failures
 ) {
+
+    public List<Long> invalidTargetIds() {
+        return invalidTargets.stream().map(InvalidPushTarget::targetId).toList();
+    }
 
     public boolean hasFailures() {
         return !failures.isEmpty();

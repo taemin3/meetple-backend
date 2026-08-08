@@ -11,6 +11,8 @@ import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.push.delivery.PushDeliveryService;
+import com.meetple.backend.domain.push.delivery.PushDeliveryClaim;
+import com.meetple.backend.domain.push.fcm.InvalidPushTarget;
 import com.meetple.backend.domain.push.fcm.PushMessage;
 import com.meetple.backend.domain.push.fcm.PushMessageSender;
 import com.meetple.backend.domain.push.fcm.PushSendException;
@@ -32,6 +34,7 @@ class PushEventProcessorTest {
 
     private static final String NOTIFICATION_TOPIC = "meetple.push.notification.v1";
     private static final String CHAT_TOPIC = "meetple.push.chat.v1";
+    private static final UUID CLAIM_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
     @Mock
     private PushDeviceTokenService pushDeviceTokenService;
@@ -62,7 +65,8 @@ class PushEventProcessorTest {
                 new PushDeviceTarget(11L, "token-2")
         );
         given(pushDeviceTokenService.findTargets(List.of(7L))).willReturn(targets);
-        given(pushDeliveryService.prepare(eventId, targets)).willReturn(targets);
+        given(pushDeliveryService.prepare(eventId, targets))
+                .willReturn(new PushDeliveryClaim(CLAIM_ID, targets, false));
         given(pushMessageSender.send(any(PushMessage.class), eq(targets)))
                 .willReturn(new PushSendResult(List.of(10L, 11L), List.of(), List.of()));
 
@@ -78,6 +82,7 @@ class PushEventProcessorTest {
         assertThat(message.data()).containsEntry("eventId", eventId.toString());
         verify(pushDeliveryService).record(
                 eventId,
+                CLAIM_ID,
                 new PushSendResult(List.of(10L, 11L), List.of(), List.of())
         );
     }
@@ -89,9 +94,11 @@ class PushEventProcessorTest {
         given(pushDeviceTokenService.findTargets(argThat(ids ->
                 ids.size() == 2 && ids.containsAll(List.of(2L, 3L))
         ))).willReturn(targets);
-        given(pushDeliveryService.prepare(eventId, targets)).willReturn(targets);
+        given(pushDeliveryService.prepare(eventId, targets))
+                .willReturn(new PushDeliveryClaim(CLAIM_ID, targets, false));
+        InvalidPushTarget invalidTarget = new InvalidPushTarget(20L, targets.getFirst().tokenHash());
         given(pushMessageSender.send(any(PushMessage.class), eq(targets)))
-                .willReturn(new PushSendResult(List.of(), List.of(20L), List.of()));
+                .willReturn(new PushSendResult(List.of(), List.of(invalidTarget), List.of()));
 
         pushEventProcessor.process(CHAT_TOPIC, chatPayload(eventId));
 
@@ -102,7 +109,7 @@ class PushEventProcessorTest {
         assertThat(message.notificationTag()).isEqualTo("chat-room-55");
         assertThat(message.data()).containsEntry("route", "CHAT_ROOM");
         assertThat(message.data()).containsEntry("roomId", "55");
-        verify(pushDeviceTokenService).removeInvalidTargets(List.of(20L));
+        verify(pushDeviceTokenService).removeInvalidTargets(List.of(invalidTarget));
     }
 
     @Test
@@ -110,7 +117,7 @@ class PushEventProcessorTest {
         UUID eventId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         List<PushDeviceTarget> targets = List.of(new PushDeviceTarget(10L, "token-1"));
         given(pushDeviceTokenService.findTargets(List.of(7L))).willReturn(targets);
-        given(pushDeliveryService.prepare(eventId, targets)).willReturn(List.of());
+        given(pushDeliveryService.prepare(eventId, targets)).willReturn(PushDeliveryClaim.empty());
 
         pushEventProcessor.process(NOTIFICATION_TOPIC, generalPayload(eventId));
 
@@ -126,10 +133,12 @@ class PushEventProcessorTest {
                 new PushDeviceTarget(12L, "token-3")
         );
         given(pushDeviceTokenService.findTargets(List.of(7L))).willReturn(targets);
-        given(pushDeliveryService.prepare(eventId, targets)).willReturn(targets);
+        given(pushDeliveryService.prepare(eventId, targets))
+                .willReturn(new PushDeliveryClaim(CLAIM_ID, targets, false));
+        InvalidPushTarget invalidTarget = new InvalidPushTarget(11L, targets.get(1).tokenHash());
         PushSendResult partialResult = new PushSendResult(
                 List.of(10L),
-                List.of(11L),
+                List.of(invalidTarget),
                 List.of(new PushSendFailure(12L, "UNAVAILABLE"))
         );
         PushSendException failure = new PushSendException(
@@ -142,8 +151,8 @@ class PushEventProcessorTest {
         assertThatThrownBy(() -> pushEventProcessor.process(NOTIFICATION_TOPIC, generalPayload(eventId)))
                 .isSameAs(failure);
 
-        verify(pushDeliveryService).record(eventId, partialResult);
-        verify(pushDeviceTokenService).removeInvalidTargets(List.of(11L));
+        verify(pushDeliveryService).record(eventId, CLAIM_ID, partialResult);
+        verify(pushDeviceTokenService).removeInvalidTargets(List.of(invalidTarget));
     }
 
     @Test
@@ -177,14 +186,29 @@ class PushEventProcessorTest {
                 List.of(new PushSendFailure(10L, "UNAVAILABLE"))
         );
         given(pushDeviceTokenService.findTargets(List.of(7L))).willReturn(targets);
-        given(pushDeliveryService.prepare(eventId, targets)).willReturn(targets);
+        given(pushDeliveryService.prepare(eventId, targets))
+                .willReturn(new PushDeliveryClaim(CLAIM_ID, targets, false));
         given(pushMessageSender.send(any(PushMessage.class), eq(targets))).willReturn(result);
 
         assertThatThrownBy(() -> pushEventProcessor.process(NOTIFICATION_TOPIC, generalPayload(eventId)))
                 .isInstanceOf(PushEventProcessingException.class)
                 .hasMessageContaining("1 target");
 
-        verify(pushDeliveryService).record(eventId, result);
+        verify(pushDeliveryService).record(eventId, CLAIM_ID, result);
+    }
+
+    @Test
+    void retriesKafkaRecordWhenAnotherConsumerOwnsAnActiveClaim() {
+        UUID eventId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        List<PushDeviceTarget> targets = List.of(new PushDeviceTarget(10L, "token-1"));
+        given(pushDeviceTokenService.findTargets(List.of(7L))).willReturn(targets);
+        given(pushDeliveryService.prepare(eventId, targets)).willReturn(PushDeliveryClaim.blocked());
+
+        assertThatThrownBy(() -> pushEventProcessor.process(NOTIFICATION_TOPIC, generalPayload(eventId)))
+                .isInstanceOf(PushEventProcessingException.class)
+                .hasMessageContaining("already being processed");
+
+        verify(pushMessageSender, never()).send(any(), any());
     }
 
     private String generalPayload(UUID eventId) {

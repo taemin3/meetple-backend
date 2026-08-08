@@ -6,6 +6,8 @@ CREATE TABLE push_event_deliveries (
     attempts INTEGER NOT NULL DEFAULT 0,
     last_error_code VARCHAR(100),
     sent_at TIMESTAMP,
+    claim_id UUID,
+    claimed_until TIMESTAMP,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
     CONSTRAINT uk_push_event_deliveries_event_device
@@ -13,8 +15,10 @@ CREATE TABLE push_event_deliveries (
     CONSTRAINT ck_push_event_deliveries_status
         CHECK (status IN ('PENDING', 'SENT', 'INVALID_TOKEN', 'FAILED')),
     CONSTRAINT ck_push_event_deliveries_attempts_non_negative
-        CHECK (attempts >= 0)
+        CHECK (attempts >= 0),
+    CONSTRAINT ck_push_event_deliveries_claim_pair
+        CHECK ((claim_id IS NULL) = (claimed_until IS NULL))
 );
 
-CREATE INDEX idx_push_event_deliveries_status_updated_at
-    ON push_event_deliveries (status, updated_at);
+CREATE INDEX idx_push_event_deliveries_status_claimed_until
+    ON push_event_deliveries (status, claimed_until);

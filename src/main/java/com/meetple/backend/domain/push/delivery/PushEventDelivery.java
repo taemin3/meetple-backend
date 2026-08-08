@@ -26,8 +26,8 @@ import lombok.NoArgsConstructor;
                 columnNames = {"event_id", "device_token_id"}
         ),
         indexes = @Index(
-                name = "idx_push_event_deliveries_status_updated_at",
-                columnList = "status, updated_at"
+                name = "idx_push_event_deliveries_status_claimed_until",
+                columnList = "status, claimed_until"
         )
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -56,6 +56,12 @@ public class PushEventDelivery extends BaseTimeEntity {
     @Column(name = "sent_at")
     private LocalDateTime sentAt;
 
+    @Column(name = "claim_id")
+    private UUID claimId;
+
+    @Column(name = "claimed_until")
+    private LocalDateTime claimedUntil;
+
     private PushEventDelivery(UUID eventId, Long deviceTokenId) {
         this.eventId = eventId;
         this.deviceTokenId = deviceTokenId;
@@ -70,25 +76,47 @@ public class PushEventDelivery extends BaseTimeEntity {
         return status == PushDeliveryStatus.SENT || status == PushDeliveryStatus.INVALID_TOKEN;
     }
 
-    public void startAttempt() {
+    public boolean hasActiveClaim(LocalDateTime now) {
+        return claimId != null && claimedUntil != null && claimedUntil.isAfter(now);
+    }
+
+    public boolean claim(UUID newClaimId, LocalDateTime now, LocalDateTime newClaimedUntil) {
+        if (isTerminal() || hasActiveClaim(now)) {
+            return false;
+        }
         this.status = PushDeliveryStatus.PENDING;
         this.attempts++;
         this.lastErrorCode = null;
+        this.claimId = newClaimId;
+        this.claimedUntil = newClaimedUntil;
+        return true;
+    }
+
+    public boolean isClaimedBy(UUID expectedClaimId) {
+        return expectedClaimId != null && expectedClaimId.equals(claimId);
     }
 
     public void markSent() {
         this.status = PushDeliveryStatus.SENT;
         this.sentAt = LocalDateTime.now();
         this.lastErrorCode = null;
+        clearClaim();
     }
 
     public void markInvalidToken() {
         this.status = PushDeliveryStatus.INVALID_TOKEN;
         this.lastErrorCode = "UNREGISTERED";
+        clearClaim();
     }
 
     public void markFailed(String errorCode) {
         this.status = PushDeliveryStatus.FAILED;
         this.lastErrorCode = errorCode;
+        clearClaim();
+    }
+
+    private void clearClaim() {
+        this.claimId = null;
+        this.claimedUntil = null;
     }
 }

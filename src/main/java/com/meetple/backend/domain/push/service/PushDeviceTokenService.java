@@ -4,6 +4,8 @@ import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.push.dto.request.RegisterPushDeviceTokenRequest;
 import com.meetple.backend.domain.push.entity.PushDeviceToken;
+import com.meetple.backend.domain.push.fcm.InvalidPushTarget;
+import com.meetple.backend.domain.push.repository.PushDeviceTokenCleanupRepository;
 import com.meetple.backend.domain.push.repository.PushDeviceTokenRepository;
 import com.meetple.backend.global.exception.NotFoundException;
 import java.util.Collection;
@@ -22,6 +24,7 @@ public class PushDeviceTokenService {
     private static final int MAX_REGISTRATION_ATTEMPTS = 3;
 
     private final PushDeviceTokenRepository pushDeviceTokenRepository;
+    private final PushDeviceTokenCleanupRepository pushDeviceTokenCleanupRepository;
     private final MemberRepository memberRepository;
     private final TransactionTemplate transactionTemplate;
 
@@ -81,15 +84,17 @@ public class PushDeviceTokenService {
             return List.of();
         }
         return pushDeviceTokenRepository.findAllByMemberIdIn(memberIds).stream()
-                .map(token -> new PushDeviceTarget(token.getId(), token.getToken()))
+                .map(token -> new PushDeviceTarget(
+                        token.getId(),
+                        token.getToken(),
+                        token.getTokenHash()
+                ))
                 .toList();
     }
 
     @Transactional
-    public void removeInvalidTargets(Collection<Long> deviceTokenIds) {
-        if (!deviceTokenIds.isEmpty()) {
-            pushDeviceTokenRepository.deleteAllByIdInBatch(deviceTokenIds);
-        }
+    public void removeInvalidTargets(Collection<InvalidPushTarget> invalidTargets) {
+        pushDeviceTokenCleanupRepository.deleteAllMatching(invalidTargets);
     }
 
     private PushDeviceToken selectRegistrationTarget(

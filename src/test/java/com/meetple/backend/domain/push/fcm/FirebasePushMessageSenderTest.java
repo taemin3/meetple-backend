@@ -65,6 +65,10 @@ class FirebasePushMessageSenderTest {
 
         assertThat(result.sentTargetIds()).containsExactly(10L);
         assertThat(result.invalidTargetIds()).containsExactly(11L);
+        assertThat(result.invalidTargets()).containsExactly(new InvalidPushTarget(
+                11L,
+                new PushDeviceTarget(11L, "token-2").tokenHash()
+        ));
         assertThat(result.failures()).containsExactly(new PushSendFailure(12L, "UNAVAILABLE"));
     }
 

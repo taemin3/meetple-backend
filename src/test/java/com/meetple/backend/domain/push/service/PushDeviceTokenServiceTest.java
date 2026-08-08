@@ -11,6 +11,8 @@ import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.push.dto.request.RegisterPushDeviceTokenRequest;
 import com.meetple.backend.domain.push.entity.PushDevicePlatform;
 import com.meetple.backend.domain.push.entity.PushDeviceToken;
+import com.meetple.backend.domain.push.fcm.InvalidPushTarget;
+import com.meetple.backend.domain.push.repository.PushDeviceTokenCleanupRepository;
 import com.meetple.backend.domain.push.repository.PushDeviceTokenRepository;
 import java.util.List;
 import java.util.Optional;
@@ -30,6 +32,9 @@ class PushDeviceTokenServiceTest {
 
     @Mock
     private PushDeviceTokenRepository pushDeviceTokenRepository;
+
+    @Mock
+    private PushDeviceTokenCleanupRepository pushDeviceTokenCleanupRepository;
 
     @Mock
     private MemberRepository memberRepository;
@@ -127,9 +132,14 @@ class PushDeviceTokenServiceTest {
 
     @Test
     void removesInvalidTargetsInBatch() {
-        pushDeviceTokenService.removeInvalidTargets(List.of(10L, 11L));
+        List<InvalidPushTarget> invalidTargets = List.of(
+                new InvalidPushTarget(10L, "hash-10"),
+                new InvalidPushTarget(11L, "hash-11")
+        );
 
-        verify(pushDeviceTokenRepository).deleteAllByIdInBatch(List.of(10L, 11L));
+        pushDeviceTokenService.removeInvalidTargets(invalidTargets);
+
+        verify(pushDeviceTokenCleanupRepository).deleteAllMatching(invalidTargets);
     }
 
     private RegisterPushDeviceTokenRequest request(String deviceId, String token) {

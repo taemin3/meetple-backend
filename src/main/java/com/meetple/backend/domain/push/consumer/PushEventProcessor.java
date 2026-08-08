@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.push.delivery.PushDeliveryService;
+import com.meetple.backend.domain.push.delivery.PushDeliveryClaim;
 import com.meetple.backend.domain.push.event.PushEventEnvelope;
 import com.meetple.backend.domain.push.event.PushEventTopic;
 import com.meetple.backend.domain.push.fcm.PushMessage;
@@ -42,7 +43,13 @@ public class PushEventProcessor {
         DispatchPlan plan = createDispatchPlan(topic, envelope);
 
         List<PushDeviceTarget> targets = pushDeviceTokenService.findTargets(plan.recipientMemberIds());
-        List<PushDeviceTarget> pendingTargets = pushDeliveryService.prepare(envelope.eventId(), targets);
+        PushDeliveryClaim claim = pushDeliveryService.prepare(envelope.eventId(), targets);
+        if (claim.blockedByActiveClaim()) {
+            throw new PushEventProcessingException(
+                    "Push event is already being processed: " + envelope.eventId()
+            );
+        }
+        List<PushDeviceTarget> pendingTargets = claim.targets();
         if (pendingTargets.isEmpty()) {
             return;
         }
@@ -51,15 +58,19 @@ public class PushEventProcessor {
         try {
             result = pushMessageSender.send(plan.message(), pendingTargets);
         } catch (PushSendException exception) {
-            pushDeliveryService.record(envelope.eventId(), exception.getPartialResult());
+            pushDeliveryService.record(
+                    envelope.eventId(),
+                    claim.claimId(),
+                    exception.getPartialResult()
+            );
             pushDeviceTokenService.removeInvalidTargets(
-                    exception.getPartialResult().invalidTargetIds()
+                    exception.getPartialResult().invalidTargets()
             );
             throw exception;
         }
 
-        pushDeliveryService.record(envelope.eventId(), result);
-        pushDeviceTokenService.removeInvalidTargets(result.invalidTargetIds());
+        pushDeliveryService.record(envelope.eventId(), claim.claimId(), result);
+        pushDeviceTokenService.removeInvalidTargets(result.invalidTargets());
         if (result.hasFailures()) {
             throw new PushEventProcessingException(
                     "FCM delivery failed for " + result.failures().size() + " target(s)."

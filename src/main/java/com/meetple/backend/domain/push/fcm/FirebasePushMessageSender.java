@@ -30,7 +30,7 @@ public class FirebasePushMessageSender implements PushMessageSender {
     @Override
     public PushSendResult send(PushMessage message, List<PushDeviceTarget> targets) {
         List<Long> sentTargetIds = new ArrayList<>();
-        List<Long> invalidTargetIds = new ArrayList<>();
+        List<InvalidPushTarget> invalidTargets = new ArrayList<>();
         List<PushSendFailure> failures = new ArrayList<>();
 
         for (int start = 0; start < targets.size(); start += MAX_MULTICAST_TARGETS) {
@@ -38,7 +38,7 @@ public class FirebasePushMessageSender implements PushMessageSender {
             List<PushDeviceTarget> batchTargets = targets.subList(start, end);
             try {
                 BatchResponse response = sendBatch(message, batchTargets);
-                collectResults(batchTargets, response, sentTargetIds, invalidTargetIds, failures);
+                collectResults(batchTargets, response, sentTargetIds, invalidTargets, failures);
             } catch (FirebaseMessagingException exception) {
                 String errorCode = errorCode(exception);
                 targets.subList(start, targets.size()).forEach(target ->
@@ -48,7 +48,7 @@ public class FirebasePushMessageSender implements PushMessageSender {
                         errorCode,
                         new PushSendResult(
                                 List.copyOf(sentTargetIds),
-                                List.copyOf(invalidTargetIds),
+                                List.copyOf(invalidTargets),
                                 List.copyOf(failures)
                         ),
                         exception
@@ -56,7 +56,7 @@ public class FirebasePushMessageSender implements PushMessageSender {
             }
         }
 
-        return new PushSendResult(sentTargetIds, invalidTargetIds, failures);
+        return new PushSendResult(sentTargetIds, invalidTargets, failures);
     }
 
     private BatchResponse sendBatch(
@@ -94,7 +94,7 @@ public class FirebasePushMessageSender implements PushMessageSender {
             List<PushDeviceTarget> targets,
             BatchResponse response,
             List<Long> sentTargetIds,
-            List<Long> invalidTargetIds,
+            List<InvalidPushTarget> invalidTargets,
             List<PushSendFailure> failures
     ) {
         List<SendResponse> responses = response.getResponses();
@@ -109,7 +109,10 @@ public class FirebasePushMessageSender implements PushMessageSender {
             FirebaseMessagingException exception = sendResponse.getException();
             String errorCode = exception == null ? UNKNOWN_ERROR : errorCode(exception);
             if (exception != null && exception.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
-                invalidTargetIds.add(target.deviceTokenId());
+                invalidTargets.add(new InvalidPushTarget(
+                        target.deviceTokenId(),
+                        target.tokenHash()
+                ));
             } else {
                 failures.add(new PushSendFailure(target.deviceTokenId(), errorCode));
             }
