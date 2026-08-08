@@ -2,6 +2,7 @@ package com.meetple.backend.domain.push.fcm;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
@@ -98,6 +99,34 @@ class FirebasePushMessageSenderTest {
         ))
                 .isInstanceOf(PushSendException.class)
                 .hasMessageContaining("UNAVAILABLE");
+    }
+
+    @Test
+    void preservesEarlierBatchSuccessWhenLaterBatchFails() throws Exception {
+        SendResponse success = mock(SendResponse.class);
+        given(success.isSuccessful()).willReturn(true);
+        BatchResponse first = mock(BatchResponse.class);
+        given(first.getResponses()).willReturn(java.util.Collections.nCopies(500, success));
+        FirebaseMessagingException exception = mock(FirebaseMessagingException.class);
+        given(exception.getMessagingErrorCode()).willReturn(MessagingErrorCode.UNAVAILABLE);
+        given(firebaseMessaging.sendEachForMulticast(any())).willReturn(first).willThrow(exception);
+        List<PushDeviceTarget> targets = IntStream.rangeClosed(1, 501)
+                .mapToObj(index -> new PushDeviceTarget((long) index, "token-" + index))
+                .toList();
+
+        PushSendException thrown = catchThrowableOfType(
+                () -> firebasePushMessageSender.send(message(), targets),
+                PushSendException.class
+        );
+
+        assertThat(thrown.getPartialResult().sentTargetIds())
+                .containsExactlyElementsOf(IntStream.rangeClosed(1, 500)
+                        .mapToObj(Long::valueOf)
+                        .toList());
+        assertThat(thrown.getPartialResult().invalidTargetIds()).isEmpty();
+        assertThat(thrown.getPartialResult().failures())
+                .containsExactly(new PushSendFailure(501L, "UNAVAILABLE"));
+        verify(firebaseMessaging, times(2)).sendEachForMulticast(any());
     }
 
     private PushMessage message() {

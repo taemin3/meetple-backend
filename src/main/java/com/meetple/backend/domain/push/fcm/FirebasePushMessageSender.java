@@ -36,14 +36,33 @@ public class FirebasePushMessageSender implements PushMessageSender {
         for (int start = 0; start < targets.size(); start += MAX_MULTICAST_TARGETS) {
             int end = Math.min(start + MAX_MULTICAST_TARGETS, targets.size());
             List<PushDeviceTarget> batchTargets = targets.subList(start, end);
-            BatchResponse response = sendBatch(message, batchTargets);
-            collectResults(batchTargets, response, sentTargetIds, invalidTargetIds, failures);
+            try {
+                BatchResponse response = sendBatch(message, batchTargets);
+                collectResults(batchTargets, response, sentTargetIds, invalidTargetIds, failures);
+            } catch (FirebaseMessagingException exception) {
+                String errorCode = errorCode(exception);
+                targets.subList(start, targets.size()).forEach(target ->
+                        failures.add(new PushSendFailure(target.deviceTokenId(), errorCode))
+                );
+                throw new PushSendException(
+                        errorCode,
+                        new PushSendResult(
+                                List.copyOf(sentTargetIds),
+                                List.copyOf(invalidTargetIds),
+                                List.copyOf(failures)
+                        ),
+                        exception
+                );
+            }
         }
 
         return new PushSendResult(sentTargetIds, invalidTargetIds, failures);
     }
 
-    private BatchResponse sendBatch(PushMessage message, List<PushDeviceTarget> targets) {
+    private BatchResponse sendBatch(
+            PushMessage message,
+            List<PushDeviceTarget> targets
+    ) throws FirebaseMessagingException {
         MulticastMessage multicastMessage = MulticastMessage.builder()
                 .setNotification(Notification.builder()
                         .setTitle(message.title())
@@ -53,11 +72,7 @@ public class FirebasePushMessageSender implements PushMessageSender {
                 .setAndroidConfig(androidConfig(message))
                 .addAllTokens(targets.stream().map(PushDeviceTarget::token).toList())
                 .build();
-        try {
-            return firebaseMessaging.sendEachForMulticast(multicastMessage);
-        } catch (FirebaseMessagingException exception) {
-            throw new PushSendException(errorCode(exception), exception);
-        }
+        return firebaseMessaging.sendEachForMulticast(multicastMessage);
     }
 
     private AndroidConfig androidConfig(PushMessage message) {

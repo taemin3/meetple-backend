@@ -110,6 +110,9 @@ public class AuthService {
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
+        if (StringUtils.hasText(request.deviceId())) {
+            pushDeviceTokenService.removeDevice(refreshTokenSession.memberId(), request.deviceId());
+        }
         accessTokenBlacklistRepository.save(
                 accessToken,
                 jwtTokenProvider.getAccessTokenRemainingExpiration(accessToken)
@@ -118,9 +121,6 @@ public class AuthService {
                 refreshTokenSession.memberId(),
                 refreshTokenSession.sessionId()
         );
-        if (StringUtils.hasText(request.deviceId())) {
-            pushDeviceTokenService.removeDevice(refreshTokenSession.memberId(), request.deviceId());
-        }
         eventPublisher.publishEvent(ChatSessionInvalidationEvent.loginSession(
                 refreshTokenSession.memberId(),
                 refreshTokenSession.sessionId()
@@ -131,8 +131,8 @@ public class AuthService {
         String accessToken = resolveAccessToken(authorizationHeader);
         JwtTokenSession accessTokenSession = parseAccessTokenSession(accessToken);
 
-        refreshTokenRepository.deleteAllByMemberId(accessTokenSession.memberId());
         pushDeviceTokenService.removeAllDevices(accessTokenSession.memberId());
+        refreshTokenRepository.deleteAllByMemberId(accessTokenSession.memberId());
         eventPublisher.publishEvent(
                 ChatSessionInvalidationEvent.member(accessTokenSession.memberId())
         );

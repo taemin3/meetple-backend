@@ -3,7 +3,7 @@ CREATE TABLE push_device_tokens (
     member_id BIGINT NOT NULL,
     device_id VARCHAR(100) NOT NULL,
     token VARCHAR(4096) NOT NULL,
-    token_hash CHAR(64) NOT NULL,
+    token_hash VARCHAR(64) NOT NULL,
     platform VARCHAR(20) NOT NULL,
     last_seen_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL,

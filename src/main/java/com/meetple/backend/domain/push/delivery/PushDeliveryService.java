@@ -2,9 +2,10 @@ package com.meetple.backend.domain.push.delivery;
 
 import com.meetple.backend.domain.push.fcm.PushSendResult;
 import com.meetple.backend.domain.push.service.PushDeviceTarget;
-import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -39,16 +40,30 @@ public class PushDeliveryService {
 
     @Transactional
     public void record(UUID eventId, PushSendResult result) {
-        mark(eventId, result.sentTargetIds(), PushEventDelivery::markSent);
-        mark(eventId, result.invalidTargetIds(), PushEventDelivery::markInvalidToken);
-        result.failures().forEach(failure -> pushEventDeliveryRepository
-                .findByEventIdAndDeviceTokenId(eventId, failure.targetId())
-                .ifPresent(delivery -> delivery.markFailed(failure.errorCode())));
-    }
+        Set<Long> sentTargetIds = Set.copyOf(result.sentTargetIds());
+        Set<Long> invalidTargetIds = Set.copyOf(result.invalidTargetIds());
+        Map<Long, String> failureCodes = result.failures().stream()
+                .collect(Collectors.toMap(
+                        failure -> failure.targetId(),
+                        failure -> failure.errorCode(),
+                        (first, second) -> second
+                ));
 
-    @Transactional
-    public void markBatchFailed(UUID eventId, Collection<Long> targetIds, String errorCode) {
-        mark(eventId, targetIds, delivery -> delivery.markFailed(errorCode));
+        Set<Long> resultTargetIds = new LinkedHashSet<>();
+        resultTargetIds.addAll(sentTargetIds);
+        resultTargetIds.addAll(invalidTargetIds);
+        resultTargetIds.addAll(failureCodes.keySet());
+        if (resultTargetIds.isEmpty()) {
+            return;
+        }
+
+        pushEventDeliveryRepository.findAllByEventIdAndDeviceTokenIdIn(eventId, resultTargetIds)
+                .forEach(delivery -> markResult(
+                        delivery,
+                        sentTargetIds,
+                        invalidTargetIds,
+                        failureCodes
+                ));
     }
 
     private boolean prepareTarget(
@@ -67,15 +82,19 @@ public class PushDeliveryService {
         return true;
     }
 
-    private void mark(
-            UUID eventId,
-            Collection<Long> targetIds,
-            java.util.function.Consumer<PushEventDelivery> marker
+    private void markResult(
+            PushEventDelivery delivery,
+            Set<Long> sentTargetIds,
+            Set<Long> invalidTargetIds,
+            Map<Long, String> failureCodes
     ) {
-        if (targetIds.isEmpty()) {
-            return;
+        Long deviceTokenId = delivery.getDeviceTokenId();
+        if (sentTargetIds.contains(deviceTokenId)) {
+            delivery.markSent();
+        } else if (invalidTargetIds.contains(deviceTokenId)) {
+            delivery.markInvalidToken();
+        } else if (failureCodes.containsKey(deviceTokenId)) {
+            delivery.markFailed(failureCodes.get(deviceTokenId));
         }
-        pushEventDeliveryRepository.findAllByEventIdAndDeviceTokenIdIn(eventId, targetIds)
-                .forEach(marker);
     }
 }

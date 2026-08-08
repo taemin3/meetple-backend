@@ -10,19 +10,37 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class PushDeviceTokenService {
+
+    private static final int MAX_REGISTRATION_ATTEMPTS = 3;
 
     private final PushDeviceTokenRepository pushDeviceTokenRepository;
     private final MemberRepository memberRepository;
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
     public void register(Long memberId, RegisterPushDeviceTokenRequest request) {
+        DataIntegrityViolationException lastFailure = null;
+        for (int attempt = 1; attempt <= MAX_REGISTRATION_ATTEMPTS; attempt++) {
+            try {
+                transactionTemplate.executeWithoutResult(status ->
+                        registerInTransaction(memberId, request)
+                );
+                return;
+            } catch (DataIntegrityViolationException exception) {
+                lastFailure = exception;
+            }
+        }
+        throw lastFailure;
+    }
+
+    private void registerInTransaction(Long memberId, RegisterPushDeviceTokenRequest request) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new NotFoundException("Member not found."));
 
@@ -44,7 +62,7 @@ public class PushDeviceTokenService {
         } else {
             target.refresh(member, request.deviceId(), request.token(), tokenHash, request.platform());
         }
-        pushDeviceTokenRepository.save(target);
+        pushDeviceTokenRepository.saveAndFlush(target);
     }
 
     @Transactional
@@ -57,6 +75,7 @@ public class PushDeviceTokenService {
         pushDeviceTokenRepository.deleteAllByMemberId(memberId);
     }
 
+    @Transactional(readOnly = true)
     public List<PushDeviceTarget> findTargets(Collection<Long> memberIds) {
         if (memberIds.isEmpty()) {
             return List.of();

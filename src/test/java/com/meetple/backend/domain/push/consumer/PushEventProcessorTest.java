@@ -118,18 +118,32 @@ class PushEventProcessorTest {
     }
 
     @Test
-    void recordsBatchFailureBeforeRethrowing() {
+    void recordsPartialBatchResultBeforeRethrowing() {
         UUID eventId = UUID.fromString("11111111-1111-1111-1111-111111111111");
-        List<PushDeviceTarget> targets = List.of(new PushDeviceTarget(10L, "token-1"));
+        List<PushDeviceTarget> targets = List.of(
+                new PushDeviceTarget(10L, "token-1"),
+                new PushDeviceTarget(11L, "token-2"),
+                new PushDeviceTarget(12L, "token-3")
+        );
         given(pushDeviceTokenService.findTargets(List.of(7L))).willReturn(targets);
         given(pushDeliveryService.prepare(eventId, targets)).willReturn(targets);
-        PushSendException failure = new PushSendException("UNAVAILABLE", new RuntimeException());
+        PushSendResult partialResult = new PushSendResult(
+                List.of(10L),
+                List.of(11L),
+                List.of(new PushSendFailure(12L, "UNAVAILABLE"))
+        );
+        PushSendException failure = new PushSendException(
+                "UNAVAILABLE",
+                partialResult,
+                new RuntimeException()
+        );
         given(pushMessageSender.send(any(PushMessage.class), eq(targets))).willThrow(failure);
 
         assertThatThrownBy(() -> pushEventProcessor.process(NOTIFICATION_TOPIC, generalPayload(eventId)))
                 .isSameAs(failure);
 
-        verify(pushDeliveryService).markBatchFailed(eventId, List.of(10L), "UNAVAILABLE");
+        verify(pushDeliveryService).record(eventId, partialResult);
+        verify(pushDeviceTokenService).removeInvalidTargets(List.of(11L));
     }
 
     @Test

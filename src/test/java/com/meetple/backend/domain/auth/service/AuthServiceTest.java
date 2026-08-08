@@ -243,7 +243,34 @@ class AuthServiceTest {
 
         authService.logout(request, "Bearer access-token");
 
-        verify(pushDeviceTokenService).removeDevice(1L, "device-1");
+        InOrder inOrder = inOrder(
+                pushDeviceTokenService,
+                accessTokenBlacklistRepository,
+                refreshTokenRepository
+        );
+        inOrder.verify(pushDeviceTokenService).removeDevice(1L, "device-1");
+        inOrder.verify(accessTokenBlacklistRepository)
+                .save("access-token", Duration.ofMinutes(10));
+        inOrder.verify(refreshTokenRepository)
+                .deleteByMemberIdAndSessionId(1L, "session-id");
+    }
+
+    @Test
+    void logoutKeepsAuthenticationSessionWhenDeviceTokenRemovalFails() {
+        LogoutRequest request = new LogoutRequest("refresh-token", "device-1");
+        JwtTokenSession tokenSession = new JwtTokenSession(1L, "session-id");
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken())).willReturn(tokenSession);
+        given(jwtTokenProvider.getAccessTokenSession("access-token")).willReturn(tokenSession);
+        given(refreshTokenRepository.matches(1L, "session-id", request.refreshToken())).willReturn(true);
+        doThrow(new IllegalStateException("database timeout"))
+                .when(pushDeviceTokenService).removeDevice(1L, "device-1");
+
+        assertThatThrownBy(() -> authService.logout(request, "Bearer access-token"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("database timeout");
+
+        verify(accessTokenBlacklistRepository, never()).save(any(), any());
+        verify(refreshTokenRepository, never()).deleteByMemberIdAndSessionId(any(), anyString());
     }
 
     @Test
@@ -318,8 +345,9 @@ class AuthServiceTest {
 
         authService.logoutAll("Bearer access-token");
 
-        verify(refreshTokenRepository).deleteAllByMemberId(1L);
-        verify(pushDeviceTokenService).removeAllDevices(1L);
+        InOrder inOrder = inOrder(pushDeviceTokenService, refreshTokenRepository);
+        inOrder.verify(pushDeviceTokenService).removeAllDevices(1L);
+        inOrder.verify(refreshTokenRepository).deleteAllByMemberId(1L);
         ArgumentCaptor<ChatSessionInvalidationEvent> eventCaptor = ArgumentCaptor.forClass(
                 ChatSessionInvalidationEvent.class
         );

@@ -51,10 +51,9 @@ public class PushEventProcessor {
         try {
             result = pushMessageSender.send(plan.message(), pendingTargets);
         } catch (PushSendException exception) {
-            pushDeliveryService.markBatchFailed(
-                    envelope.eventId(),
-                    pendingTargets.stream().map(PushDeviceTarget::deviceTokenId).toList(),
-                    exception.getErrorCode()
+            pushDeliveryService.record(envelope.eventId(), exception.getPartialResult());
+            pushDeviceTokenService.removeInvalidTargets(
+                    exception.getPartialResult().invalidTargetIds()
             );
             throw exception;
         }

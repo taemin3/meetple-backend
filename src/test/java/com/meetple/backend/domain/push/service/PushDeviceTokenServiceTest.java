@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
@@ -19,7 +20,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class PushDeviceTokenServiceTest {
@@ -30,8 +34,20 @@ class PushDeviceTokenServiceTest {
     @Mock
     private MemberRepository memberRepository;
 
+    @Mock
+    private TransactionTemplate transactionTemplate;
+
     @InjectMocks
     private PushDeviceTokenService pushDeviceTokenService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUpTransactionTemplate() {
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
+            java.util.function.Consumer<TransactionStatus> action = invocation.getArgument(0);
+            action.accept(org.mockito.Mockito.mock(TransactionStatus.class));
+            return null;
+        }).when(transactionTemplate).executeWithoutResult(any());
+    }
 
     @Test
     void registersNewInstallationForMember() {
@@ -45,7 +61,7 @@ class PushDeviceTokenServiceTest {
         pushDeviceTokenService.register(1L, request);
 
         ArgumentCaptor<PushDeviceToken> captor = ArgumentCaptor.forClass(PushDeviceToken.class);
-        verify(pushDeviceTokenRepository).save(captor.capture());
+        verify(pushDeviceTokenRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getMember()).isSameAs(member);
         assertThat(captor.getValue().getDeviceId()).isEqualTo("device-1");
         assertThat(captor.getValue().getToken()).isEqualTo("token-1");
@@ -68,7 +84,7 @@ class PushDeviceTokenServiceTest {
 
         verify(pushDeviceTokenRepository).delete(tokenMatch);
         verify(pushDeviceTokenRepository).flush();
-        verify(pushDeviceTokenRepository).save(deviceMatch);
+        verify(pushDeviceTokenRepository).saveAndFlush(deviceMatch);
         assertThat(deviceMatch.getMember()).isSameAs(newMember);
         assertThat(deviceMatch.getToken()).isEqualTo("token-1");
     }
@@ -88,6 +104,25 @@ class PushDeviceTokenServiceTest {
                 new PushDeviceTarget(10L, "token-1"),
                 new PushDeviceTarget(11L, "token-2")
         );
+    }
+
+    @Test
+    void retriesConcurrentInsertConflictInANewTransaction() {
+        Member member = member(1L);
+        RegisterPushDeviceTokenRequest request = request("device-1", "token-1");
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(pushDeviceTokenRepository.findByDeviceIdForUpdate("device-1"))
+                .willReturn(Optional.empty());
+        given(pushDeviceTokenRepository.findByTokenHashForUpdate(PushTokenHash.sha256("token-1")))
+                .willReturn(Optional.empty());
+        given(pushDeviceTokenRepository.saveAndFlush(any(PushDeviceToken.class)))
+                .willThrow(new DataIntegrityViolationException("concurrent unique conflict"))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        pushDeviceTokenService.register(1L, request);
+
+        verify(transactionTemplate, times(2)).executeWithoutResult(any());
+        verify(pushDeviceTokenRepository, times(2)).saveAndFlush(any(PushDeviceToken.class));
     }
 
     @Test
