@@ -51,7 +51,10 @@ public class AuthController {
 
     @PostMapping("/logout")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "로그아웃", description = "저장된 refresh token을 삭제하고 access token을 만료 전까지 차단합니다.")
+    @Operation(
+            summary = "로그아웃",
+            description = "저장된 refresh token을 삭제하고 access token을 차단합니다. deviceId가 있으면 해당 기기의 FCM token도 삭제합니다."
+    )
     public ResponseEntity<ApiResponse<Void>> logout(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader,
             @Valid @RequestBody LogoutRequest request
@@ -62,7 +65,10 @@ public class AuthController {
 
     @PostMapping("/logout-all")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "전체 기기 로그아웃", description = "회원의 모든 refresh token 세션을 삭제해 모든 기기에서 로그아웃합니다.")
+    @Operation(
+            summary = "전체 기기 로그아웃",
+            description = "회원의 모든 refresh token 세션과 FCM 기기 token을 삭제합니다."
+    )
     public ResponseEntity<ApiResponse<Void>> logoutAll(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader
     ) {

@@ -21,6 +21,7 @@ import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.push.service.PushDeviceTokenService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.UnauthorizedException;
@@ -59,6 +60,9 @@ class AuthServiceTest {
 
     @Mock
     private AccessTokenBlacklistRepository accessTokenBlacklistRepository;
+
+    @Mock
+    private PushDeviceTokenService pushDeviceTokenService;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
@@ -224,6 +228,49 @@ class AuthServiceTest {
         inOrder.verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().memberId()).isEqualTo(1L);
         assertThat(eventCaptor.getValue().loginSessionId()).isEqualTo("session-id");
+        verify(pushDeviceTokenService, never()).removeDevice(any(), anyString());
+    }
+
+    @Test
+    void logoutRemovesOnlyRequestedDeviceToken() {
+        LogoutRequest request = new LogoutRequest("refresh-token", "device-1");
+        JwtTokenSession tokenSession = new JwtTokenSession(1L, "session-id");
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken())).willReturn(tokenSession);
+        given(jwtTokenProvider.getAccessTokenSession("access-token")).willReturn(tokenSession);
+        given(refreshTokenRepository.matches(1L, "session-id", request.refreshToken())).willReturn(true);
+        given(jwtTokenProvider.getAccessTokenRemainingExpiration("access-token"))
+                .willReturn(Duration.ofMinutes(10));
+
+        authService.logout(request, "Bearer access-token");
+
+        InOrder inOrder = inOrder(
+                pushDeviceTokenService,
+                accessTokenBlacklistRepository,
+                refreshTokenRepository
+        );
+        inOrder.verify(pushDeviceTokenService).removeDevice(1L, "device-1");
+        inOrder.verify(accessTokenBlacklistRepository)
+                .save("access-token", Duration.ofMinutes(10));
+        inOrder.verify(refreshTokenRepository)
+                .deleteByMemberIdAndSessionId(1L, "session-id");
+    }
+
+    @Test
+    void logoutKeepsAuthenticationSessionWhenDeviceTokenRemovalFails() {
+        LogoutRequest request = new LogoutRequest("refresh-token", "device-1");
+        JwtTokenSession tokenSession = new JwtTokenSession(1L, "session-id");
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken())).willReturn(tokenSession);
+        given(jwtTokenProvider.getAccessTokenSession("access-token")).willReturn(tokenSession);
+        given(refreshTokenRepository.matches(1L, "session-id", request.refreshToken())).willReturn(true);
+        doThrow(new IllegalStateException("database timeout"))
+                .when(pushDeviceTokenService).removeDevice(1L, "device-1");
+
+        assertThatThrownBy(() -> authService.logout(request, "Bearer access-token"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("database timeout");
+
+        verify(accessTokenBlacklistRepository, never()).save(any(), any());
+        verify(refreshTokenRepository, never()).deleteByMemberIdAndSessionId(any(), anyString());
     }
 
     @Test
@@ -298,7 +345,9 @@ class AuthServiceTest {
 
         authService.logoutAll("Bearer access-token");
 
-        verify(refreshTokenRepository).deleteAllByMemberId(1L);
+        InOrder inOrder = inOrder(pushDeviceTokenService, refreshTokenRepository);
+        inOrder.verify(pushDeviceTokenService).removeAllDevices(1L);
+        inOrder.verify(refreshTokenRepository).deleteAllByMemberId(1L);
         ArgumentCaptor<ChatSessionInvalidationEvent> eventCaptor = ArgumentCaptor.forClass(
                 ChatSessionInvalidationEvent.class
         );

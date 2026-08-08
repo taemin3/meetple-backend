@@ -42,3 +42,7 @@ out/
 docs/work-logs/*.md
 !docs/work-logs/README.md
 !docs/work-logs/TEMPLATE.md
+
+### Firebase credentials ###
+*firebase-adminsdk*.json
+service-account*.json
