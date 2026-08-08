@@ -21,6 +21,7 @@ import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.push.service.PushDeviceTokenService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.UnauthorizedException;
@@ -59,6 +60,9 @@ class AuthServiceTest {
 
     @Mock
     private AccessTokenBlacklistRepository accessTokenBlacklistRepository;
+
+    @Mock
+    private PushDeviceTokenService pushDeviceTokenService;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
@@ -224,6 +228,22 @@ class AuthServiceTest {
         inOrder.verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().memberId()).isEqualTo(1L);
         assertThat(eventCaptor.getValue().loginSessionId()).isEqualTo("session-id");
+        verify(pushDeviceTokenService, never()).removeDevice(any(), anyString());
+    }
+
+    @Test
+    void logoutRemovesOnlyRequestedDeviceToken() {
+        LogoutRequest request = new LogoutRequest("refresh-token", "device-1");
+        JwtTokenSession tokenSession = new JwtTokenSession(1L, "session-id");
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken())).willReturn(tokenSession);
+        given(jwtTokenProvider.getAccessTokenSession("access-token")).willReturn(tokenSession);
+        given(refreshTokenRepository.matches(1L, "session-id", request.refreshToken())).willReturn(true);
+        given(jwtTokenProvider.getAccessTokenRemainingExpiration("access-token"))
+                .willReturn(Duration.ofMinutes(10));
+
+        authService.logout(request, "Bearer access-token");
+
+        verify(pushDeviceTokenService).removeDevice(1L, "device-1");
     }
 
     @Test
@@ -299,6 +319,7 @@ class AuthServiceTest {
         authService.logoutAll("Bearer access-token");
 
         verify(refreshTokenRepository).deleteAllByMemberId(1L);
+        verify(pushDeviceTokenService).removeAllDevices(1L);
         ArgumentCaptor<ChatSessionInvalidationEvent> eventCaptor = ArgumentCaptor.forClass(
                 ChatSessionInvalidationEvent.class
         );

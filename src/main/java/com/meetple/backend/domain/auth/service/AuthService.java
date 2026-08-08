@@ -10,6 +10,7 @@ import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.push.service.PushDeviceTokenService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.UnauthorizedException;
@@ -45,6 +46,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenRepository refreshTokenRepository;
     private final AccessTokenBlacklistRepository accessTokenBlacklistRepository;
+    private final PushDeviceTokenService pushDeviceTokenService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
@@ -116,6 +118,9 @@ public class AuthService {
                 refreshTokenSession.memberId(),
                 refreshTokenSession.sessionId()
         );
+        if (StringUtils.hasText(request.deviceId())) {
+            pushDeviceTokenService.removeDevice(refreshTokenSession.memberId(), request.deviceId());
+        }
         eventPublisher.publishEvent(ChatSessionInvalidationEvent.loginSession(
                 refreshTokenSession.memberId(),
                 refreshTokenSession.sessionId()
@@ -127,6 +132,7 @@ public class AuthService {
         JwtTokenSession accessTokenSession = parseAccessTokenSession(accessToken);
 
         refreshTokenRepository.deleteAllByMemberId(accessTokenSession.memberId());
+        pushDeviceTokenService.removeAllDevices(accessTokenSession.memberId());
         eventPublisher.publishEvent(
                 ChatSessionInvalidationEvent.member(accessTokenSession.memberId())
         );

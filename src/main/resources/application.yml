@@ -7,9 +7,28 @@ spring:
     default: local
   flyway:
     enabled: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${PUSH_KAFKA_CONSUMER_GROUP:meetple-push-fcm-v1}
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: record
+      concurrency: ${PUSH_KAFKA_CONSUMER_CONCURRENCY:3}
+      auto-startup: ${PUSH_KAFKA_CONSUMER_ENABLED:false}
 
 server:
   port: ${SERVER_PORT:8080}
+
+push:
+  kafka:
+    consumer-enabled: ${PUSH_KAFKA_CONSUMER_ENABLED:false}
+  fcm:
+    enabled: ${PUSH_FCM_ENABLED:false}
+    credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}
 
 springdoc:
   swagger-ui:
