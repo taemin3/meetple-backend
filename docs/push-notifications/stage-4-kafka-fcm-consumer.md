@@ -124,7 +124,7 @@ Kafka offset commit과 FCM 외부 호출은 하나의 원자적 트랜잭션으�
 
 ## 8단계 적용 후 실패 처리
 
-Record 단위 ack와 비차단 Retry Topic을 사용한다. 일시 오류는 1초, 2초, 4초 backoff로 재시도하고 최초 소비를 포함해 최대 4번 처리한 뒤 DLQ로 이동한다. 잘못된 JSON, 지원하지 않는 schema version과 같은 영구 계약 오류는 재시도 없이 바로 DLQ로 이동한다.
+Record 단위 ack와 비차단 Retry Topic을 사용한다. 일시 오류는 1초, 10초, 100초, 300초 backoff로 재시도하고 최초 소비를 포함해 최대 5번 처리한 뒤 DLQ로 이동한다. 전체 재시도 구간을 5분 claim lease보다 길게 유지해 프로세스 종료나 DB 일시 오류로 claim이 남아도 만료 후 자동 복구할 기회를 보장한다. 잘못된 JSON, 지원하지 않는 schema version과 같은 영구 계약 오류는 재시도 없이 바로 DLQ로 이동한다.
 
 Retry Topic 소비 시에는 레코드의 현재 Topic이 아니라 `kafka_original-topic` 헤더를 이벤트 계약 선택에 사용한다. DLQ에는 원본 Topic, partition, offset과 예외 정보가 헤더로 보존된다.
 

@@ -27,11 +27,11 @@ public class PushKafkaConsumer {
     private final PushEventProcessor pushEventProcessor;
 
     @RetryableTopic(
-            attempts = "4",
+            attempts = "5",
             backOff = @BackOff(
                     delayString = "${push.kafka.retry.initial-delay-ms:1000}",
-                    multiplierString = "${push.kafka.retry.multiplier:2.0}",
-                    maxDelayString = "${push.kafka.retry.max-delay-ms:4000}"
+                    multiplierString = "${push.kafka.retry.multiplier:10.0}",
+                    maxDelayString = "${push.kafka.retry.max-delay-ms:300000}"
             ),
             kafkaTemplate = "kafkaTemplate",
             autoCreateTopics = "false",

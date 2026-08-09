@@ -24,12 +24,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.retrytopic.RetryTopicSchedulerWrapper;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -53,10 +57,12 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
                 PushKafkaRetryIntegrationTest.NOTIFICATION_TOPIC + ".retry-0",
                 PushKafkaRetryIntegrationTest.NOTIFICATION_TOPIC + ".retry-1",
                 PushKafkaRetryIntegrationTest.NOTIFICATION_TOPIC + ".retry-2",
+                PushKafkaRetryIntegrationTest.NOTIFICATION_TOPIC + ".retry-3",
                 PushKafkaRetryIntegrationTest.NOTIFICATION_DLT,
                 PushKafkaRetryIntegrationTest.CHAT_TOPIC + ".retry-0",
                 PushKafkaRetryIntegrationTest.CHAT_TOPIC + ".retry-1",
                 PushKafkaRetryIntegrationTest.CHAT_TOPIC + ".retry-2",
+                PushKafkaRetryIntegrationTest.CHAT_TOPIC + ".retry-3",
                 PushKafkaRetryIntegrationTest.CHAT_TOPIC + ".dlq"
         },
         brokerProperties = "auto.create.topics.enable=false"
@@ -72,6 +78,12 @@ class PushKafkaRetryIntegrationTest {
 
     @Autowired
     private EmbeddedKafkaBroker embeddedKafka;
+
+    @Autowired
+    private ApplicationContext applicationContext;
+
+    @Autowired
+    private RetryTopicSchedulerWrapper retryTopicSchedulerWrapper;
 
     @MockitoBean
     private PushEventProcessor pushEventProcessor;
@@ -98,6 +110,49 @@ class PushKafkaRetryIntegrationTest {
         verify(pushEventProcessor, timeout(10_000).times(3))
                 .process(NOTIFICATION_TOPIC, payload);
         assertThat(attempts).hasValue(3);
+    }
+
+    @Test
+    void sendsTransientFailureToDltAfterAllRetryTopicsAreExhausted() throws Exception {
+        String key = "retry-dlt-" + UUID.randomUUID();
+        String payload = "transient-dlt-payload-" + key;
+        doThrow(new PushEventProcessingException("temporary failure"))
+                .when(pushEventProcessor)
+                .process(NOTIFICATION_TOPIC, payload);
+
+        try (Consumer<String, String> consumer = dltConsumer()) {
+            kafkaTemplate.send(NOTIFICATION_TOPIC, key, payload).get(10, SECONDS);
+            ConsumerRecord<String, String> dltRecord = awaitRecord(consumer, key);
+
+            assertThat(dltRecord.value()).isEqualTo(payload);
+        }
+
+        verify(pushEventProcessor, timeout(10_000).times(5))
+                .process(NOTIFICATION_TOPIC, payload);
+    }
+
+    @Test
+    void keepsKafkaRetrySchedulerOutOfApplicationTaskSchedulers() {
+        TaskScheduler applicationTaskScheduler = applicationContext.getBean(
+                "taskScheduler",
+                TaskScheduler.class
+        );
+
+        assertThat(applicationContext.getBeansOfType(TaskScheduler.class).values())
+                .doesNotContain(retryTopicSchedulerWrapper.getScheduler());
+        assertThat(applicationTaskScheduler)
+                .isNotSameAs(retryTopicSchedulerWrapper.getScheduler())
+                .isInstanceOfSatisfying(
+                        ThreadPoolTaskScheduler.class,
+                        scheduler -> assertThat(scheduler.getThreadNamePrefix())
+                                .isEqualTo("application-scheduling-")
+                );
+        assertThat(retryTopicSchedulerWrapper.getScheduler())
+                .isInstanceOfSatisfying(
+                        ThreadPoolTaskScheduler.class,
+                        scheduler -> assertThat(scheduler.getThreadNamePrefix())
+                                .isEqualTo("push-kafka-retry-")
+                );
     }
 
     @Test

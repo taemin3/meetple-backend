@@ -28,8 +28,8 @@ push:
     consumer-enabled: ${PUSH_KAFKA_CONSUMER_ENABLED:false}
     retry:
       initial-delay-ms: ${PUSH_KAFKA_RETRY_INITIAL_DELAY_MS:1000}
-      multiplier: ${PUSH_KAFKA_RETRY_MULTIPLIER:2.0}
-      max-delay-ms: ${PUSH_KAFKA_RETRY_MAX_DELAY_MS:4000}
+      multiplier: ${PUSH_KAFKA_RETRY_MULTIPLIER:10.0}
+      max-delay-ms: ${PUSH_KAFKA_RETRY_MAX_DELAY_MS:300000}
   fcm:
     enabled: ${PUSH_FCM_ENABLED:false}
     credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}
