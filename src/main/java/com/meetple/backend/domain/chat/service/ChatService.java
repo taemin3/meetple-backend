@@ -16,11 +16,15 @@ import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
+import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
+import com.meetple.backend.domain.push.event.PushEventTopic;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,12 +46,17 @@ public class ChatService {
 
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_MESSAGE_LENGTH = 1000;
+    private static final String CHAT_MESSAGE_AGGREGATE_TYPE = "chat_message";
+    private static final String CHAT_MESSAGE_CREATED_EVENT = "CHAT_MESSAGE_CREATED";
+    private static final int PUSH_SCHEMA_VERSION = 1;
 
     private final ChatMessageRepository messageRepository;
     private final ChatReadStateRepository readStateRepository;
     private final MeetingRepository meetingRepository;
     private final MemberRepository memberRepository;
     private final ChatAccessPolicy accessPolicy;
+    private final ChatPushRecipientResolver pushRecipientResolver;
+    private final OutboxEventPublisher outboxEventPublisher;
     private final ApplicationEventPublisher eventPublisher;
 
     public PageResponse<ChatRoomSummaryResponse> getRooms(Long memberId, Pageable pageable) {
@@ -113,6 +122,17 @@ public class ChatService {
         );
     }
 
+    public ChatRoomSummaryResponse getRoom(Long memberId, Long meetingId) {
+        Meeting meeting = accessPolicy.getAccessibleMeeting(memberId, meetingId);
+        ChatMessageResponse lastMessage = messageRepository
+                .findTopByMeetingIdOrderByRoomSequenceDesc(meetingId)
+                .map(ChatMessageResponse::from)
+                .orElse(null);
+        long unreadCount = getUnreadCounts(memberId, List.of(meetingId))
+                .getOrDefault(meetingId, 0L);
+        return toRoomSummary(meeting, lastMessage, unreadCount);
+    }
+
     @Transactional
     public ChatMessageSendResult sendMessage(
             Long memberId,
@@ -141,9 +161,41 @@ public class ChatService {
         );
         ChatMessageResponse response = ChatMessageResponse.from(message);
         if (created) {
+            publishPushEvent(meeting, response);
             eventPublisher.publishEvent(ChatMessageFanOutEvent.create(response));
         }
         return new ChatMessageSendResult(response, created);
+    }
+
+    private void publishPushEvent(Meeting meeting, ChatMessageResponse message) {
+        List<Long> recipientMemberIds = pushRecipientResolver.resolve(
+                meeting,
+                message.senderId()
+        );
+        if (recipientMemberIds.isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("recipientMemberIds", recipientMemberIds);
+        data.put("senderMemberId", message.senderId());
+        data.put("senderNickname", message.senderNickname());
+        data.put("roomId", message.roomId());
+        data.put("chatMessageId", message.id());
+        data.put("roomSequence", message.sequence());
+        data.put("title", meeting.getTitle());
+        data.put("body", message.content());
+
+        outboxEventPublisher.publish(new OutboxEventRequest(
+                CHAT_MESSAGE_AGGREGATE_TYPE,
+                message.id().toString(),
+                CHAT_MESSAGE_CREATED_EVENT,
+                "room:" + message.roomId(),
+                PushEventTopic.CHAT,
+                PUSH_SCHEMA_VERSION,
+                "chat-message:" + message.id(),
+                data
+        ));
     }
 
     @Transactional
