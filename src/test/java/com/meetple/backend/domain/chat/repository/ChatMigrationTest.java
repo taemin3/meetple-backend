@@ -27,7 +27,7 @@ class ChatMigrationTest {
 
         var result = flyway.migrate();
 
-        assertThat(result.migrationsExecuted).isEqualTo(6);
+        assertThat(result.migrationsExecuted).isEqualTo(5);
         try (var connection = DriverManager.getConnection(url, "sa", "")) {
             assertThat(tableExists(connection, "CHAT_MESSAGES")).isTrue();
             assertThat(tableExists(connection, "CHAT_READ_STATES")).isTrue();
@@ -35,7 +35,6 @@ class ChatMigrationTest {
             assertThat(tableExists(connection, "PUSH_DEVICE_TOKENS")).isTrue();
             assertThat(tableExists(connection, "PUSH_EVENT_DELIVERIES")).isTrue();
             assertThat(tableExists(connection, "CHAT_NOTIFICATION_SETTINGS")).isTrue();
-            assertThat(tableExists(connection, "PUSH_EVENT_RECIPIENT_DECISIONS")).isTrue();
             assertThat(columnDataType(connection, "PUSH_DEVICE_TOKENS", "TOKEN_HASH"))
                     .isEqualTo(Types.VARCHAR);
             assertThat(columnTypeName(connection, "PUSH_EVENT_DELIVERIES", "CLAIM_ID"))

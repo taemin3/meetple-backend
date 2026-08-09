@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.chat.service.ChatNotificationSettingService;
 import com.meetple.backend.domain.push.delivery.PushDeliveryService;
 import com.meetple.backend.domain.push.delivery.PushDeliveryClaim;
-import com.meetple.backend.domain.push.delivery.PushEventRecipientDecisionService;
 import com.meetple.backend.domain.push.fcm.InvalidPushTarget;
 import com.meetple.backend.domain.push.fcm.PushMessage;
 import com.meetple.backend.domain.push.fcm.PushMessageSender;
@@ -50,9 +49,6 @@ class PushEventProcessorTest {
     @Mock
     private ChatNotificationSettingService chatNotificationSettingService;
 
-    @Mock
-    private PushEventRecipientDecisionService recipientDecisionService;
-
     private PushEventProcessor pushEventProcessor;
 
     @BeforeEach
@@ -62,8 +58,7 @@ class PushEventProcessorTest {
                 pushDeviceTokenService,
                 pushDeliveryService,
                 pushMessageSender,
-                chatNotificationSettingService,
-                recipientDecisionService
+                chatNotificationSettingService
         );
     }
 
@@ -105,11 +100,6 @@ class PushEventProcessorTest {
                 eq(55L),
                 argThat(ids -> ids.size() == 2 && ids.containsAll(List.of(2L, 3L)))
         )).willReturn(List.of(2L, 3L));
-        given(recipientDecisionService.resolveEnabledRecipients(
-                eq(eventId),
-                argThat(ids -> ids.size() == 2 && ids.containsAll(List.of(2L, 3L))),
-                eq(List.of(2L, 3L))
-        )).willReturn(List.of(2L, 3L));
         given(pushDeviceTokenService.findTargets(argThat(ids ->
                 ids.size() == 2 && ids.containsAll(List.of(2L, 3L))
         ))).willReturn(targets);
@@ -137,11 +127,6 @@ class PushEventProcessorTest {
         given(chatNotificationSettingService.filterPushEnabledRecipients(
                 eq(55L),
                 argThat(ids -> ids.size() == 2 && ids.containsAll(List.of(2L, 3L)))
-        )).willReturn(List.of(3L));
-        given(recipientDecisionService.resolveEnabledRecipients(
-                eq(eventId),
-                argThat(ids -> ids.size() == 2 && ids.containsAll(List.of(2L, 3L))),
-                eq(List.of(3L))
         )).willReturn(List.of(3L));
         given(pushDeviceTokenService.findTargets(List.of(3L))).willReturn(List.of());
         given(pushDeliveryService.prepare(eventId, List.of()))
