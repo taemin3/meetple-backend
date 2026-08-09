@@ -52,6 +52,18 @@ public class ChatController {
         );
     }
 
+    @GetMapping("/{roomId}")
+    @Operation(summary = "채팅방 단건 조회")
+    public ResponseEntity<ApiResponse<ChatRoomSummaryResponse>> getRoom(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PathVariable Long roomId
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                chatService.getRoom(authenticatedMember.id(), roomId)
+        );
+    }
+
     @GetMapping("/{roomId}/messages")
     @Operation(summary = "채팅 메시지 커서 조회")
     public ResponseEntity<ApiResponse<ChatMessagePageResponse>> getMessages(

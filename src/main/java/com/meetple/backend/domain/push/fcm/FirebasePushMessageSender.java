@@ -82,8 +82,7 @@ public class FirebasePushMessageSender implements PushMessageSender {
             config.setCollapseKey(message.collapseKey());
         }
 
-        AndroidNotification.Builder notification = AndroidNotification.builder()
-                .setClickAction("FLUTTER_NOTIFICATION_CLICK");
+        AndroidNotification.Builder notification = AndroidNotification.builder();
         if (StringUtils.hasText(message.notificationTag())) {
             notification.setTag(message.notificationTag());
         }

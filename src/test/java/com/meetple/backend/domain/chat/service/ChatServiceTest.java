@@ -20,10 +20,14 @@ import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
+import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
+import com.meetple.backend.domain.push.event.PushEventTopic;
 import com.meetple.backend.global.exception.BadRequestException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -56,6 +60,12 @@ class ChatServiceTest {
     private ChatAccessPolicy accessPolicy;
 
     @Mock
+    private ChatPushRecipientResolver pushRecipientResolver;
+
+    @Mock
+    private OutboxEventPublisher outboxEventPublisher;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
@@ -81,6 +91,7 @@ class ChatServiceTest {
                     ReflectionTestUtils.setField(saved, "id", 21L);
                     return saved;
                 });
+        given(pushRecipientResolver.resolve(meeting, 1L)).willReturn(List.of(2L));
 
         var result = chatService.sendMessage(
                 1L,
@@ -101,6 +112,27 @@ class ChatServiceTest {
                 ArgumentCaptor.forClass(ChatMessageFanOutEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().message()).isEqualTo(result.message());
+        ArgumentCaptor<OutboxEventRequest> outboxCaptor =
+                ArgumentCaptor.forClass(OutboxEventRequest.class);
+        verify(outboxEventPublisher).publish(outboxCaptor.capture());
+        OutboxEventRequest outbox = outboxCaptor.getValue();
+        assertThat(outbox.aggregateType()).isEqualTo("chat_message");
+        assertThat(outbox.aggregateId()).isEqualTo("21");
+        assertThat(outbox.eventType()).isEqualTo("CHAT_MESSAGE_CREATED");
+        assertThat(outbox.eventKey()).isEqualTo("room:10");
+        assertThat(outbox.topic()).isEqualTo(PushEventTopic.CHAT);
+        assertThat(outbox.schemaVersion()).isEqualTo(1);
+        assertThat(outbox.deduplicationKey()).isEqualTo("chat-message:21");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) outbox.data();
+        assertThat(data).containsEntry("recipientMemberIds", List.of(2L))
+                .containsEntry("senderMemberId", 1L)
+                .containsEntry("senderNickname", "host")
+                .containsEntry("roomId", 10L)
+                .containsEntry("chatMessageId", 21L)
+                .containsEntry("roomSequence", 8L)
+                .containsEntry("title", "Weekend running")
+                .containsEntry("body", "  hello  ");
     }
 
     @Test
@@ -166,6 +198,35 @@ class ChatServiceTest {
         assertThat(result.message().sequence()).isEqualTo(3L);
         verify(messageRepository, never()).saveAndFlush(any(ChatMessage.class));
         verify(eventPublisher, never()).publishEvent(any());
+        verify(outboxEventPublisher, never()).publish(any());
+    }
+
+    @Test
+    void getRoomReturnsAccessibleRoomSummary() {
+        Member host = member(1L, "host");
+        Meeting meeting = meeting(10L, host);
+        ChatMessage latest = message(
+                20L,
+                meeting,
+                host,
+                7L,
+                UUID.randomUUID(),
+                "latest"
+        );
+        given(accessPolicy.getAccessibleMeeting(1L, 10L)).willReturn(meeting);
+        given(messageRepository.findTopByMeetingIdOrderByRoomSequenceDesc(10L))
+                .willReturn(Optional.of(latest));
+        given(messageRepository.countUnreadByMeetingIds(1L, List.of(10L)))
+                .willReturn(List.of(unreadCount(10L, 3L)));
+        given(accessPolicy.canSend(meeting)).willReturn(true);
+
+        var response = chatService.getRoom(1L, 10L);
+
+        assertThat(response.roomId()).isEqualTo(10L);
+        assertThat(response.meetingTitle()).isEqualTo("Weekend running");
+        assertThat(response.lastMessage().id()).isEqualTo(20L);
+        assertThat(response.unreadCount()).isEqualTo(3L);
+        assertThat(response.canSend()).isTrue();
     }
 
     @Test

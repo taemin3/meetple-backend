@@ -8,7 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.meetple.backend.domain.chat.dto.response.ChatMessagePageResponse;
 import com.meetple.backend.domain.chat.dto.response.ChatMessageResponse;
+import com.meetple.backend.domain.chat.dto.response.ChatRoomSummaryResponse;
 import com.meetple.backend.domain.chat.service.ChatService;
+import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.member.entity.MemberRole;
 import com.meetple.backend.global.exception.GlobalExceptionHandler;
 import com.meetple.backend.global.security.AuthenticatedMember;
@@ -67,6 +69,28 @@ class ChatControllerTest {
                 .andExpect(jsonPath("$.data.hasMore").value(true))
                 .andExpect(jsonPath("$.data.oldestSequence").value(7))
                 .andExpect(jsonPath("$.data.latestSequence").value(7));
+    }
+
+    @Test
+    void getRoomReturnsAccessibleRoomSummary() throws Exception {
+        given(chatService.getRoom(1L, 10L)).willReturn(new ChatRoomSummaryResponse(
+                10L,
+                10L,
+                "Weekend running",
+                MeetingStatus.RECRUITING,
+                null,
+                messageResponse(),
+                2L,
+                true
+        ));
+
+        mockMvc.perform(get("/api/v1/chat/rooms/10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.roomId").value(10))
+                .andExpect(jsonPath("$.data.meetingTitle").value("Weekend running"))
+                .andExpect(jsonPath("$.data.unreadCount").value(2))
+                .andExpect(jsonPath("$.data.canSend").value(true));
     }
 
     @Test
