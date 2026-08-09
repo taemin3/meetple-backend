@@ -82,21 +82,21 @@ public class PushEventProcessor {
         try {
             return objectMapper.readValue(payload, PushEventEnvelope.class);
         } catch (JsonProcessingException exception) {
-            throw new PushEventProcessingException("Invalid push event JSON.", exception);
+            throw new NonRetryablePushEventException("Invalid push event JSON.", exception);
         }
     }
 
     private void validateEnvelope(PushEventEnvelope envelope) {
         if (envelope.eventId() == null || !StringUtils.hasText(envelope.eventType())) {
-            throw new PushEventProcessingException("Push event metadata is missing.");
+            throw new NonRetryablePushEventException("Push event metadata is missing.");
         }
         if (envelope.schemaVersion() != SUPPORTED_SCHEMA_VERSION) {
-            throw new PushEventProcessingException(
+            throw new NonRetryablePushEventException(
                     "Unsupported push event schema version: " + envelope.schemaVersion()
             );
         }
         if (envelope.data() == null || !envelope.data().isObject()) {
-            throw new PushEventProcessingException("Push event data must be a JSON object.");
+            throw new NonRetryablePushEventException("Push event data must be a JSON object.");
         }
     }
 
@@ -107,7 +107,7 @@ public class PushEventProcessor {
         if (PushEventTopic.CHAT.getValue().equals(topic)) {
             return chatNotificationPlan(envelope);
         }
-        throw new PushEventProcessingException("Unsupported push topic: " + topic);
+        throw new NonRetryablePushEventException("Unsupported push topic: " + topic);
     }
 
     private DispatchPlan generalNotificationPlan(PushEventEnvelope envelope) {
@@ -173,7 +173,7 @@ public class PushEventProcessor {
     private String requiredText(JsonNode data, String fieldName) {
         JsonNode field = data.get(fieldName);
         if (field == null || !field.isTextual() || !StringUtils.hasText(field.textValue())) {
-            throw new PushEventProcessingException(fieldName + " must be a non-blank string.");
+            throw new NonRetryablePushEventException(fieldName + " must be a non-blank string.");
         }
         return field.textValue();
     }
@@ -181,7 +181,7 @@ public class PushEventProcessor {
     private String requiredScalarText(JsonNode data, String fieldName) {
         JsonNode field = data.get(fieldName);
         if (field == null || field.isContainerNode() || !StringUtils.hasText(field.asText())) {
-            throw new PushEventProcessingException(fieldName + " must be a scalar value.");
+            throw new NonRetryablePushEventException(fieldName + " must be a scalar value.");
         }
         return field.asText();
     }
@@ -189,7 +189,7 @@ public class PushEventProcessor {
     private Long requiredLong(JsonNode data, String fieldName) {
         Long value = optionalLong(data, fieldName);
         if (value == null) {
-            throw new PushEventProcessingException(fieldName + " must be an integer.");
+            throw new NonRetryablePushEventException(fieldName + " must be an integer.");
         }
         return value;
     }
@@ -205,12 +205,12 @@ public class PushEventProcessor {
     private Set<Long> requiredLongSet(JsonNode data, String fieldName) {
         JsonNode field = data.get(fieldName);
         if (field == null || !field.isArray() || field.isEmpty()) {
-            throw new PushEventProcessingException(fieldName + " must be a non-empty array.");
+            throw new NonRetryablePushEventException(fieldName + " must be a non-empty array.");
         }
         Set<Long> values = new LinkedHashSet<>();
         field.forEach(value -> {
             if (!value.canConvertToLong()) {
-                throw new PushEventProcessingException(fieldName + " must contain integers only.");
+                throw new NonRetryablePushEventException(fieldName + " must contain integers only.");
             }
             values.add(value.longValue());
         });

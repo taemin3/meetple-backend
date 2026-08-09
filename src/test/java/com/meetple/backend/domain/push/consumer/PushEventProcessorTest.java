@@ -170,7 +170,7 @@ class PushEventProcessorTest {
                 """;
 
         assertThatThrownBy(() -> pushEventProcessor.process(NOTIFICATION_TOPIC, payload))
-                .isInstanceOf(PushEventProcessingException.class)
+                .isInstanceOf(NonRetryablePushEventException.class)
                 .hasMessageContaining("Unsupported push event schema version");
 
         verify(pushDeviceTokenService, never()).findTargets(any());
