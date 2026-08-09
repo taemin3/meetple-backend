@@ -88,6 +88,26 @@ services:
           --topic meetple.push.chat.v1 \
           --partitions "$${KAFKA_PUSH_TOPIC_PARTITIONS}" \
           --replication-factor 1
+        for topic in \
+          meetple.push.notification.v1.retry-0 \
+          meetple.push.notification.v1.retry-1 \
+          meetple.push.notification.v1.retry-2 \
+          meetple.push.notification.v1.retry-3 \
+          meetple.push.notification.v1.dlq \
+          meetple.push.chat.v1.retry-0 \
+          meetple.push.chat.v1.retry-1 \
+          meetple.push.chat.v1.retry-2 \
+          meetple.push.chat.v1.retry-3 \
+          meetple.push.chat.v1.dlq
+        do
+          /opt/kafka/bin/kafka-topics.sh \
+            --bootstrap-server kafka:29092 \
+            --create \
+            --if-not-exists \
+            --topic "$${topic}" \
+            --partitions "$${KAFKA_PUSH_TOPIC_PARTITIONS}" \
+            --replication-factor 1
+        done
     restart: "no"
 
   kafka-connect:

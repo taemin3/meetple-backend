@@ -122,17 +122,13 @@ FCM data에는 `eventId`, `eventType`, `schemaVersion`, `route=MEETING_DETAIL`, 
 
 Kafka offset commit과 FCM 외부 호출은 하나의 원자적 트랜잭션으로 묶을 수 없다. FCM 성공 직후 프로세스가 종료되고 ledger 반영 전에 중단되는 작은 중복 가능 구간은 남는다. `eventId`를 앱에도 전달하므로 5단계에서 앱의 표시 중복 방지 키로 사용한다.
 
-## 현재 실패 처리
+## 8단계 적용 후 실패 처리
 
-Record 단위 ack를 사용한다. 실패하면 동일 Kafka 레코드를 1초 간격으로 두 번 재시도하고, 복구 처리도 실패를 다시 던져 offset이 성공으로 처리되지 않게 한다. 따라서 8단계 전에는 지속적으로 실패하는 이벤트가 해당 partition을 막을 수 있다.
+Record 단위 ack와 비차단 Retry Topic을 사용한다. 일시 오류는 1초, 10초, 100초, 300초 backoff로 재시도하고 최초 소비를 포함해 최대 5번 처리한 뒤 DLQ로 이동한다. 전체 재시도 구간을 5분 claim lease보다 길게 유지해 프로세스 종료나 DB 일시 오류로 claim이 남아도 만료 후 자동 복구할 기회를 보장한다. 잘못된 JSON, 지원하지 않는 schema version과 같은 영구 계약 오류는 재시도 없이 바로 DLQ로 이동한다.
 
-8단계에서는 다음 구조로 교체한다.
+Retry Topic 소비 시에는 레코드의 현재 Topic이 아니라 `kafka_original-topic` 헤더를 이벤트 계약 선택에 사용한다. DLQ에는 원본 Topic, partition, offset과 예외 정보가 헤더로 보존된다.
 
-- 지수 backoff Retry Topic
-- 최대 시도 횟수
-- DLQ와 운영 확인 정보
-- 실패 ledger 재처리
-- Consumer 재시작과 부분 성공 통합 테스트
+상세 Topic 목록, 운영 확인과 재처리 방법은 [8단계 문서](./stage-8-retry-dlq.md)를 따른다.
 
 ## 만료 토큰 정리
 
