@@ -8,6 +8,7 @@ import com.meetple.backend.domain.chat.dto.request.UpdateChatNotificationSetting
 import com.meetple.backend.domain.chat.entity.ChatNotificationSetting;
 import com.meetple.backend.domain.chat.repository.ChatNotificationSettingRepository;
 import com.meetple.backend.domain.meeting.entity.Meeting;
+import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import java.util.List;
@@ -33,6 +34,9 @@ class ChatNotificationSettingServiceTest {
     private ChatAccessPolicy accessPolicy;
 
     @Mock
+    private MeetingRepository meetingRepository;
+
+    @Mock
     private Meeting meeting;
 
     @Mock
@@ -55,7 +59,7 @@ class ChatNotificationSettingServiceTest {
 
     @Test
     void createsDisabledSettingForAccessibleMember() {
-        given(accessPolicy.getAccessibleMeeting(1L, 10L)).willReturn(meeting);
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
         given(settingRepository.findByMeetingIdAndMemberId(10L, 1L))
                 .willReturn(Optional.empty());
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
@@ -73,6 +77,7 @@ class ChatNotificationSettingServiceTest {
         assertThat(captor.getValue().getMember()).isSameAs(member);
         assertThat(captor.getValue().isEnabled()).isFalse();
         assertThat(response.enabled()).isFalse();
+        verify(accessPolicy).ensureCanAccess(1L, meeting);
     }
 
     @Test

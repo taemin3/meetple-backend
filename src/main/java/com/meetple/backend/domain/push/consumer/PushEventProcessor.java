@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.chat.service.ChatNotificationSettingService;
 import com.meetple.backend.domain.push.delivery.PushDeliveryClaim;
 import com.meetple.backend.domain.push.delivery.PushDeliveryService;
+import com.meetple.backend.domain.push.delivery.PushEventRecipientDecisionService;
 import com.meetple.backend.domain.push.event.PushEventEnvelope;
 import com.meetple.backend.domain.push.event.PushEventTopic;
 import com.meetple.backend.domain.push.fcm.PushMessage;
@@ -38,6 +39,7 @@ public class PushEventProcessor {
     private final PushDeliveryService pushDeliveryService;
     private final PushMessageSender pushMessageSender;
     private final ChatNotificationSettingService chatNotificationSettingService;
+    private final PushEventRecipientDecisionService recipientDecisionService;
 
     public void process(String topic, String payload) {
         PushEventEnvelope envelope = parseEnvelope(payload);
@@ -137,8 +139,13 @@ public class PushEventProcessor {
         }
 
         Long roomId = requiredLong(data, "roomId");
-        List<Long> enabledRecipientMemberIds = chatNotificationSettingService
+        List<Long> currentlyEnabledRecipientMemberIds = chatNotificationSettingService
                 .filterPushEnabledRecipients(roomId, recipientMemberIds);
+        List<Long> enabledRecipientMemberIds = recipientDecisionService.resolveEnabledRecipients(
+                envelope.eventId(),
+                recipientMemberIds,
+                currentlyEnabledRecipientMemberIds
+        );
         String title = requiredText(data, "title");
         String body = requiredBody(data);
         Map<String, String> messageData = baseMessageData(envelope, "CHAT_ROOM");

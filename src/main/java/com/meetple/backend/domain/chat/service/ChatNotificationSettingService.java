@@ -5,6 +5,7 @@ import com.meetple.backend.domain.chat.dto.response.ChatNotificationSettingRespo
 import com.meetple.backend.domain.chat.entity.ChatNotificationSetting;
 import com.meetple.backend.domain.chat.repository.ChatNotificationSettingRepository;
 import com.meetple.backend.domain.meeting.entity.Meeting;
+import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.global.exception.NotFoundException;
@@ -23,6 +24,7 @@ public class ChatNotificationSettingService {
     private final ChatNotificationSettingRepository settingRepository;
     private final MemberRepository memberRepository;
     private final ChatAccessPolicy accessPolicy;
+    private final MeetingRepository meetingRepository;
 
     public ChatNotificationSettingResponse get(Long memberId, Long meetingId) {
         accessPolicy.getAccessibleMeeting(memberId, meetingId);
@@ -38,7 +40,9 @@ public class ChatNotificationSettingService {
             Long meetingId,
             UpdateChatNotificationSettingRequest request
     ) {
-        Meeting meeting = accessPolicy.getAccessibleMeeting(memberId, meetingId);
+        Meeting meeting = meetingRepository.findByIdForUpdate(meetingId)
+                .orElseThrow(() -> new NotFoundException("모임을 찾을 수 없습니다."));
+        accessPolicy.ensureCanAccess(memberId, meeting);
         ChatNotificationSetting setting = settingRepository
                 .findByMeetingIdAndMemberId(meetingId, memberId)
                 .orElseGet(() -> ChatNotificationSetting.create(

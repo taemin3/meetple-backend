@@ -27,8 +27,10 @@
 ## 변경 파일 요약
 
 - `domain/chat`: 알림 설정 엔티티, repository, service, DTO, API 추가
-- `domain/push/consumer/PushEventProcessor`: 채팅 수신자 설정 필터 추가
+- `domain/push/consumer/PushEventProcessor`: 채팅 수신자 설정 필터와 이벤트별 수신 결정 스냅샷 추가
+- `domain/push/delivery`: 재시도에서도 유지되는 회원별 수신 결정 저장 추가
 - `db/migration/V5__create_chat_notification_settings.sql`: 운영 스키마 추가
+- `db/migration/V6__create_push_event_recipient_decisions.sql`: 이벤트 수신 결정 스키마 추가
 - 관련 controller/service/consumer/migration 테스트 추가 및 갱신
 
 ## 검증
@@ -39,13 +41,15 @@
 
 결과:
 
-- 전체 276개 테스트 통과
+- 전체 279개 테스트 통과
 
 ## 이슈와 결정
 
 - 설정 행이 없으면 기존 사용자 동작을 보존하기 위해 알림을 켠 상태로 간주한다.
 - 설정은 계정·채팅방 단위이므로 여러 기기에서 동일하게 적용된다.
 - Redis 실시간 채팅 전달과 Outbox/Kafka 이벤트 생성은 유지하고 FCM 대상만 제외한다.
+- 최초 설정 생성은 채팅방 행을 잠가 동시 PATCH의 unique 충돌을 방지한다.
+- 최초 이벤트 처리 시 회원별 수신 여부를 저장해 재시도 전에 설정이 바뀌어도 과거 푸시 대상이 달라지지 않게 한다.
 
 ## 후속 작업
 
