@@ -1,10 +1,13 @@
 package com.meetple.backend.domain.chat.controller;
 
 import com.meetple.backend.domain.chat.dto.request.MarkChatRoomReadRequest;
+import com.meetple.backend.domain.chat.dto.request.UpdateChatNotificationSettingRequest;
 import com.meetple.backend.domain.chat.dto.response.ChatMessagePageResponse;
+import com.meetple.backend.domain.chat.dto.response.ChatNotificationSettingResponse;
 import com.meetple.backend.domain.chat.dto.response.ChatReadStateResponse;
 import com.meetple.backend.domain.chat.dto.response.ChatRoomSummaryResponse;
 import com.meetple.backend.domain.chat.service.ChatService;
+import com.meetple.backend.domain.chat.service.ChatNotificationSettingService;
 import com.meetple.backend.global.config.OpenApiConfig;
 import com.meetple.backend.global.response.ApiResponse;
 import com.meetple.backend.global.response.PageResponse;
@@ -38,6 +41,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ChatController {
 
     private final ChatService chatService;
+    private final ChatNotificationSettingService notificationSettingService;
 
     @GetMapping
     @Operation(summary = "내 채팅방 목록 조회")
@@ -95,6 +99,31 @@ public class ChatController {
         return ApiResponse.success(
                 SuccessStatus.OK,
                 chatService.markRead(authenticatedMember.id(), roomId, request)
+        );
+    }
+
+    @GetMapping("/{roomId}/notification-setting")
+    @Operation(summary = "채팅방 푸시 알림 설정 조회")
+    public ResponseEntity<ApiResponse<ChatNotificationSettingResponse>> getNotificationSetting(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PathVariable Long roomId
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                notificationSettingService.get(authenticatedMember.id(), roomId)
+        );
+    }
+
+    @PatchMapping("/{roomId}/notification-setting")
+    @Operation(summary = "채팅방 푸시 알림 설정 변경")
+    public ResponseEntity<ApiResponse<ChatNotificationSettingResponse>> updateNotificationSetting(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PathVariable Long roomId,
+            @Valid @RequestBody UpdateChatNotificationSettingRequest request
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                notificationSettingService.update(authenticatedMember.id(), roomId, request)
         );
     }
 }

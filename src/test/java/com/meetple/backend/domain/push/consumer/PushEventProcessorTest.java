@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.meetple.backend.domain.chat.service.ChatNotificationSettingService;
 import com.meetple.backend.domain.push.delivery.PushDeliveryService;
 import com.meetple.backend.domain.push.delivery.PushDeliveryClaim;
 import com.meetple.backend.domain.push.fcm.InvalidPushTarget;
@@ -45,6 +46,9 @@ class PushEventProcessorTest {
     @Mock
     private PushMessageSender pushMessageSender;
 
+    @Mock
+    private ChatNotificationSettingService chatNotificationSettingService;
+
     private PushEventProcessor pushEventProcessor;
 
     @BeforeEach
@@ -53,7 +57,8 @@ class PushEventProcessorTest {
                 new ObjectMapper(),
                 pushDeviceTokenService,
                 pushDeliveryService,
-                pushMessageSender
+                pushMessageSender,
+                chatNotificationSettingService
         );
     }
 
@@ -91,6 +96,10 @@ class PushEventProcessorTest {
     void excludesChatSenderAndUsesRoomGroupingKey() {
         UUID eventId = UUID.fromString("22222222-2222-2222-2222-222222222222");
         List<PushDeviceTarget> targets = List.of(new PushDeviceTarget(20L, "token-2"));
+        given(chatNotificationSettingService.filterPushEnabledRecipients(
+                eq(55L),
+                argThat(ids -> ids.size() == 2 && ids.containsAll(List.of(2L, 3L)))
+        )).willReturn(List.of(2L, 3L));
         given(pushDeviceTokenService.findTargets(argThat(ids ->
                 ids.size() == 2 && ids.containsAll(List.of(2L, 3L))
         ))).willReturn(targets);
@@ -110,6 +119,23 @@ class PushEventProcessorTest {
         assertThat(message.data()).containsEntry("route", "CHAT_ROOM");
         assertThat(message.data()).containsEntry("roomId", "55");
         verify(pushDeviceTokenService).removeInvalidTargets(List.of(invalidTarget));
+    }
+
+    @Test
+    void excludesMembersWhoDisabledThisChatRoomPush() {
+        UUID eventId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        given(chatNotificationSettingService.filterPushEnabledRecipients(
+                eq(55L),
+                argThat(ids -> ids.size() == 2 && ids.containsAll(List.of(2L, 3L)))
+        )).willReturn(List.of(3L));
+        given(pushDeviceTokenService.findTargets(List.of(3L))).willReturn(List.of());
+        given(pushDeliveryService.prepare(eventId, List.of()))
+                .willReturn(PushDeliveryClaim.empty());
+
+        pushEventProcessor.process(CHAT_TOPIC, chatPayload(eventId));
+
+        verify(pushDeviceTokenService).findTargets(List.of(3L));
+        verify(pushMessageSender, never()).send(any(), any());
     }
 
     @Test

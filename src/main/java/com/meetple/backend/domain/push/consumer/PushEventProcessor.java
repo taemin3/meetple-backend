@@ -3,8 +3,9 @@ package com.meetple.backend.domain.push.consumer;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.meetple.backend.domain.push.delivery.PushDeliveryService;
+import com.meetple.backend.domain.chat.service.ChatNotificationSettingService;
 import com.meetple.backend.domain.push.delivery.PushDeliveryClaim;
+import com.meetple.backend.domain.push.delivery.PushDeliveryService;
 import com.meetple.backend.domain.push.event.PushEventEnvelope;
 import com.meetple.backend.domain.push.event.PushEventTopic;
 import com.meetple.backend.domain.push.fcm.PushMessage;
@@ -36,6 +37,7 @@ public class PushEventProcessor {
     private final PushDeviceTokenService pushDeviceTokenService;
     private final PushDeliveryService pushDeliveryService;
     private final PushMessageSender pushMessageSender;
+    private final ChatNotificationSettingService chatNotificationSettingService;
 
     public void process(String topic, String payload) {
         PushEventEnvelope envelope = parseEnvelope(payload);
@@ -134,7 +136,9 @@ public class PushEventProcessor {
             recipientMemberIds.remove(senderMemberId);
         }
 
-        String roomId = requiredScalarText(data, "roomId");
+        Long roomId = requiredLong(data, "roomId");
+        List<Long> enabledRecipientMemberIds = chatNotificationSettingService
+                .filterPushEnabledRecipients(roomId, recipientMemberIds);
         String title = requiredText(data, "title");
         String body = requiredBody(data);
         Map<String, String> messageData = baseMessageData(envelope, "CHAT_ROOM");
@@ -146,7 +150,7 @@ public class PushEventProcessor {
 
         String groupKey = "chat-room-" + roomId;
         return new DispatchPlan(
-                List.copyOf(recipientMemberIds),
+                enabledRecipientMemberIds,
                 new PushMessage(title, body, messageData, groupKey, groupKey)
         );
     }
@@ -176,14 +180,6 @@ public class PushEventProcessor {
             throw new NonRetryablePushEventException(fieldName + " must be a non-blank string.");
         }
         return field.textValue();
-    }
-
-    private String requiredScalarText(JsonNode data, String fieldName) {
-        JsonNode field = data.get(fieldName);
-        if (field == null || field.isContainerNode() || !StringUtils.hasText(field.asText())) {
-            throw new NonRetryablePushEventException(fieldName + " must be a scalar value.");
-        }
-        return field.asText();
     }
 
     private Long requiredLong(JsonNode data, String fieldName) {

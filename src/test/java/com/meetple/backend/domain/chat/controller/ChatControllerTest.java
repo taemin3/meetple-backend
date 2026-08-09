@@ -2,13 +2,17 @@ package com.meetple.backend.domain.chat.controller;
 
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.meetple.backend.domain.chat.dto.response.ChatMessagePageResponse;
 import com.meetple.backend.domain.chat.dto.response.ChatMessageResponse;
+import com.meetple.backend.domain.chat.dto.response.ChatNotificationSettingResponse;
 import com.meetple.backend.domain.chat.dto.response.ChatRoomSummaryResponse;
+import com.meetple.backend.domain.chat.dto.request.UpdateChatNotificationSettingRequest;
+import com.meetple.backend.domain.chat.service.ChatNotificationSettingService;
 import com.meetple.backend.domain.chat.service.ChatService;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.member.entity.MemberRole;
@@ -28,6 +32,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.http.MediaType;
 
 @ExtendWith(MockitoExtension.class)
 class ChatControllerTest {
@@ -35,11 +40,17 @@ class ChatControllerTest {
     @Mock
     private ChatService chatService;
 
+    @Mock
+    private ChatNotificationSettingService notificationSettingService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new ChatController(chatService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new ChatController(
+                        chatService,
+                        notificationSettingService
+                ))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -97,6 +108,41 @@ class ChatControllerTest {
     void sendMessageIsNotExposedAsRestEndpoint() throws Exception {
         mockMvc.perform(post("/api/v1/chat/rooms/10/messages"))
                 .andExpect(status().isMethodNotAllowed());
+    }
+
+    @Test
+    void getsChatNotificationSetting() throws Exception {
+        given(notificationSettingService.get(1L, 10L))
+                .willReturn(new ChatNotificationSettingResponse(10L, true));
+
+        mockMvc.perform(get("/api/v1/chat/rooms/10/notification-setting"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.roomId").value(10))
+                .andExpect(jsonPath("$.data.enabled").value(true));
+    }
+
+    @Test
+    void updatesChatNotificationSetting() throws Exception {
+        given(notificationSettingService.update(
+                1L,
+                10L,
+                new UpdateChatNotificationSettingRequest(false)
+        )).willReturn(new ChatNotificationSettingResponse(10L, false));
+
+        mockMvc.perform(patch("/api/v1/chat/rooms/10/notification-setting")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"enabled\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.roomId").value(10))
+                .andExpect(jsonPath("$.data.enabled").value(false));
+    }
+
+    @Test
+    void rejectsMissingChatNotificationSettingValue() throws Exception {
+        mockMvc.perform(patch("/api/v1/chat/rooms/10/notification-setting")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
     }
 
     private ChatMessageResponse messageResponse() {
