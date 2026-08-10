@@ -89,6 +89,52 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                     from meetings m
                     join categories c on c.id = m.category_id
                     where m.status = :status
+                      and (
+                            lower(m.title) like :keywordPattern
+                            or lower(m.location_name) like :keywordPattern
+                            or lower(m.address) like :keywordPattern
+                            or lower(c.name) like :keywordPattern
+                          )
+                      and (:categoryName is null or c.name = :categoryName)
+                    order by (:earthRadiusMeters * acos(least(1.0, greatest(-1.0,
+                            cos(radians(:latitude)) * cos(radians(m.latitude))
+                            * cos(radians(m.longitude) - radians(:longitude))
+                            + sin(radians(:latitude)) * sin(radians(m.latitude))
+                          )))) asc,
+                          m.meeting_date asc,
+                          m.id asc
+                    """,
+            countQuery = """
+                    select count(*)
+                    from meetings m
+                    join categories c on c.id = m.category_id
+                    where m.status = :status
+                      and (
+                            lower(m.title) like :keywordPattern
+                            or lower(m.location_name) like :keywordPattern
+                            or lower(m.address) like :keywordPattern
+                            or lower(c.name) like :keywordPattern
+                          )
+                      and (:categoryName is null or c.name = :categoryName)
+                    """,
+            nativeQuery = true
+    )
+    Page<Meeting> searchMeetings(
+            @Param("status") String status,
+            @Param("keywordPattern") String keywordPattern,
+            @Param("categoryName") String categoryName,
+            @Param("latitude") double latitude,
+            @Param("longitude") double longitude,
+            @Param("earthRadiusMeters") double earthRadiusMeters,
+            Pageable pageable
+    );
+
+    @Query(
+            value = """
+                    select m.*
+                    from meetings m
+                    join categories c on c.id = m.category_id
+                    where m.status = :status
                       and m.latitude between :minLatitude and :maxLatitude
                       and (
                             (:crossesAntimeridian = false and m.longitude between :minLongitude and :maxLongitude)

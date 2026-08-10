@@ -75,6 +75,21 @@ class MeetingRequestValidationTest {
     }
 
     @Test
+    void meetingSearchRequestRejectsBlankKeywordAndInvalidCoordinates() {
+        MeetingSearchRequest request = new MeetingSearchRequest(" ", null, 91.0, 181.0);
+
+        Set<ConstraintViolation<MeetingSearchRequest>> violations = validator.validate(request);
+
+        assertThat(violations)
+                .extracting(ConstraintViolation::getMessage)
+                .contains(
+                        "검색어를 입력해주세요.",
+                        "위도는 90 이하여야 합니다.",
+                        "경도는 180 이하여야 합니다."
+                );
+    }
+
+    @Test
     void createMeetingParticipationRequestAcceptsBlankMessageBecauseItIsOptional() {
         CreateMeetingParticipationRequest request = new CreateMeetingParticipationRequest("");
 

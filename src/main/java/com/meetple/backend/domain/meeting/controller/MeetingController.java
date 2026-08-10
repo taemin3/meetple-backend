@@ -2,6 +2,7 @@ package com.meetple.backend.domain.meeting.controller;
 
 import com.meetple.backend.domain.meeting.dto.request.CancelMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
+import com.meetple.backend.domain.meeting.dto.request.MeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
@@ -61,6 +62,19 @@ public class MeetingController {
             @PageableDefault(size = 20, sort = "meetingDate", direction = Sort.Direction.ASC) Pageable pageable
     ) {
         return ApiResponse.success(SuccessStatus.OK, meetingService.getMeetings(status, pageable));
+    }
+
+    @GetMapping("/search")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(
+            summary = "전체 모임 검색",
+            description = "전체 모집 중인 모임을 검색하고 요청 위치에서 가까운 순으로 조회합니다."
+    )
+    public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> searchMeetings(
+            @Valid @ModelAttribute MeetingSearchRequest request,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        return ApiResponse.success(SuccessStatus.OK, meetingService.searchMeetings(request, pageable));
     }
 
     @GetMapping("/nearby")

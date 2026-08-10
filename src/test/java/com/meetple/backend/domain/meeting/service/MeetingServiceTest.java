@@ -14,6 +14,7 @@ import static org.mockito.Mockito.verify;
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
+import com.meetple.backend.domain.meeting.dto.request.MeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
@@ -295,6 +296,45 @@ class MeetingServiceTest {
         assertThat(response.totalElements()).isEqualTo(1);
         assertThat(response.content()).extracting(MeetingResponse::title)
                 .containsExactly("Weekend running");
+    }
+
+    @Test
+    void searchMeetingsNormalizesFiltersAndUsesDistanceOrderQuery() {
+        Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
+        MeetingSearchRequest request = new MeetingSearchRequest(
+                "  RUNNING  ",
+                " exercise ",
+                37.5219,
+                126.9245
+        );
+        PageRequest requestedPage = PageRequest.of(1, 10, Sort.by("title"));
+        PageRequest repositoryPage = PageRequest.of(1, 10);
+        given(meetingRepository.searchMeetings(
+                MeetingStatus.RECRUITING.name(),
+                "%running%",
+                "exercise",
+                37.5219,
+                126.9245,
+                6_371_000.0,
+                repositoryPage
+        )).willReturn(new PageImpl<>(List.of(meeting), repositoryPage, 11));
+
+        PageResponse<MeetingResponse> response = meetingService.searchMeetings(request, requestedPage);
+
+        assertThat(response.page()).isEqualTo(1);
+        assertThat(response.size()).isEqualTo(10);
+        assertThat(response.totalElements()).isEqualTo(11);
+        assertThat(response.content()).extracting(MeetingResponse::title)
+                .containsExactly("Weekend running");
+        verify(meetingRepository).searchMeetings(
+                MeetingStatus.RECRUITING.name(),
+                "%running%",
+                "exercise",
+                37.5219,
+                126.9245,
+                6_371_000.0,
+                repositoryPage
+        );
     }
 
     @Test

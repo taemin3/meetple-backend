@@ -133,6 +133,69 @@ class MeetingRepositoryTest {
     }
 
     @Test
+    void searchMeetingsReturnsGlobalKeywordMatchesInDistanceOrder() {
+        Member host = memberRepository.save(Member.createUser(
+                "search-host@meetple.com",
+                "encoded-password",
+                "host",
+                "Seoul"
+        ));
+        Category exercise = categoryRepository.save(Category.create("exercise"));
+        Category study = categoryRepository.save(Category.create("study"));
+        Meeting nearby = meetingRepository.save(createMeeting(
+                host,
+                exercise,
+                "Nearby running",
+                new BigDecimal("37.521900"),
+                new BigDecimal("126.924500")
+        ));
+        Meeting farAway = meetingRepository.save(createMeeting(
+                host,
+                exercise,
+                "Busan running",
+                new BigDecimal("35.179600"),
+                new BigDecimal("129.075600")
+        ));
+        meetingRepository.save(createMeeting(
+                host,
+                exercise,
+                "Nearby board game",
+                new BigDecimal("37.520000"),
+                new BigDecimal("126.924500")
+        ));
+        meetingRepository.save(createMeeting(
+                host,
+                study,
+                "Closer running study",
+                new BigDecimal("37.521000"),
+                new BigDecimal("126.924500")
+        ));
+        Meeting completed = meetingRepository.save(createMeeting(
+                host,
+                exercise,
+                "Completed running",
+                new BigDecimal("37.521500"),
+                new BigDecimal("126.924500")
+        ));
+        completed.complete();
+        meetingRepository.flush();
+
+        Page<Meeting> result = meetingRepository.searchMeetings(
+                MeetingStatus.RECRUITING.name(),
+                "%running%",
+                "exercise",
+                37.5219,
+                126.9245,
+                6371000.0,
+                PageRequest.of(0, 20)
+        );
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent()).extracting(Meeting::getId)
+                .containsExactly(nearby.getId(), farAway.getId());
+    }
+
+    @Test
     void participationStatusTransitions() {
         Member host = memberRepository.save(Member.createUser(
                 "host@meetple.com",

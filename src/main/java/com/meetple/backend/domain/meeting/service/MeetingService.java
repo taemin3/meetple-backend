@@ -3,6 +3,7 @@ package com.meetple.backend.domain.meeting.service;
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
+import com.meetple.backend.domain.meeting.dto.request.MeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
@@ -138,6 +139,20 @@ public class MeetingService {
                         EARTH_RADIUS_METERS,
                         withoutSort(pageable)
                 );
+        return PageResponse.from(toResponsePage(page));
+    }
+
+    public PageResponse<MeetingResponse> searchMeetings(MeetingSearchRequest request, Pageable pageable) {
+        String keywordPattern = "%" + request.keyword().trim().toLowerCase(Locale.ROOT) + "%";
+        Page<Meeting> page = meetingRepository.searchMeetings(
+                MeetingStatus.RECRUITING.name(),
+                keywordPattern,
+                normalizeOptionalText(request.category()),
+                request.latitude(),
+                request.longitude(),
+                EARTH_RADIUS_METERS,
+                withoutSort(pageable)
+        );
         return PageResponse.from(toResponsePage(page));
     }
 
