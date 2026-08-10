@@ -3,6 +3,7 @@ package com.meetple.backend.domain.meeting.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -13,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
+import com.meetple.backend.domain.meeting.dto.request.MeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
@@ -118,6 +120,45 @@ class MeetingControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("지원하지 않는 모임 상태입니다."));
+    }
+
+    @Test
+    void searchMeetingsReturnsPagedApiResponse() throws Exception {
+        MeetingSearchRequest request = new MeetingSearchRequest(
+                "러닝",
+                "exercise",
+                37.5219,
+                126.9245
+        );
+        given(meetingService.searchMeetings(eq(request), eq(PageRequest.of(0, 20))))
+                .willReturn(PageResponse.from(new org.springframework.data.domain.PageImpl<>(
+                        List.of(meetingResponse()),
+                        PageRequest.of(0, 20),
+                        1
+                )));
+
+        mockMvc.perform(get("/api/v1/meetings/search")
+                        .param("keyword", "러닝")
+                        .param("category", "exercise")
+                        .param("latitude", "37.5219")
+                        .param("longitude", "126.9245"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].id").value(10))
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+
+        verify(meetingService).searchMeetings(request, PageRequest.of(0, 20));
+    }
+
+    @Test
+    void searchMeetingsReturnsBadRequestForBlankKeyword() throws Exception {
+        mockMvc.perform(get("/api/v1/meetings/search")
+                        .param("keyword", " ")
+                        .param("latitude", "37.5219")
+                        .param("longitude", "126.9245"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+
+        verify(meetingService, never()).searchMeetings(any(), any());
     }
 
     @Test
