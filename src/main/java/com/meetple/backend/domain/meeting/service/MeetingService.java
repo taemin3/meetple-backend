@@ -31,10 +31,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -143,17 +145,16 @@ public class MeetingService {
     }
 
     public PageResponse<MeetingResponse> searchMeetings(MeetingSearchRequest request, Pageable pageable) {
-        String keywordPattern = "%" + request.keyword().trim().toLowerCase(Locale.ROOT) + "%";
-        Page<Meeting> page = meetingRepository.searchMeetings(
+        Page<Long> meetingIds = meetingRepository.searchMeetingIds(
                 MeetingStatus.RECRUITING.name(),
-                keywordPattern,
+                toLiteralLikePattern(request.keyword()),
                 normalizeOptionalText(request.category()),
                 request.latitude(),
                 request.longitude(),
                 EARTH_RADIUS_METERS,
                 withoutSort(pageable)
         );
-        return PageResponse.from(toResponsePage(page));
+        return PageResponse.from(toResponsePage(loadSearchMeetings(meetingIds)));
     }
 
     public MeetingResponse getMeeting(Long meetingId) {
@@ -319,6 +320,21 @@ public class MeetingService {
         return imageUrlsByMeetingId;
     }
 
+    private Page<Meeting> loadSearchMeetings(Page<Long> meetingIds) {
+        if (meetingIds.isEmpty()) {
+            return new PageImpl<>(List.of(), meetingIds.getPageable(), meetingIds.getTotalElements());
+        }
+
+        Map<Long, Meeting> meetingsById = new HashMap<>();
+        meetingRepository.findAllWithHostAndCategoryByIdIn(meetingIds.getContent())
+                .forEach(meeting -> meetingsById.put(meeting.getId(), meeting));
+        List<Meeting> orderedMeetings = meetingIds.getContent().stream()
+                .map(meetingsById::get)
+                .filter(Objects::nonNull)
+                .toList();
+        return new PageImpl<>(orderedMeetings, meetingIds.getPageable(), meetingIds.getTotalElements());
+    }
+
     private List<String> normalizeImageUrls(List<String> imageUrls) {
         if (imageUrls == null) {
             return List.of();
@@ -438,6 +454,15 @@ public class MeetingService {
 
     private String normalizeOptionalText(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private String toLiteralLikePattern(String value) {
+        String escaped = value.trim()
+                .toLowerCase(Locale.ROOT)
+                .replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
+        return "%" + escaped + "%";
     }
 
     private BigDecimal toBigDecimal(Double value) {

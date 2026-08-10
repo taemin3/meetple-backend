@@ -11,11 +11,13 @@ import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.hibernate.Hibernate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -39,6 +41,9 @@ class MeetingRepositoryTest {
 
     @Autowired
     private MeetingParticipationRepository participationRepository;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Test
     void saveMeetingWithHostAndCategory() {
@@ -145,44 +150,45 @@ class MeetingRepositoryTest {
         Meeting nearby = meetingRepository.save(createMeeting(
                 host,
                 exercise,
-                "Nearby running",
+                "Nearby 100% running",
                 new BigDecimal("37.521900"),
                 new BigDecimal("126.924500")
         ));
         Meeting farAway = meetingRepository.save(createMeeting(
                 host,
                 exercise,
-                "Busan running",
+                "Busan 100% running",
                 new BigDecimal("35.179600"),
                 new BigDecimal("129.075600")
         ));
         meetingRepository.save(createMeeting(
                 host,
                 exercise,
-                "Nearby board game",
+                "Nearby 1000 running",
                 new BigDecimal("37.520000"),
                 new BigDecimal("126.924500")
         ));
         meetingRepository.save(createMeeting(
                 host,
                 study,
-                "Closer running study",
+                "Closer 100% running study",
                 new BigDecimal("37.521000"),
                 new BigDecimal("126.924500")
         ));
         Meeting completed = meetingRepository.save(createMeeting(
                 host,
                 exercise,
-                "Completed running",
+                "Completed 100% running",
                 new BigDecimal("37.521500"),
                 new BigDecimal("126.924500")
         ));
         completed.complete();
         meetingRepository.flush();
+        entityManager.clear();
 
-        Page<Meeting> result = meetingRepository.searchMeetings(
+        Page<Long> result = meetingRepository.searchMeetingIds(
                 MeetingStatus.RECRUITING.name(),
-                "%running%",
+                "%100!% running%",
                 "exercise",
                 37.5219,
                 126.9245,
@@ -191,8 +197,13 @@ class MeetingRepositoryTest {
         );
 
         assertThat(result.getTotalElements()).isEqualTo(2);
-        assertThat(result.getContent()).extracting(Meeting::getId)
-                .containsExactly(nearby.getId(), farAway.getId());
+        assertThat(result.getContent()).containsExactly(nearby.getId(), farAway.getId());
+
+        List<Meeting> meetings = meetingRepository.findAllWithHostAndCategoryByIdIn(result.getContent());
+        assertThat(meetings).allSatisfy(meeting -> {
+            assertThat(Hibernate.isInitialized(meeting.getHost())).isTrue();
+            assertThat(Hibernate.isInitialized(meeting.getCategory())).isTrue();
+        });
     }
 
     @Test

@@ -299,25 +299,27 @@ class MeetingServiceTest {
     }
 
     @Test
-    void searchMeetingsNormalizesFiltersAndUsesDistanceOrderQuery() {
+    void searchMeetingsEscapesLikeCharactersAndLoadsAssociationsInBulk() {
         Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
         MeetingSearchRequest request = new MeetingSearchRequest(
-                "  RUNNING  ",
+                "  100%_RUN!  ",
                 " exercise ",
                 37.5219,
                 126.9245
         );
         PageRequest requestedPage = PageRequest.of(1, 10, Sort.by("title"));
         PageRequest repositoryPage = PageRequest.of(1, 10);
-        given(meetingRepository.searchMeetings(
+        given(meetingRepository.searchMeetingIds(
                 MeetingStatus.RECRUITING.name(),
-                "%running%",
+                "%100!%!_run!!%",
                 "exercise",
                 37.5219,
                 126.9245,
                 6_371_000.0,
                 repositoryPage
-        )).willReturn(new PageImpl<>(List.of(meeting), repositoryPage, 11));
+        )).willReturn(new PageImpl<>(List.of(10L), repositoryPage, 11));
+        given(meetingRepository.findAllWithHostAndCategoryByIdIn(List.of(10L)))
+                .willReturn(List.of(meeting));
 
         PageResponse<MeetingResponse> response = meetingService.searchMeetings(request, requestedPage);
 
@@ -326,15 +328,16 @@ class MeetingServiceTest {
         assertThat(response.totalElements()).isEqualTo(11);
         assertThat(response.content()).extracting(MeetingResponse::title)
                 .containsExactly("Weekend running");
-        verify(meetingRepository).searchMeetings(
+        verify(meetingRepository).searchMeetingIds(
                 MeetingStatus.RECRUITING.name(),
-                "%running%",
+                "%100!%!_run!!%",
                 "exercise",
                 37.5219,
                 126.9245,
                 6_371_000.0,
                 repositoryPage
         );
+        verify(meetingRepository).findAllWithHostAndCategoryByIdIn(List.of(10L));
     }
 
     @Test

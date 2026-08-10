@@ -4,6 +4,7 @@ import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -83,17 +84,21 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
     @Query("select m from Meeting m where m.id = :meetingId")
     Optional<Meeting> findByIdForUpdate(@Param("meetingId") Long meetingId);
 
+    @EntityGraph(attributePaths = {"host", "category"})
+    @Query("select m from Meeting m where m.id in :meetingIds")
+    List<Meeting> findAllWithHostAndCategoryByIdIn(@Param("meetingIds") Collection<Long> meetingIds);
+
     @Query(
             value = """
-                    select m.*
+                    select m.id
                     from meetings m
                     join categories c on c.id = m.category_id
                     where m.status = :status
                       and (
-                            lower(m.title) like :keywordPattern
-                            or lower(m.location_name) like :keywordPattern
-                            or lower(m.address) like :keywordPattern
-                            or lower(c.name) like :keywordPattern
+                            lower(m.title) like :keywordPattern escape '!'
+                            or lower(m.location_name) like :keywordPattern escape '!'
+                            or lower(m.address) like :keywordPattern escape '!'
+                            or lower(c.name) like :keywordPattern escape '!'
                           )
                       and (:categoryName is null or c.name = :categoryName)
                     order by (:earthRadiusMeters * acos(least(1.0, greatest(-1.0,
@@ -110,16 +115,16 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                     join categories c on c.id = m.category_id
                     where m.status = :status
                       and (
-                            lower(m.title) like :keywordPattern
-                            or lower(m.location_name) like :keywordPattern
-                            or lower(m.address) like :keywordPattern
-                            or lower(c.name) like :keywordPattern
+                            lower(m.title) like :keywordPattern escape '!'
+                            or lower(m.location_name) like :keywordPattern escape '!'
+                            or lower(m.address) like :keywordPattern escape '!'
+                            or lower(c.name) like :keywordPattern escape '!'
                           )
                       and (:categoryName is null or c.name = :categoryName)
                     """,
             nativeQuery = true
     )
-    Page<Meeting> searchMeetings(
+    Page<Long> searchMeetingIds(
             @Param("status") String status,
             @Param("keywordPattern") String keywordPattern,
             @Param("categoryName") String categoryName,
