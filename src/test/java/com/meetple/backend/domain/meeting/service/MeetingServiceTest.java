@@ -206,11 +206,10 @@ class MeetingServiceTest {
     }
 
     @Test
-    void updateMeetingClearsEndTimeWhenScheduleIsSubmittedWithoutEndTime() {
+    void updateMeetingClearsEndTimeWhenExplicitNullIsSubmittedWithoutSchedule() {
         Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
         ReflectionTestUtils.setField(meeting, "endDate", meeting.getMeetingDate().plusHours(2));
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
-        LocalDateTime updatedSchedule = meeting.getMeetingDate().plusHours(1);
         UpdateMeetingRequest request = new UpdateMeetingRequest(
                 null,
                 null,
@@ -218,7 +217,7 @@ class MeetingServiceTest {
                 null,
                 null,
                 null,
-                updatedSchedule,
+                null,
                 null,
                 null,
                 null,
@@ -227,8 +226,32 @@ class MeetingServiceTest {
 
         MeetingResponse response = meetingService.updateMeeting(1L, 10L, request);
 
-        assertThat(response.scheduledAt()).isEqualTo(updatedSchedule);
+        assertThat(response.scheduledAt()).isEqualTo(meeting.getMeetingDate());
         assertThat(response.endsAt()).isNull();
+    }
+
+    @Test
+    void updateMeetingPreservesEndTimeWhenFieldIsOmitted() {
+        Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
+        LocalDateTime existingEndDate = meeting.getMeetingDate().plusHours(2);
+        ReflectionTestUtils.setField(meeting, "endDate", existingEndDate);
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        UpdateMeetingRequest request = new UpdateMeetingRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        MeetingResponse response = meetingService.updateMeeting(1L, 10L, request);
+
+        assertThat(response.endsAt()).isEqualTo(existingEndDate);
     }
 
     @Test

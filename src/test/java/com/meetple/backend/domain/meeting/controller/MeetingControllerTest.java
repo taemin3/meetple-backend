@@ -1,5 +1,6 @@
 package com.meetple.backend.domain.meeting.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
@@ -207,24 +209,35 @@ class MeetingControllerTest {
         given(meetingService.updateMeeting(eq(1L), eq(10L), any(UpdateMeetingRequest.class)))
                 .willReturn(meetingResponse());
 
-        UpdateMeetingRequest request = new UpdateMeetingRequest(
-                "Updated title",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        );
+        mockMvc.perform(patch("/api/v1/meetings/10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Updated title"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(10));
+
+        ArgumentCaptor<UpdateMeetingRequest> requestCaptor = ArgumentCaptor.forClass(UpdateMeetingRequest.class);
+        verify(meetingService).updateMeeting(eq(1L), eq(10L), requestCaptor.capture());
+        assertThat(requestCaptor.getValue().isEndsAtProvided()).isFalse();
+    }
+
+    @Test
+    void updateMeetingDistinguishesExplicitNullEndTime() throws Exception {
+        given(meetingService.updateMeeting(eq(1L), eq(10L), any(UpdateMeetingRequest.class)))
+                .willReturn(meetingResponse());
 
         mockMvc.perform(patch("/api/v1/meetings/10")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").value(10));
+                        .content("""
+                                {"endsAt":null}
+                                """))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<UpdateMeetingRequest> requestCaptor = ArgumentCaptor.forClass(UpdateMeetingRequest.class);
+        verify(meetingService).updateMeeting(eq(1L), eq(10L), requestCaptor.capture());
+        assertThat(requestCaptor.getValue().isEndsAtProvided()).isTrue();
+        assertThat(requestCaptor.getValue().getEndsAt()).isNull();
     }
 
     @Test

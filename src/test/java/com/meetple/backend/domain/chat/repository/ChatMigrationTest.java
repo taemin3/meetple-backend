@@ -15,7 +15,19 @@ class ChatMigrationTest {
         try (var connection = DriverManager.getConnection(url, "sa", "");
              var statement = connection.createStatement()) {
             statement.execute("create table members (id bigint primary key)");
-            statement.execute("create table meetings (id bigint primary key)");
+            statement.execute("""
+                    create table meetings (
+                        id bigint primary key,
+                        meeting_date timestamp not null,
+                        end_date timestamp null
+                    )
+                    """);
+            statement.execute("""
+                    insert into meetings (id, meeting_date, end_date)
+                    values
+                        (1, timestamp '2026-08-20 14:00:00', null),
+                        (2, timestamp '2026-08-20 14:00:00', timestamp '2026-08-20 18:00:00')
+                    """);
         }
 
         Flyway flyway = Flyway.configure()
@@ -27,7 +39,7 @@ class ChatMigrationTest {
 
         var result = flyway.migrate();
 
-        assertThat(result.migrationsExecuted).isEqualTo(5);
+        assertThat(result.migrationsExecuted).isEqualTo(6);
         try (var connection = DriverManager.getConnection(url, "sa", "")) {
             assertThat(tableExists(connection, "CHAT_MESSAGES")).isTrue();
             assertThat(tableExists(connection, "CHAT_READ_STATES")).isTrue();
@@ -41,6 +53,18 @@ class ChatMigrationTest {
                     .isEqualTo("UUID");
             assertThat(columnDataType(connection, "PUSH_EVENT_DELIVERIES", "CLAIMED_UNTIL"))
                     .isEqualTo(Types.TIMESTAMP);
+            try (var statement = connection.createStatement();
+                 var resultSet = statement.executeQuery("select end_date from meetings where id = 1")) {
+                assertThat(resultSet.next()).isTrue();
+                assertThat(resultSet.getTimestamp("end_date").toLocalDateTime())
+                        .isEqualTo(java.time.LocalDateTime.of(2026, 8, 20, 16, 0));
+            }
+            try (var statement = connection.createStatement();
+                 var resultSet = statement.executeQuery("select end_date from meetings where id = 2")) {
+                assertThat(resultSet.next()).isTrue();
+                assertThat(resultSet.getTimestamp("end_date").toLocalDateTime())
+                        .isEqualTo(java.time.LocalDateTime.of(2026, 8, 20, 18, 0));
+            }
         }
     }
 

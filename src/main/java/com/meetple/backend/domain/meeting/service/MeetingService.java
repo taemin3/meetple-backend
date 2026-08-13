@@ -168,31 +168,31 @@ public class MeetingService {
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
 
-        Category category = request.category() == null
+        Category category = request.getCategory() == null
                 ? meeting.getCategory()
-                : getCategory(request.category());
-        Integer capacity = request.capacity() == null
+                : getCategory(request.getCategory());
+        Integer capacity = request.getCapacity() == null
                 ? meeting.getMaxPeople()
-                : request.capacity();
+                : request.getCapacity();
         if (capacity < meeting.getCurrentPeople()) {
             throw new BadRequestException(CAPACITY_TOO_SMALL_MESSAGE);
         }
 
         meeting.update(
                 category,
-                chooseText(request.title(), meeting.getTitle(), "Title is required."),
-                chooseText(request.description(), meeting.getContent(), "Description is required."),
-                chooseText(request.locationName(), meeting.getLocationName(), "Location name is required."),
-                chooseText(request.address(), meeting.getAddress(), "Address is required."),
-                request.latitude() == null ? meeting.getLatitude() : toBigDecimal(request.latitude()),
-                request.longitude() == null ? meeting.getLongitude() : toBigDecimal(request.longitude()),
+                chooseText(request.getTitle(), meeting.getTitle(), "Title is required."),
+                chooseText(request.getDescription(), meeting.getContent(), "Description is required."),
+                chooseText(request.getLocationName(), meeting.getLocationName(), "Location name is required."),
+                chooseText(request.getAddress(), meeting.getAddress(), "Address is required."),
+                request.getLatitude() == null ? meeting.getLatitude() : toBigDecimal(request.getLatitude()),
+                request.getLongitude() == null ? meeting.getLongitude() : toBigDecimal(request.getLongitude()),
                 capacity,
-                chooseDateTime(request.scheduledAt(), meeting.getMeetingDate()),
+                chooseDateTime(request.getScheduledAt(), meeting.getMeetingDate()),
                 resolveUpdatedEndDate(meeting, request)
         );
 
-        if (request.imageUrls() != null) {
-            List<String> imageUrls = normalizeImageUrls(request.imageUrls());
+        if (request.getImageUrls() != null) {
+            List<String> imageUrls = normalizeImageUrls(request.getImageUrls());
             meeting.changeThumbnailImageUrl(firstImageUrl(imageUrls));
             replaceMeetingImages(meeting, imageUrls);
             return MeetingResponse.from(meeting, imageUrls);
@@ -401,10 +401,10 @@ public class MeetingService {
     }
 
     private LocalDateTime resolveUpdatedEndDate(Meeting meeting, UpdateMeetingRequest request) {
-        LocalDateTime startDate = chooseDateTime(request.scheduledAt(), meeting.getMeetingDate());
-        LocalDateTime endDate = request.scheduledAt() == null && request.endsAt() == null
-                ? meeting.getEndDate()
-                : request.endsAt();
+        LocalDateTime startDate = chooseDateTime(request.getScheduledAt(), meeting.getMeetingDate());
+        LocalDateTime endDate = request.isEndsAtProvided()
+                ? request.getEndsAt()
+                : meeting.getEndDate();
         return validateEndDate(startDate, endDate);
     }
 
