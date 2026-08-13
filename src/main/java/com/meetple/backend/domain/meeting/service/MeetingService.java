@@ -59,6 +59,7 @@ public class MeetingService {
     private static final String INVALID_MEETING_STATUS_MESSAGE = "지원하지 않는 모임 상태입니다.";
     private static final String INVALID_SORT_PROPERTY_MESSAGE = "지원하지 않는 정렬 조건입니다.";
     private static final int NOTIFICATION_MESSAGE_MAX_LENGTH = 500;
+    private static final long UNKNOWN_END_AUTO_COMPLETE_HOURS = 24;
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
     private static final double METERS_PER_LATITUDE_DEGREE = 111_320.0;
     private static final Set<String> ALLOWED_SORT_PROPERTIES = Set.of(
@@ -87,7 +88,7 @@ public class MeetingService {
         Category category = getCategory(request.category());
         List<String> imageUrls = normalizeImageUrls(request.imageUrls());
 
-        LocalDateTime endDate = resolveEndDate(request.scheduledAt(), request.endsAt());
+        LocalDateTime endDate = validateEndDate(request.scheduledAt(), request.endsAt());
         Meeting meeting = Meeting.create(
                 host,
                 category,
@@ -167,31 +168,31 @@ public class MeetingService {
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
 
-        Category category = request.category() == null
+        Category category = request.getCategory() == null
                 ? meeting.getCategory()
-                : getCategory(request.category());
-        Integer capacity = request.capacity() == null
+                : getCategory(request.getCategory());
+        Integer capacity = request.getCapacity() == null
                 ? meeting.getMaxPeople()
-                : request.capacity();
+                : request.getCapacity();
         if (capacity < meeting.getCurrentPeople()) {
             throw new BadRequestException(CAPACITY_TOO_SMALL_MESSAGE);
         }
 
         meeting.update(
                 category,
-                chooseText(request.title(), meeting.getTitle(), "Title is required."),
-                chooseText(request.description(), meeting.getContent(), "Description is required."),
-                chooseText(request.locationName(), meeting.getLocationName(), "Location name is required."),
-                chooseText(request.address(), meeting.getAddress(), "Address is required."),
-                request.latitude() == null ? meeting.getLatitude() : toBigDecimal(request.latitude()),
-                request.longitude() == null ? meeting.getLongitude() : toBigDecimal(request.longitude()),
+                chooseText(request.getTitle(), meeting.getTitle(), "Title is required."),
+                chooseText(request.getDescription(), meeting.getContent(), "Description is required."),
+                chooseText(request.getLocationName(), meeting.getLocationName(), "Location name is required."),
+                chooseText(request.getAddress(), meeting.getAddress(), "Address is required."),
+                request.getLatitude() == null ? meeting.getLatitude() : toBigDecimal(request.getLatitude()),
+                request.getLongitude() == null ? meeting.getLongitude() : toBigDecimal(request.getLongitude()),
                 capacity,
-                chooseDateTime(request.scheduledAt(), meeting.getMeetingDate()),
+                chooseDateTime(request.getScheduledAt(), meeting.getMeetingDate()),
                 resolveUpdatedEndDate(meeting, request)
         );
 
-        if (request.imageUrls() != null) {
-            List<String> imageUrls = normalizeImageUrls(request.imageUrls());
+        if (request.getImageUrls() != null) {
+            List<String> imageUrls = normalizeImageUrls(request.getImageUrls());
             meeting.changeThumbnailImageUrl(firstImageUrl(imageUrls));
             replaceMeetingImages(meeting, imageUrls);
             return MeetingResponse.from(meeting, imageUrls);
@@ -263,7 +264,7 @@ public class MeetingService {
         endedMeetings.addAll(
                 meetingRepository.findByStatusInAndEndDateIsNullAndMeetingDateLessThanEqual(
                         openStatuses,
-                        now.minusHours(2)
+                        now.minusHours(UNKNOWN_END_AUTO_COMPLETE_HOURS)
                 )
         );
         endedMeetings.forEach(Meeting::complete);
@@ -392,23 +393,19 @@ public class MeetingService {
         return value == null ? currentValue : value;
     }
 
-    private LocalDateTime resolveEndDate(LocalDateTime startDate, LocalDateTime requestedEndDate) {
-        LocalDateTime endDate = requestedEndDate == null ? startDate.plusHours(2) : requestedEndDate;
-        if (!endDate.isAfter(startDate)) {
+    private LocalDateTime validateEndDate(LocalDateTime startDate, LocalDateTime endDate) {
+        if (endDate != null && !endDate.isAfter(startDate)) {
             throw new BadRequestException("모임 종료 시각은 시작 시각 이후여야 합니다.");
         }
         return endDate;
     }
 
     private LocalDateTime resolveUpdatedEndDate(Meeting meeting, UpdateMeetingRequest request) {
-        LocalDateTime startDate = chooseDateTime(request.scheduledAt(), meeting.getMeetingDate());
-        LocalDateTime endDate = request.endsAt();
-        if (endDate == null) {
-            endDate = request.scheduledAt() == null && meeting.getEndDate() != null
-                    ? meeting.getEndDate()
-                    : startDate.plusHours(2);
-        }
-        return resolveEndDate(startDate, endDate);
+        LocalDateTime startDate = chooseDateTime(request.getScheduledAt(), meeting.getMeetingDate());
+        LocalDateTime endDate = request.isEndsAtProvided()
+                ? request.getEndsAt()
+                : meeting.getEndDate();
+        return validateEndDate(startDate, endDate);
     }
 
     private String normalizeRequiredText(String value, String message) {

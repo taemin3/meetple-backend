@@ -63,7 +63,7 @@ public record MeetingResponse(
                 latitude,
                 longitude,
                 scheduledAt,
-                scheduledAt == null ? null : scheduledAt.plusHours(2),
+                null,
                 capacity,
                 currentPeople,
                 status,
@@ -94,9 +94,7 @@ public record MeetingResponse(
                 meeting.getLatitude().doubleValue(),
                 meeting.getLongitude().doubleValue(),
                 meeting.getMeetingDate(),
-                meeting.getEndDate() == null
-                        ? meeting.getMeetingDate().plusHours(2)
-                        : meeting.getEndDate(),
+                meeting.getEndDate(),
                 meeting.getMaxPeople(),
                 meeting.getCurrentPeople(),
                 meeting.getStatus(),
