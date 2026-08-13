@@ -107,6 +107,7 @@ class MeetingServiceTest {
         assertThat(response.capacity()).isEqualTo(10);
         assertThat(response.currentPeople()).isEqualTo(1);
         assertThat(response.status()).isEqualTo(MeetingStatus.RECRUITING);
+        assertThat(response.endsAt()).isNull();
         assertThat(response.thumbnailImageUrl()).isEqualTo("https://cdn.meetple.com/images/meeting/1/first.png");
         assertThat(response.imageUrls()).containsExactly(
                 "https://cdn.meetple.com/images/meeting/1/first.png",
@@ -205,6 +206,32 @@ class MeetingServiceTest {
     }
 
     @Test
+    void updateMeetingClearsEndTimeWhenScheduleIsSubmittedWithoutEndTime() {
+        Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
+        ReflectionTestUtils.setField(meeting, "endDate", meeting.getMeetingDate().plusHours(2));
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        LocalDateTime updatedSchedule = meeting.getMeetingDate().plusHours(1);
+        UpdateMeetingRequest request = new UpdateMeetingRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                updatedSchedule,
+                null,
+                null,
+                null,
+                null
+        );
+
+        MeetingResponse response = meetingService.updateMeeting(1L, 10L, request);
+
+        assertThat(response.scheduledAt()).isEqualTo(updatedSchedule);
+        assertThat(response.endsAt()).isNull();
+    }
+
+    @Test
     void updateMeetingRejectsNonHost() {
         Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
@@ -277,6 +304,58 @@ class MeetingServiceTest {
         assertThat(response.content().getFirst().imageUrls()).containsExactly(
                 "https://cdn.meetple.com/images/meeting/10/first.png",
                 "https://cdn.meetple.com/images/meeting/10/second.png"
+        );
+    }
+
+    @Test
+    void createMeetingUsesRequestedEndTime() {
+        Member host = member(1L, "host@meetple.com", "host");
+        Category category = category(1L, "exercise");
+        LocalDateTime scheduledAt = LocalDateTime.now().plusDays(7);
+        LocalDateTime endsAt = scheduledAt.plusHours(3);
+        CreateMeetingRequest request = createRequest(scheduledAt, endsAt);
+
+        given(memberRepository.findById(1L)).willReturn(Optional.of(host));
+        given(categoryRepository.findByName("exercise")).willReturn(Optional.of(category));
+        given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        MeetingResponse response = meetingService.createMeeting(1L, request);
+
+        assertThat(response.endsAt()).isEqualTo(endsAt);
+    }
+
+    @Test
+    void createMeetingRejectsEndTimeNotAfterStart() {
+        Member host = member(1L, "host@meetple.com", "host");
+        Category category = category(1L, "exercise");
+        LocalDateTime scheduledAt = LocalDateTime.now().plusDays(7);
+        CreateMeetingRequest request = createRequest(scheduledAt, scheduledAt);
+
+        given(memberRepository.findById(1L)).willReturn(Optional.of(host));
+        given(categoryRepository.findByName("exercise")).willReturn(Optional.of(category));
+
+        assertThatThrownBy(() -> meetingService.createMeeting(1L, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("모임 종료 시각은 시작 시각 이후여야 합니다.");
+    }
+
+    @Test
+    void completeEndedMeetingsWaitsTwentyFourHoursWhenEndTimeIsUnknown() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 14, 12, 0);
+        List<MeetingStatus> openStatuses = List.of(MeetingStatus.RECRUITING, MeetingStatus.FULL);
+        given(meetingRepository.findByStatusInAndEndDateLessThanEqual(openStatuses, now))
+                .willReturn(List.of());
+        given(meetingRepository.findByStatusInAndEndDateIsNullAndMeetingDateLessThanEqual(
+                openStatuses,
+                now.minusHours(24)
+        )).willReturn(List.of());
+
+        int completedCount = meetingService.completeEndedMeetings(now);
+
+        assertThat(completedCount).isZero();
+        verify(meetingRepository).findByStatusInAndEndDateIsNullAndMeetingDateLessThanEqual(
+                openStatuses,
+                now.minusHours(24)
         );
     }
 
@@ -408,6 +487,22 @@ class MeetingServiceTest {
                 10,
                 "Run together at an easy pace.",
                 imageUrls
+        );
+    }
+
+    private CreateMeetingRequest createRequest(LocalDateTime scheduledAt, LocalDateTime endsAt) {
+        return new CreateMeetingRequest(
+                "Weekend running",
+                "exercise",
+                "Yeouido Park",
+                "330 Yeouidong-ro, Yeongdeungpo-gu, Seoul",
+                37.5219,
+                126.9245,
+                scheduledAt,
+                10,
+                "Run together at an easy pace.",
+                List.of(),
+                endsAt
         );
     }
 

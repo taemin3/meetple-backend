@@ -59,6 +59,7 @@ public class MeetingService {
     private static final String INVALID_MEETING_STATUS_MESSAGE = "지원하지 않는 모임 상태입니다.";
     private static final String INVALID_SORT_PROPERTY_MESSAGE = "지원하지 않는 정렬 조건입니다.";
     private static final int NOTIFICATION_MESSAGE_MAX_LENGTH = 500;
+    private static final long UNKNOWN_END_AUTO_COMPLETE_HOURS = 24;
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
     private static final double METERS_PER_LATITUDE_DEGREE = 111_320.0;
     private static final Set<String> ALLOWED_SORT_PROPERTIES = Set.of(
@@ -87,7 +88,7 @@ public class MeetingService {
         Category category = getCategory(request.category());
         List<String> imageUrls = normalizeImageUrls(request.imageUrls());
 
-        LocalDateTime endDate = resolveEndDate(request.scheduledAt(), request.endsAt());
+        LocalDateTime endDate = validateEndDate(request.scheduledAt(), request.endsAt());
         Meeting meeting = Meeting.create(
                 host,
                 category,
@@ -263,7 +264,7 @@ public class MeetingService {
         endedMeetings.addAll(
                 meetingRepository.findByStatusInAndEndDateIsNullAndMeetingDateLessThanEqual(
                         openStatuses,
-                        now.minusHours(2)
+                        now.minusHours(UNKNOWN_END_AUTO_COMPLETE_HOURS)
                 )
         );
         endedMeetings.forEach(Meeting::complete);
@@ -392,9 +393,8 @@ public class MeetingService {
         return value == null ? currentValue : value;
     }
 
-    private LocalDateTime resolveEndDate(LocalDateTime startDate, LocalDateTime requestedEndDate) {
-        LocalDateTime endDate = requestedEndDate == null ? startDate.plusHours(2) : requestedEndDate;
-        if (!endDate.isAfter(startDate)) {
+    private LocalDateTime validateEndDate(LocalDateTime startDate, LocalDateTime endDate) {
+        if (endDate != null && !endDate.isAfter(startDate)) {
             throw new BadRequestException("모임 종료 시각은 시작 시각 이후여야 합니다.");
         }
         return endDate;
@@ -402,13 +402,10 @@ public class MeetingService {
 
     private LocalDateTime resolveUpdatedEndDate(Meeting meeting, UpdateMeetingRequest request) {
         LocalDateTime startDate = chooseDateTime(request.scheduledAt(), meeting.getMeetingDate());
-        LocalDateTime endDate = request.endsAt();
-        if (endDate == null) {
-            endDate = request.scheduledAt() == null && meeting.getEndDate() != null
-                    ? meeting.getEndDate()
-                    : startDate.plusHours(2);
-        }
-        return resolveEndDate(startDate, endDate);
+        LocalDateTime endDate = request.scheduledAt() == null && request.endsAt() == null
+                ? meeting.getEndDate()
+                : request.endsAt();
+        return validateEndDate(startDate, endDate);
     }
 
     private String normalizeRequiredText(String value, String message) {

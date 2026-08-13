@@ -140,7 +140,7 @@ public class Meeting extends BaseTimeEntity {
                 longitude,
                 maxPeople,
                 meetingDate,
-                meetingDate.plusHours(2),
+                null,
                 thumbnailImageUrl
         );
     }
