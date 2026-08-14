@@ -32,7 +32,7 @@ public record ImageStorageProperties(
 
     public ImageStorageProperties {
         region = StringUtils.hasText(region) ? region : DEFAULT_REGION;
-        keyPrefix = normalizeKeyPrefix(keyPrefix);
+        keyPrefix = StringUtils.hasText(keyPrefix) ? keyPrefix : DEFAULT_KEY_PREFIX;
         uploadUrlExpiration = uploadUrlExpiration == null
                 ? DEFAULT_UPLOAD_URL_EXPIRATION
                 : uploadUrlExpiration;
@@ -40,17 +40,5 @@ public record ImageStorageProperties(
         allowedContentTypes = allowedContentTypes == null || allowedContentTypes.isEmpty()
                 ? DEFAULT_ALLOWED_CONTENT_TYPES
                 : List.copyOf(allowedContentTypes);
-    }
-
-    public static String normalizeKeyPrefix(String value) {
-        if (!StringUtils.hasText(value)) {
-            return DEFAULT_KEY_PREFIX;
-        }
-
-        String normalized = value.replace("\\", "/")
-                .replaceAll("^/+", "")
-                .replaceAll("/+$", "")
-                .replaceAll("[^a-zA-Z0-9/_-]", "");
-        return StringUtils.hasText(normalized) ? normalized : DEFAULT_KEY_PREFIX;
     }
 }

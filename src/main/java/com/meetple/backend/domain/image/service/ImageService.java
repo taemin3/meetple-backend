@@ -100,7 +100,7 @@ public class ImageService {
 
     private String ownerObjectKeyPrefix(Long memberId, ImageUploadPurpose purpose) {
         return String.join("/",
-                properties.keyPrefix(),
+                sanitizePathSegment(properties.keyPrefix()),
                 purpose.pathSegment(),
                 memberId.toString()
         );
@@ -137,7 +137,7 @@ public class ImageService {
     ) {
         String extension = resolveExtension(fileName, contentType);
         return String.join("/",
-                properties.keyPrefix(),
+                sanitizePathSegment(properties.keyPrefix()),
                 purpose.pathSegment(),
                 memberId.toString(),
                 UUID.randomUUID() + "." + extension
@@ -163,4 +163,14 @@ public class ImageService {
         return nameOnly.substring(extensionStart + 1).toLowerCase(Locale.ROOT);
     }
 
+    private String sanitizePathSegment(String value) {
+        String sanitized = value.replace("\\", "/")
+                .replaceAll("^/+", "")
+                .replaceAll("/+$", "")
+                .replaceAll("[^a-zA-Z0-9/_-]", "");
+        if (!StringUtils.hasText(sanitized)) {
+            return "images";
+        }
+        return sanitized;
+    }
 }
