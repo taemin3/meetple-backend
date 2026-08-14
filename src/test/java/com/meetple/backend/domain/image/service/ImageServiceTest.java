@@ -77,6 +77,37 @@ class ImageServiceTest {
     }
 
     @Test
+    void createUploadUrlUsesNormalizedStorageKeyPrefix() {
+        ImageStorageProperties unnormalizedProperties = new ImageStorageProperties(
+                "meetple-images",
+                "ap-northeast-2",
+                "",
+                "https://cdn.meetple.com",
+                "access-key",
+                "secret-key",
+                "/custom@-assets/",
+                Duration.ofMinutes(3),
+                1024L,
+                false,
+                List.of("image/jpeg", "image/png", "image/webp")
+        );
+        ImageService service = new ImageService(imageStorageClient, unnormalizedProperties);
+
+        ImageUploadUrlResponse response = service.createUploadUrl(
+                7L,
+                new ImageUploadUrlRequest(
+                        ImageUploadPurpose.PROFILE,
+                        "avatar.png",
+                        "image/png",
+                        512L
+                )
+        );
+
+        assertThat(unnormalizedProperties.keyPrefix()).isEqualTo("custom-assets");
+        assertThat(response.objectKey()).startsWith("custom-assets/profile/7/");
+    }
+
+    @Test
     void createUploadUrlsReturnsPresignedUploadContracts() {
         ImageUploadUrlsRequest request = new ImageUploadUrlsRequest(List.of(
                 new ImageUploadUrlRequest(ImageUploadPurpose.MEETING, "first.png", "image/png", 512L),

@@ -24,6 +24,7 @@ class ChatMigrationTest {
             statement.execute("""
                     create table meetings (
                         id bigint primary key,
+                        host_id bigint not null,
                         meeting_date timestamp not null,
                         end_date timestamp null,
                         thumbnail_image_url varchar(2048)
@@ -31,14 +32,20 @@ class ChatMigrationTest {
                     """);
             statement.execute("""
                     insert into members (id, profile_image_url)
-                    values (1, 'https://cdn.meetple.com/custom-assets/profile/1/550e8400-e29b-41d4-a716-446655440000.png')
+                    values
+                        (1, 'https://cdn.meetple.com/custom-assets/profile/1/550e8400-e29b-41d4-a716-446655440000.png'),
+                        (2, 'https://cdn.meetple.com/custom-assets/profile/1/550e8400-e29b-41d4-a716-446655440002.png'),
+                        (3, 'https://cdn.meetple.com/custom-assets/profile/3/avatar.png')
                     """);
             statement.execute("""
-                    insert into meetings (id, meeting_date, end_date, thumbnail_image_url)
+                    insert into meetings (id, host_id, meeting_date, end_date, thumbnail_image_url)
                     values
-                        (1, timestamp '2026-08-20 14:00:00', null,
+                        (1, 1, timestamp '2026-08-20 14:00:00', null,
                             'https://cdn.meetple.com/custom-assets/meeting/1/550e8400-e29b-41d4-a716-446655440001.png'),
-                        (2, timestamp '2026-08-20 14:00:00', timestamp '2026-08-20 18:00:00', null)
+                        (2, 2, timestamp '2026-08-20 14:00:00', timestamp '2026-08-20 18:00:00',
+                            'https://cdn.meetple.com/custom-assets/meeting/1/550e8400-e29b-41d4-a716-446655440003.png'),
+                        (3, 3, timestamp '2026-08-20 14:00:00', null,
+                            'https://cdn.meetple.com/custom-assets/meeting/3/thumbnail.png')
                     """);
             statement.execute("""
                     create table meeting_images (
@@ -57,7 +64,14 @@ class ChatMigrationTest {
                             'https://cdn.meetple.com/custom-assets/meeting/1/550e8400-e29b-41d4-a716-446655440001.png',
                             0
                         ),
-                        (2, 2, 'https://example.com/legacy-image.png', 0)
+                        (2, 2, 'https://example.com/legacy-image.png', 0),
+                        (
+                            3,
+                            2,
+                            'https://cdn.meetple.com/custom-assets/meeting/1/550e8400-e29b-41d4-a716-446655440004.png',
+                            1
+                        ),
+                        (4, 3, 'https://cdn.meetple.com/custom-assets/meeting/3/image.png', 0)
                     """);
         }
 
@@ -66,7 +80,7 @@ class ChatMigrationTest {
                 .locations("classpath:db/migration")
                 .baselineOnMigrate(true)
                 .baselineVersion("0")
-                .placeholders(Map.of("imageStorageKeyPrefix", "custom-assets"))
+                .placeholders(Map.of("imageStorageKeyPrefix", "/custom@-assets/"))
                 .load();
 
         var result = flyway.migrate();
@@ -91,8 +105,24 @@ class ChatMigrationTest {
             )).isEqualTo("custom-assets/profile/1/550e8400-e29b-41d4-a716-446655440000.png");
             assertThat(singleStringValue(
                     connection,
+                    "select profile_image_object_key from members where id = 2"
+            )).isNull();
+            assertThat(singleStringValue(
+                    connection,
+                    "select profile_image_object_key from members where id = 3"
+            )).isNull();
+            assertThat(singleStringValue(
+                    connection,
                     "select thumbnail_image_object_key from meetings where id = 1"
             )).isEqualTo("custom-assets/meeting/1/550e8400-e29b-41d4-a716-446655440001.png");
+            assertThat(singleStringValue(
+                    connection,
+                    "select thumbnail_image_object_key from meetings where id = 2"
+            )).isNull();
+            assertThat(singleStringValue(
+                    connection,
+                    "select thumbnail_image_object_key from meetings where id = 3"
+            )).isNull();
             assertThat(singleStringValue(
                     connection,
                     "select object_key from meeting_images where id = 1"
@@ -100,6 +130,14 @@ class ChatMigrationTest {
             assertThat(singleStringValue(
                     connection,
                     "select object_key from meeting_images where id = 2"
+            )).isNull();
+            assertThat(singleStringValue(
+                    connection,
+                    "select object_key from meeting_images where id = 3"
+            )).isNull();
+            assertThat(singleStringValue(
+                    connection,
+                    "select object_key from meeting_images where id = 4"
             )).isNull();
             assertThat(columnIsNullable(connection, "MEETING_IMAGES", "OBJECT_KEY"))
                     .isTrue();
