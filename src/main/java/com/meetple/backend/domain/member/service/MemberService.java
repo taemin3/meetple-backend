@@ -15,6 +15,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -42,21 +43,35 @@ public class MemberService {
 
     @Transactional
     public MemberProfileResponse updateMyProfileImage(Long memberId, String profileImageUrl) {
+        return updateMyProfileImage(memberId, null, profileImageUrl);
+    }
+
+    @Transactional
+    public MemberProfileResponse updateMyProfileImage(
+            Long memberId,
+            String profileImageObjectKey,
+            String profileImageUrl
+    ) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
 
-        String trustedProfileImageUrl = imageService.resolveOwnedFileUrl(
-                memberId,
-                ImageUploadPurpose.PROFILE,
-                profileImageUrl
-        );
-        member.updateProfileImage(trustedProfileImageUrl);
+        String trustedObjectKey = StringUtils.hasText(profileImageObjectKey)
+                ? imageService.resolveOwnedObjectKey(memberId, ImageUploadPurpose.PROFILE, profileImageObjectKey)
+                : imageService.resolveOwnedObjectKeyFromFileUrl(
+                        memberId,
+                        ImageUploadPurpose.PROFILE,
+                        profileImageUrl
+                );
+        member.updateProfileImage(trustedObjectKey, imageService.createFileUrl(trustedObjectKey));
         return toProfileResponse(member, memberId);
     }
 
     private MemberProfileResponse toProfileResponse(Member member, Long memberId) {
         return MemberProfileResponse.from(
                 member,
+                StringUtils.hasText(member.getProfileImageObjectKey())
+                        ? imageService.createFileUrl(member.getProfileImageObjectKey())
+                        : member.getProfileImageUrl(),
                 meetingRepository.countByHostId(memberId),
                 participationRepository.countByMemberIdAndStatusAndMeetingStatusIn(
                         memberId,

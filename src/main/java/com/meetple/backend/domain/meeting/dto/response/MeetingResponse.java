@@ -25,6 +25,7 @@ public record MeetingResponse(
         String cancelReason,
         String thumbnailImageUrl,
         List<String> imageUrls,
+        List<String> imageObjectKeys,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -70,6 +71,7 @@ public record MeetingResponse(
                 null,
                 thumbnailImageUrl,
                 imageUrls,
+                List.of(),
                 createdAt,
                 updatedAt
         );
@@ -80,7 +82,16 @@ public record MeetingResponse(
     }
 
     public static MeetingResponse from(Meeting meeting, List<String> imageUrls) {
+        return from(meeting, imageUrls, List.of());
+    }
+
+    public static MeetingResponse from(
+            Meeting meeting,
+            List<String> imageUrls,
+            List<String> imageObjectKeys
+    ) {
         List<String> resolvedImageUrls = imageUrls == null ? List.of() : imageUrls;
+        List<String> resolvedImageObjectKeys = imageObjectKeys == null ? List.of() : imageObjectKeys;
         return new MeetingResponse(
                 meeting.getId(),
                 meeting.getHost().getId(),
@@ -101,6 +112,7 @@ public record MeetingResponse(
                 meeting.getCancelReason(),
                 resolveThumbnailImageUrl(meeting, resolvedImageUrls),
                 resolvedImageUrls,
+                resolvedImageObjectKeys,
                 meeting.getCreatedAt(),
                 meeting.getUpdatedAt()
         );

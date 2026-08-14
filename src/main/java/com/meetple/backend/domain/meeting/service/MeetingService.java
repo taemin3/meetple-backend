@@ -89,7 +89,11 @@ public class MeetingService {
     public MeetingResponse createMeeting(Long memberId, CreateMeetingRequest request) {
         Member host = getMember(memberId);
         Category category = getCategory(request.category());
-        List<String> imageUrls = normalizeImageUrls(memberId, request.imageUrls());
+        List<ImageReference> images = normalizeImages(
+                memberId,
+                request.imageObjectKeys(),
+                request.imageUrls()
+        );
 
         LocalDateTime endDate = validateEndDate(request.scheduledAt(), request.endsAt());
         Meeting meeting = Meeting.create(
@@ -104,13 +108,13 @@ public class MeetingService {
                 request.capacity(),
                 request.scheduledAt(),
                 endDate,
-                firstImageUrl(imageUrls)
+                firstImageUrl(images)
         );
 
         Meeting savedMeeting = meetingRepository.save(meeting);
-        saveMeetingImages(savedMeeting, imageUrls);
+        saveMeetingImages(savedMeeting, images);
 
-        return MeetingResponse.from(savedMeeting, imageUrls);
+        return toResponse(savedMeeting, images);
     }
 
     public PageResponse<MeetingResponse> getMeetings(String status, Pageable pageable) {
@@ -171,9 +175,10 @@ public class MeetingService {
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
 
-        List<String> imageUrls = request.getImageUrls() == null
-                ? null
-                : normalizeImageUrls(memberId, request.getImageUrls());
+        boolean imagesProvided = request.getImageObjectKeys() != null || request.getImageUrls() != null;
+        List<ImageReference> images = imagesProvided
+                ? normalizeImages(memberId, request.getImageObjectKeys(), request.getImageUrls())
+                : null;
 
         Category category = request.getCategory() == null
                 ? meeting.getCategory()
@@ -198,10 +203,10 @@ public class MeetingService {
                 resolveUpdatedEndDate(meeting, request)
         );
 
-        if (imageUrls != null) {
-            meeting.changeThumbnailImageUrl(firstImageUrl(imageUrls));
-            replaceMeetingImages(meeting, imageUrls);
-            return MeetingResponse.from(meeting, imageUrls);
+        if (images != null) {
+            meeting.changeThumbnailImageUrl(firstImageUrl(images));
+            replaceMeetingImages(meeting, images);
+            return toResponse(meeting, images);
         }
 
         return toResponse(meeting);
@@ -277,54 +282,59 @@ public class MeetingService {
         return endedMeetings.size();
     }
 
-    private void saveMeetingImages(Meeting meeting, List<String> imageUrls) {
-        if (imageUrls.isEmpty()) {
+    private void saveMeetingImages(Meeting meeting, List<ImageReference> images) {
+        if (images.isEmpty()) {
             return;
         }
 
-        List<MeetingImage> images = IntStream.range(0, imageUrls.size())
-                .mapToObj(index -> MeetingImage.create(meeting, imageUrls.get(index), index))
+        List<MeetingImage> meetingImages = IntStream.range(0, images.size())
+                .mapToObj(index -> MeetingImage.createWithObjectKey(
+                        meeting,
+                        images.get(index).objectKey(),
+                        images.get(index).fileUrl(),
+                        index
+                ))
                 .toList();
-        meetingImageRepository.saveAll(images);
+        meetingImageRepository.saveAll(meetingImages);
     }
 
-    private void replaceMeetingImages(Meeting meeting, List<String> imageUrls) {
+    private void replaceMeetingImages(Meeting meeting, List<ImageReference> images) {
         meetingImageRepository.deleteByMeetingId(meeting.getId());
-        saveMeetingImages(meeting, imageUrls);
+        saveMeetingImages(meeting, images);
     }
 
     private MeetingResponse toResponse(Meeting meeting) {
-        List<String> imageUrls = meetingImageRepository.findByMeetingIdOrderBySortOrderAsc(meeting.getId())
+        List<ImageReference> images = meetingImageRepository.findByMeetingIdOrderBySortOrderAsc(meeting.getId())
                 .stream()
-                .map(MeetingImage::getImageUrl)
+                .map(this::toImageReference)
                 .toList();
-        return MeetingResponse.from(meeting, imageUrls);
+        return toResponse(meeting, images);
     }
 
     private Page<MeetingResponse> toResponsePage(Page<Meeting> meetings) {
-        Map<Long, List<String>> imageUrlsByMeetingId = getImageUrlsByMeetingIds(
+        Map<Long, List<ImageReference>> imagesByMeetingId = getImagesByMeetingIds(
                 meetings.getContent()
                         .stream()
                         .map(Meeting::getId)
                         .toList()
         );
-        return meetings.map(meeting -> MeetingResponse.from(
+        return meetings.map(meeting -> toResponse(
                 meeting,
-                imageUrlsByMeetingId.getOrDefault(meeting.getId(), List.of())
+                imagesByMeetingId.getOrDefault(meeting.getId(), List.of())
         ));
     }
 
-    private Map<Long, List<String>> getImageUrlsByMeetingIds(Collection<Long> meetingIds) {
+    private Map<Long, List<ImageReference>> getImagesByMeetingIds(Collection<Long> meetingIds) {
         if (meetingIds.isEmpty()) {
             return Map.of();
         }
 
-        Map<Long, List<String>> imageUrlsByMeetingId = new HashMap<>();
+        Map<Long, List<ImageReference>> imagesByMeetingId = new HashMap<>();
         meetingImageRepository.findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(meetingIds)
-                .forEach(image -> imageUrlsByMeetingId
+                .forEach(image -> imagesByMeetingId
                         .computeIfAbsent(image.getMeeting().getId(), id -> new java.util.ArrayList<>())
-                        .add(image.getImageUrl()));
-        return imageUrlsByMeetingId;
+                        .add(toImageReference(image)));
+        return imagesByMeetingId;
     }
 
     private Page<Meeting> loadSearchMeetings(Page<Long> meetingIds) {
@@ -342,21 +352,56 @@ public class MeetingService {
         return new PageImpl<>(orderedMeetings, meetingIds.getPageable(), meetingIds.getTotalElements());
     }
 
-    private List<String> normalizeImageUrls(Long memberId, List<String> imageUrls) {
-        if (imageUrls == null) {
-            return List.of();
+    private List<ImageReference> normalizeImages(
+            Long memberId,
+            List<String> imageObjectKeys,
+            List<String> imageUrls
+    ) {
+        if (imageObjectKeys != null && imageUrls != null) {
+            throw new BadRequestException("Use either imageObjectKeys or imageUrls, not both.");
         }
-        return imageUrls.stream()
-                .map(imageUrl -> imageService.resolveOwnedFileUrl(
-                        memberId,
-                        ImageUploadPurpose.MEETING,
-                        imageUrl
-                ))
-                .toList();
+        if (imageObjectKeys != null) {
+            return imageObjectKeys.stream()
+                    .map(objectKey -> imageService.resolveOwnedObjectKey(
+                            memberId,
+                            ImageUploadPurpose.MEETING,
+                            objectKey
+                    ))
+                    .map(objectKey -> new ImageReference(objectKey, imageService.createFileUrl(objectKey)))
+                    .toList();
+        }
+        if (imageUrls != null) {
+            return imageUrls.stream()
+                    .map(imageUrl -> imageService.resolveOwnedObjectKeyFromFileUrl(
+                            memberId,
+                            ImageUploadPurpose.MEETING,
+                            imageUrl
+                    ))
+                    .map(objectKey -> new ImageReference(objectKey, imageService.createFileUrl(objectKey)))
+                    .toList();
+        }
+        return List.of();
     }
 
-    private String firstImageUrl(List<String> imageUrls) {
-        return imageUrls.isEmpty() ? null : imageUrls.get(0);
+    private MeetingResponse toResponse(Meeting meeting, List<ImageReference> images) {
+        return MeetingResponse.from(
+                meeting,
+                images.stream().map(ImageReference::fileUrl).toList(),
+                images.stream()
+                        .map(ImageReference::objectKey)
+                        .toList()
+        );
+    }
+
+    private ImageReference toImageReference(MeetingImage image) {
+        String fileUrl = StringUtils.hasText(image.getObjectKey())
+                ? imageService.createFileUrl(image.getObjectKey())
+                : image.getImageUrl();
+        return new ImageReference(image.getObjectKey(), fileUrl);
+    }
+
+    private String firstImageUrl(List<ImageReference> images) {
+        return images.isEmpty() ? null : images.get(0).fileUrl();
     }
 
     private Member getMember(Long memberId) {
@@ -511,5 +556,8 @@ public class MeetingService {
             double normalized = ((longitude + 180.0) % 360.0 + 360.0) % 360.0 - 180.0;
             return normalized == -180.0 ? 180.0 : normalized;
         }
+    }
+
+    private record ImageReference(String objectKey, String fileUrl) {
     }
 }

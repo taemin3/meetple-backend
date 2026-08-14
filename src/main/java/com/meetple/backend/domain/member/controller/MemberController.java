@@ -46,7 +46,11 @@ public class MemberController {
     ) {
         return ApiResponse.success(
                 SuccessStatus.OK,
-                memberService.updateMyProfileImage(authenticatedMember.id(), request.profileImageUrl())
+                memberService.updateMyProfileImage(
+                        authenticatedMember.id(),
+                        request.profileImageObjectKey(),
+                        request.profileImageUrl()
+                )
         );
     }
 }

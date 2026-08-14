@@ -56,6 +56,12 @@ public final class UpdateMeetingRequest {
             @Size(max = 2048, message = "이미지 URL은 2048자 이하여야 합니다.")
             String> imageUrls;
 
+    @Size(max = 10, message = "Up to 10 image object keys are allowed.")
+    private List<
+            @NotBlank(message = "Image object key is required.")
+            @Size(max = 255, message = "Image object key must be 255 characters or fewer.")
+            String> imageObjectKeys;
+
     private LocalDateTime endsAt;
 
     @JsonIgnore

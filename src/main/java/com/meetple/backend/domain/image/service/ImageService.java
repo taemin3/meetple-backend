@@ -71,28 +71,71 @@ public class ImageService {
     }
 
     public String resolveOwnedFileUrl(Long memberId, ImageUploadPurpose purpose, String candidateUrl) {
+        return createFileUrl(resolveOwnedObjectKeyFromFileUrl(memberId, purpose, candidateUrl));
+    }
+
+    public String resolveOwnedObjectKeyFromFileUrl(
+            Long memberId,
+            ImageUploadPurpose purpose,
+            String candidateUrl
+    ) {
         if (!StringUtils.hasText(candidateUrl)) {
             throw new BadRequestException(UNTRUSTED_IMAGE_PATH_MESSAGE);
         }
 
-        String ownerObjectKeyPrefix = String.join("/",
+        String ownerObjectKeyPrefix = ownerObjectKeyPrefix(memberId, purpose);
+        String ownerFileUrlPrefix = imageStorageClient.createFileUrl(ownerObjectKeyPrefix) + "/";
+        String normalizedCandidate = candidateUrl.trim();
+        if (!normalizedCandidate.startsWith(ownerFileUrlPrefix)) {
+            throw new BadRequestException(UNTRUSTED_IMAGE_PATH_MESSAGE);
+        }
+        return validateGeneratedObjectKey(
+                ownerObjectKeyPrefix,
+                normalizedCandidate.substring(ownerFileUrlPrefix.length())
+        );
+    }
+
+    public String resolveOwnedObjectKey(
+            Long memberId,
+            ImageUploadPurpose purpose,
+            String candidateObjectKey
+    ) {
+        if (!StringUtils.hasText(candidateObjectKey)) {
+            throw new BadRequestException(UNTRUSTED_IMAGE_PATH_MESSAGE);
+        }
+
+        String ownerObjectKeyPrefix = ownerObjectKeyPrefix(memberId, purpose);
+        String expectedPrefix = ownerObjectKeyPrefix + "/";
+        String normalizedCandidate = candidateObjectKey.trim().replace("\\", "/");
+        if (!normalizedCandidate.startsWith(expectedPrefix)) {
+            throw new BadRequestException(UNTRUSTED_IMAGE_PATH_MESSAGE);
+        }
+        return validateGeneratedObjectKey(
+                ownerObjectKeyPrefix,
+                normalizedCandidate.substring(expectedPrefix.length())
+        );
+    }
+
+    public String createFileUrl(String objectKey) {
+        if (!StringUtils.hasText(objectKey)) {
+            return null;
+        }
+        return imageStorageClient.createFileUrl(objectKey.trim());
+    }
+
+    private String ownerObjectKeyPrefix(Long memberId, ImageUploadPurpose purpose) {
+        return String.join("/",
                 sanitizePathSegment(properties.keyPrefix()),
                 purpose.pathSegment(),
                 memberId.toString()
         );
-        String ownerFileUrlPrefix = imageStorageClient.createFileUrl(ownerObjectKeyPrefix) + "/";
-        String normalizedCandidate = candidateUrl.trim();
+    }
 
-        if (!normalizedCandidate.startsWith(ownerFileUrlPrefix)) {
-            throw new BadRequestException(UNTRUSTED_IMAGE_PATH_MESSAGE);
-        }
-
-        String fileName = normalizedCandidate.substring(ownerFileUrlPrefix.length());
+    private String validateGeneratedObjectKey(String ownerObjectKeyPrefix, String fileName) {
         if (!GENERATED_IMAGE_FILE_NAME.matcher(fileName).matches()) {
             throw new BadRequestException(UNTRUSTED_IMAGE_PATH_MESSAGE);
         }
-
-        return imageStorageClient.createFileUrl(ownerObjectKeyPrefix + "/" + fileName);
+        return ownerObjectKeyPrefix + "/" + fileName;
     }
 
     private String normalizeContentType(String contentType) {

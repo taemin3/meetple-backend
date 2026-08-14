@@ -17,6 +17,7 @@ public record MemberProfileResponse(
 
     public static MemberProfileResponse from(
             Member member,
+            String profileImageUrl,
             long createdMeetingsCount,
             long joinedMeetingsCount,
             long likedMeetingsCount
@@ -25,7 +26,7 @@ public record MemberProfileResponse(
                 member.getId(),
                 member.getEmail(),
                 member.getNickname(),
-                member.getProfileImageUrl(),
+                profileImageUrl,
                 member.getRegion(),
                 member.getRole(),
                 createdMeetingsCount,

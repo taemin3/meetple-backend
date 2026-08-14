@@ -57,8 +57,43 @@ public record CreateMeetingRequest(
                 @Size(max = 2048, message = "이미지 URL은 2048자 이하여야 합니다.")
                 String> imageUrls,
 
+        @Size(max = 10, message = "Up to 10 image object keys are allowed.")
+        List<
+                @NotBlank(message = "Image object key is required.")
+                @Size(max = 255, message = "Image object key must be 255 characters or fewer.")
+                String> imageObjectKeys,
+
         LocalDateTime endsAt
 ) {
+
+    public CreateMeetingRequest(
+            String title,
+            String category,
+            String locationName,
+            String address,
+            Double latitude,
+            Double longitude,
+            LocalDateTime scheduledAt,
+            Integer capacity,
+            String description,
+            List<String> imageUrls,
+            LocalDateTime endsAt
+    ) {
+        this(
+                title,
+                category,
+                locationName,
+                address,
+                latitude,
+                longitude,
+                scheduledAt,
+                capacity,
+                description,
+                imageUrls,
+                null,
+                endsAt
+        );
+    }
 
     public CreateMeetingRequest(
             String title,
@@ -83,6 +118,7 @@ public record CreateMeetingRequest(
                 capacity,
                 description,
                 imageUrls,
+                null,
                 null
         );
     }
@@ -108,6 +144,7 @@ public record CreateMeetingRequest(
                 scheduledAt,
                 capacity,
                 description,
+                null,
                 null,
                 null
         );

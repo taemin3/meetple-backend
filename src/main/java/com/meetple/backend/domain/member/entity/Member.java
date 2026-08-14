@@ -41,6 +41,9 @@ public class Member extends BaseTimeEntity {
     @Column(name = "profile_image_url", length = 255)
     private String profileImageUrl;
 
+    @Column(name = "profile_image_object_key", length = 255)
+    private String profileImageObjectKey;
+
     @Column(length = 100)
     private String region;
 
@@ -60,7 +63,8 @@ public class Member extends BaseTimeEntity {
         return new Member(email, password, nickname, region, MemberRole.USER);
     }
 
-    public void updateProfileImage(String profileImageUrl) {
+    public void updateProfileImage(String profileImageObjectKey, String profileImageUrl) {
+        this.profileImageObjectKey = profileImageObjectKey;
         this.profileImageUrl = profileImageUrl;
     }
 

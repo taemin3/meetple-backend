@@ -134,6 +134,28 @@ class ImageServiceTest {
     }
 
     @Test
+    void resolveOwnedObjectKeyAcceptsGeneratedKeyForCurrentMemberAndPurpose() {
+        String resolved = imageService.resolveOwnedObjectKey(
+                7L,
+                ImageUploadPurpose.PROFILE,
+                " images/profile/7/550e8400-e29b-41d4-a716-446655440000.png "
+        );
+
+        assertThat(resolved).isEqualTo(
+                "images/profile/7/550e8400-e29b-41d4-a716-446655440000.png"
+        );
+    }
+
+    @Test
+    void resolveOwnedObjectKeyRejectsOtherMemberKey() {
+        assertThatThrownBy(() -> imageService.resolveOwnedObjectKey(
+                7L,
+                ImageUploadPurpose.PROFILE,
+                "images/profile/8/550e8400-e29b-41d4-a716-446655440000.png"
+        )).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
     void resolveOwnedFileUrlRejectsExternalUrl() {
         assertThatThrownBy(() -> imageService.resolveOwnedFileUrl(
                 7L,

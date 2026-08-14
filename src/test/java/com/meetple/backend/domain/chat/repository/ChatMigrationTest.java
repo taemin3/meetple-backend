@@ -28,6 +28,14 @@ class ChatMigrationTest {
                         (1, timestamp '2026-08-20 14:00:00', null),
                         (2, timestamp '2026-08-20 14:00:00', timestamp '2026-08-20 18:00:00')
                     """);
+            statement.execute("""
+                    create table meeting_images (
+                        id bigint primary key,
+                        meeting_id bigint not null,
+                        image_url varchar(2048) not null,
+                        sort_order integer not null
+                    )
+                    """);
         }
 
         Flyway flyway = Flyway.configure()
@@ -39,7 +47,7 @@ class ChatMigrationTest {
 
         var result = flyway.migrate();
 
-        assertThat(result.migrationsExecuted).isEqualTo(6);
+        assertThat(result.migrationsExecuted).isEqualTo(7);
         try (var connection = DriverManager.getConnection(url, "sa", "")) {
             assertThat(tableExists(connection, "CHAT_MESSAGES")).isTrue();
             assertThat(tableExists(connection, "CHAT_READ_STATES")).isTrue();
@@ -48,6 +56,10 @@ class ChatMigrationTest {
             assertThat(tableExists(connection, "PUSH_EVENT_DELIVERIES")).isTrue();
             assertThat(tableExists(connection, "CHAT_NOTIFICATION_SETTINGS")).isTrue();
             assertThat(columnDataType(connection, "PUSH_DEVICE_TOKENS", "TOKEN_HASH"))
+                    .isEqualTo(Types.VARCHAR);
+            assertThat(columnDataType(connection, "MEMBERS", "PROFILE_IMAGE_OBJECT_KEY"))
+                    .isEqualTo(Types.VARCHAR);
+            assertThat(columnDataType(connection, "MEETING_IMAGES", "OBJECT_KEY"))
                     .isEqualTo(Types.VARCHAR);
             assertThat(columnTypeName(connection, "PUSH_EVENT_DELIVERIES", "CLAIM_ID"))
                     .isEqualTo("UUID");
