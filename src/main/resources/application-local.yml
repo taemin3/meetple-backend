@@ -11,6 +11,11 @@ spring:
     properties:
       hibernate:
         format_sql: true
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/local/legacy-image-schema-compatibility.sql
+      separator: ^^^ END OF SCRIPT ^^^
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}

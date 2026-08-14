@@ -7,6 +7,8 @@ spring:
     default: local
   flyway:
     enabled: false
+    placeholders:
+      imageStorageKeyPrefix: ${IMAGE_STORAGE_KEY_PREFIX:images}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:

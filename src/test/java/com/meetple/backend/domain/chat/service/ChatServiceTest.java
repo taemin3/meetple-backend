@@ -274,6 +274,8 @@ class ChatServiceTest {
         ChatUnreadCountProjection unreadCount = unreadCount(10L, 2L);
         given(meetingRepository.findChatAccessibleMeetings(1L, pageable))
                 .willReturn(new PageImpl<>(List.of(firstMeeting, secondMeeting), pageable, 2));
+        given(meetingRepository.findAllWithHostAndCategoryByIdIn(List.of(10L, 11L)))
+                .willReturn(List.of(firstMeeting, secondMeeting));
         given(messageRepository.findLatestByMeetingIds(List.of(10L, 11L)))
                 .willReturn(List.of(latestMessage));
         given(messageRepository.countUnreadByMeetingIds(1L, List.of(10L, 11L)))
@@ -288,6 +290,7 @@ class ChatServiceTest {
         assertThat(response.content().get(1).unreadCount()).isZero();
         verify(messageRepository).findLatestByMeetingIds(List.of(10L, 11L));
         verify(messageRepository).countUnreadByMeetingIds(1L, List.of(10L, 11L));
+        verify(meetingRepository).findAllWithHostAndCategoryByIdIn(List.of(10L, 11L));
     }
 
     @Test

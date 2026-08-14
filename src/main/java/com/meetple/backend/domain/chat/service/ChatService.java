@@ -65,14 +65,21 @@ public class ChatService {
         validatePageable(pageable);
         Page<Meeting> meetings = meetingRepository.findChatAccessibleMeetings(memberId, pageable);
         List<Long> meetingIds = meetings.stream().map(Meeting::getId).toList();
+        Map<Long, Meeting> meetingsWithCategories = getMeetingsWithCategories(meetingIds);
         Map<Long, ChatMessageResponse> lastMessages = getLastMessages(meetingIds);
         Map<Long, Long> unreadCounts = getUnreadCounts(memberId, meetingIds);
 
-        return PageResponse.from(meetings.map(meeting -> toRoomSummary(
-                meeting,
-                lastMessages.get(meeting.getId()),
-                unreadCounts.getOrDefault(meeting.getId(), 0L)
-        )));
+        return PageResponse.from(meetings.map(meeting -> {
+            Meeting meetingWithCategory = meetingsWithCategories.getOrDefault(
+                    meeting.getId(),
+                    meeting
+            );
+            return toRoomSummary(
+                    meetingWithCategory,
+                    lastMessages.get(meeting.getId()),
+                    unreadCounts.getOrDefault(meeting.getId(), 0L)
+            );
+        }));
     }
 
     public ChatMessagePageResponse getMessages(
@@ -291,6 +298,14 @@ public class ChatService {
         return messageRepository.findLatestByMeetingIds(meetingIds).stream()
                 .map(this::toMessageResponse)
                 .collect(Collectors.toMap(ChatMessageResponse::roomId, Function.identity()));
+    }
+
+    private Map<Long, Meeting> getMeetingsWithCategories(List<Long> meetingIds) {
+        if (meetingIds.isEmpty()) {
+            return Map.of();
+        }
+        return meetingRepository.findAllWithHostAndCategoryByIdIn(meetingIds).stream()
+                .collect(Collectors.toMap(Meeting::getId, Function.identity()));
     }
 
     private ChatMessageResponse toMessageResponse(ChatMessage message) {
