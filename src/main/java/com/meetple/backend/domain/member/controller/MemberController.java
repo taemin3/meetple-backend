@@ -1,5 +1,6 @@
 package com.meetple.backend.domain.member.controller;
 
+import com.meetple.backend.domain.member.dto.request.UpdateProfileImageRequest;
 import com.meetple.backend.domain.member.dto.response.MemberProfileResponse;
 import com.meetple.backend.domain.member.service.MemberService;
 import com.meetple.backend.global.config.OpenApiConfig;
@@ -9,10 +10,13 @@ import com.meetple.backend.global.security.AuthenticatedMember;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -31,5 +35,18 @@ public class MemberController {
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember
     ) {
         return ApiResponse.success(SuccessStatus.OK, memberService.getMyProfile(authenticatedMember.id()));
+    }
+
+    @PatchMapping("/me/profile-image")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(summary = "프로필 이미지 수정", description = "로그인한 회원의 프로필 이미지 URL을 수정합니다.")
+    public ResponseEntity<ApiResponse<MemberProfileResponse>> updateMyProfileImage(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @Valid @RequestBody UpdateProfileImageRequest request
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                memberService.updateMyProfileImage(authenticatedMember.id(), request.profileImageUrl())
+        );
     }
 }

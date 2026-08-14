@@ -1,6 +1,8 @@
 package com.meetple.backend.domain.member.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -64,5 +67,37 @@ class MemberControllerTest {
                 .andExpect(jsonPath("$.data.nickname").value("tester"))
                 .andExpect(jsonPath("$.data.region").value("Seoul"))
                 .andExpect(jsonPath("$.data.role").value("USER"));
+    }
+
+    @Test
+    void updateMyProfileImagePersistsUploadedImageUrl() throws Exception {
+        mockMvc.perform(patch("/api/v1/users/me/profile-image")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "profileImageUrl": "https://cdn.meetple.com/images/profile/1/avatar.png"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.profileImageUrl")
+                        .value("https://cdn.meetple.com/images/profile/1/avatar.png"));
+
+        Member savedMember = memberRepository.findByEmail("user@meetple.com").orElseThrow();
+        assertThat(savedMember.getProfileImageUrl())
+                .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
+    }
+
+    @Test
+    void updateMyProfileImageRejectsBlankUrl() throws Exception {
+        mockMvc.perform(patch("/api/v1/users/me/profile-image")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "profileImageUrl": " "
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
     }
 }

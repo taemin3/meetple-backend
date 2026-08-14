@@ -34,6 +34,19 @@ public class MemberService {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
 
+        return toProfileResponse(member, memberId);
+    }
+
+    @Transactional
+    public MemberProfileResponse updateMyProfileImage(Long memberId, String profileImageUrl) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
+
+        member.updateProfileImage(profileImageUrl.trim());
+        return toProfileResponse(member, memberId);
+    }
+
+    private MemberProfileResponse toProfileResponse(Member member, Long memberId) {
         return MemberProfileResponse.from(
                 member,
                 meetingRepository.countByHostId(memberId),

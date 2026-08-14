@@ -76,4 +76,21 @@ class MemberServiceTest {
                 .isInstanceOf(NotFoundException.class)
                 .hasMessage("회원을 찾을 수 없습니다.");
     }
+
+    @Test
+    void updateMyProfileImageUpdatesMemberAndReturnsProfile() {
+        Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
+        ReflectionTestUtils.setField(member, "id", 1L);
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+
+        MemberProfileResponse response = memberService.updateMyProfileImage(
+                1L,
+                " https://cdn.meetple.com/images/profile/1/avatar.png "
+        );
+
+        assertThat(member.getProfileImageUrl())
+                .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
+        assertThat(response.profileImageUrl())
+                .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
+    }
 }
