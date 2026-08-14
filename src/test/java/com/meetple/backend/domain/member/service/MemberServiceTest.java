@@ -49,8 +49,10 @@ class MemberServiceTest {
     void getMyProfileReturnsCurrentMemberProfile() {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
         ReflectionTestUtils.setField(member, "id", 1L);
-        ReflectionTestUtils.setField(member, "profileImageUrl", "https://example.com/profile.png");
+        ReflectionTestUtils.setField(member, "profileImageObjectKey", "images/profile/1/profile.png");
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(imageService.createFileUrl("images/profile/1/profile.png"))
+                .willReturn("https://example.com/profile.png");
         given(meetingRepository.countByHostId(1L)).willReturn(3L);
         given(participationRepository.countByMemberIdAndStatusAndMeetingStatusIn(
                 1L,
@@ -87,31 +89,6 @@ class MemberServiceTest {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
         ReflectionTestUtils.setField(member, "id", 1L);
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
-        given(imageService.resolveOwnedObjectKeyFromFileUrl(
-                1L,
-                ImageUploadPurpose.PROFILE,
-                " https://cdn.meetple.com/images/profile/1/avatar.png "
-        )).willReturn("images/profile/1/avatar.png");
-        given(imageService.createFileUrl("images/profile/1/avatar.png"))
-                .willReturn("https://cdn.meetple.com/images/profile/1/avatar.png");
-
-        MemberProfileResponse response = memberService.updateMyProfileImage(
-                1L,
-                " https://cdn.meetple.com/images/profile/1/avatar.png "
-        );
-
-        assertThat(member.getProfileImageUrl())
-                .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
-        assertThat(member.getProfileImageObjectKey()).isEqualTo("images/profile/1/avatar.png");
-        assertThat(response.profileImageUrl())
-                .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
-    }
-
-    @Test
-    void updateMyProfileImageAcceptsOwnedObjectKey() {
-        Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
-        ReflectionTestUtils.setField(member, "id", 1L);
-        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(imageService.resolveOwnedObjectKey(
                 1L,
                 ImageUploadPurpose.PROFILE,
@@ -122,12 +99,12 @@ class MemberServiceTest {
 
         MemberProfileResponse response = memberService.updateMyProfileImage(
                 1L,
-                "images/profile/1/avatar.png",
-                null
+                "images/profile/1/avatar.png"
         );
 
         assertThat(member.getProfileImageObjectKey()).isEqualTo("images/profile/1/avatar.png");
         assertThat(response.profileImageUrl())
                 .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
     }
+
 }

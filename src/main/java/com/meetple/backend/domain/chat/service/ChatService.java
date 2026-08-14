@@ -12,6 +12,7 @@ import com.meetple.backend.domain.chat.realtime.ChatMessageFanOutEvent;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
 import com.meetple.backend.domain.chat.repository.ChatReadStateRepository;
 import com.meetple.backend.domain.chat.repository.ChatUnreadCountProjection;
+import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
@@ -58,6 +59,7 @@ public class ChatService {
     private final ChatPushRecipientResolver pushRecipientResolver;
     private final OutboxEventPublisher outboxEventPublisher;
     private final ApplicationEventPublisher eventPublisher;
+    private final ImageService imageService;
 
     public PageResponse<ChatRoomSummaryResponse> getRooms(Long memberId, Pageable pageable) {
         validatePageable(pageable);
@@ -117,7 +119,7 @@ public class ChatService {
         }
 
         return ChatMessagePageResponse.from(
-                selected.stream().map(ChatMessageResponse::from).toList(),
+                selected.stream().map(this::toMessageResponse).toList(),
                 hasMore
         );
     }
@@ -126,7 +128,7 @@ public class ChatService {
         Meeting meeting = accessPolicy.getAccessibleMeeting(memberId, meetingId);
         ChatMessageResponse lastMessage = messageRepository
                 .findTopByMeetingIdOrderByRoomSequenceDesc(meetingId)
-                .map(ChatMessageResponse::from)
+                .map(this::toMessageResponse)
                 .orElse(null);
         long unreadCount = getUnreadCounts(memberId, List.of(meetingId))
                 .getOrDefault(meetingId, 0L);
@@ -159,7 +161,7 @@ public class ChatService {
                 message::getSender,
                 message.getRoomSequence()
         );
-        ChatMessageResponse response = ChatMessageResponse.from(message);
+        ChatMessageResponse response = toMessageResponse(message);
         if (created) {
             publishPushEvent(meeting, response);
             eventPublisher.publishEvent(ChatMessageFanOutEvent.create(response));
@@ -234,7 +236,9 @@ public class ChatService {
                 meeting.getId(),
                 meeting.getTitle(),
                 meeting.getStatus(),
-                meeting.getThumbnailImageUrl(),
+                meeting.getThumbnailImageObjectKey() == null
+                        ? meeting.getCategory().getDefaultImageUrl()
+                        : imageService.createFileUrl(meeting.getThumbnailImageObjectKey()),
                 lastMessage,
                 unreadCount,
                 accessPolicy.canSend(meeting)
@@ -285,8 +289,15 @@ public class ChatService {
             return Map.of();
         }
         return messageRepository.findLatestByMeetingIds(meetingIds).stream()
-                .map(ChatMessageResponse::from)
+                .map(this::toMessageResponse)
                 .collect(Collectors.toMap(ChatMessageResponse::roomId, Function.identity()));
+    }
+
+    private ChatMessageResponse toMessageResponse(ChatMessage message) {
+        return ChatMessageResponse.from(
+                message,
+                imageService.createFileUrl(message.getSender().getProfileImageObjectKey())
+        );
     }
 
     private Map<Long, Long> getUnreadCounts(Long memberId, List<Long> meetingIds) {

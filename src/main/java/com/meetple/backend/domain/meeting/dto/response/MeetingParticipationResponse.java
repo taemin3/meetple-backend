@@ -48,14 +48,17 @@ public record MeetingParticipationResponse(
         );
     }
 
-    public static MeetingParticipationResponse from(MeetingParticipation participation) {
+    public static MeetingParticipationResponse from(
+            MeetingParticipation participation,
+            String memberProfileImageUrl
+    ) {
         return new MeetingParticipationResponse(
                 participation.getId(),
                 participation.getMeeting().getId(),
                 participation.getMeeting().getTitle(),
                 participation.getMember().getId(),
                 participation.getMember().getNickname(),
-                participation.getMember().getProfileImageUrl(),
+                memberProfileImageUrl,
                 participation.getStatus(),
                 participation.getMessage(),
                 participation.getReviewedAt(),

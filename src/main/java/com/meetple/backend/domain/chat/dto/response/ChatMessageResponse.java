@@ -16,7 +16,7 @@ public record ChatMessageResponse(
         LocalDateTime createdAt
 ) {
 
-    public static ChatMessageResponse from(ChatMessage message) {
+    public static ChatMessageResponse from(ChatMessage message, String senderProfileImageUrl) {
         return new ChatMessageResponse(
                 message.getId(),
                 message.getMeeting().getId(),
@@ -24,7 +24,7 @@ public record ChatMessageResponse(
                 message.getClientMessageId(),
                 message.getSender().getId(),
                 message.getSender().getNickname(),
-                message.getSender().getProfileImageUrl(),
+                senderProfileImageUrl,
                 message.getContent(),
                 message.getCreatedAt()
         );

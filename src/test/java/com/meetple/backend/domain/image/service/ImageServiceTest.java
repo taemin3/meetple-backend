@@ -122,18 +122,6 @@ class ImageServiceTest {
     }
 
     @Test
-    void resolveOwnedFileUrlAcceptsGeneratedUrlForCurrentMemberAndPurpose() {
-        String fileUrl = " https://cdn.meetple.com/images/profile/7/"
-                + "550e8400-e29b-41d4-a716-446655440000.png ";
-
-        String resolved = imageService.resolveOwnedFileUrl(7L, ImageUploadPurpose.PROFILE, fileUrl);
-
-        assertThat(resolved).isEqualTo(
-                "https://cdn.meetple.com/images/profile/7/550e8400-e29b-41d4-a716-446655440000.png"
-        );
-    }
-
-    @Test
     void resolveOwnedObjectKeyAcceptsGeneratedKeyForCurrentMemberAndPurpose() {
         String resolved = imageService.resolveOwnedObjectKey(
                 7L,
@@ -153,44 +141,19 @@ class ImageServiceTest {
                 ImageUploadPurpose.PROFILE,
                 "images/profile/8/550e8400-e29b-41d4-a716-446655440000.png"
         )).isInstanceOf(BadRequestException.class);
-    }
 
-    @Test
-    void resolveOwnedFileUrlRejectsExternalUrl() {
-        assertThatThrownBy(() -> imageService.resolveOwnedFileUrl(
+        assertThatThrownBy(() -> imageService.resolveOwnedObjectKey(
                 7L,
                 ImageUploadPurpose.PROFILE,
-                "https://tracker.example/avatar.png"
-        ))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessage("신뢰할 수 없는 이미지 경로입니다.");
-    }
-
-    @Test
-    void resolveOwnedFileUrlRejectsOtherMemberOrPurpose() {
-        assertThatThrownBy(() -> imageService.resolveOwnedFileUrl(
-                7L,
-                ImageUploadPurpose.PROFILE,
-                "https://cdn.meetple.com/images/profile/8/550e8400-e29b-41d4-a716-446655440000.png"
+                "images/meeting/7/550e8400-e29b-41d4-a716-446655440000.png"
         ))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("신뢰할 수 없는 이미지 경로입니다.");
 
-        assertThatThrownBy(() -> imageService.resolveOwnedFileUrl(
+        assertThatThrownBy(() -> imageService.resolveOwnedObjectKey(
                 7L,
                 ImageUploadPurpose.PROFILE,
-                "https://cdn.meetple.com/images/meeting/7/550e8400-e29b-41d4-a716-446655440000.png"
-        ))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessage("신뢰할 수 없는 이미지 경로입니다.");
-    }
-
-    @Test
-    void resolveOwnedFileUrlRejectsFileNameNotGeneratedByUploadApi() {
-        assertThatThrownBy(() -> imageService.resolveOwnedFileUrl(
-                7L,
-                ImageUploadPurpose.PROFILE,
-                "https://cdn.meetple.com/images/profile/7/avatar.png"
+                "images/profile/7/avatar.png"
         ))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("신뢰할 수 없는 이미지 경로입니다.");

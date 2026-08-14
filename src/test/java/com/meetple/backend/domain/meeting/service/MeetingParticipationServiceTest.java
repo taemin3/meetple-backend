@@ -1,5 +1,6 @@
 package com.meetple.backend.domain.meeting.service;
 
+import com.meetple.backend.domain.image.service.ImageService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -56,6 +57,9 @@ class MeetingParticipationServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private ImageService imageService;
 
     @InjectMocks
     private MeetingParticipationService participationService;

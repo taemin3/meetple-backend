@@ -41,38 +41,19 @@ public class MeetingImage extends BaseTimeEntity {
     @JoinColumn(name = "meeting_id", nullable = false)
     private Meeting meeting;
 
-    @Column(name = "image_url", length = 2048)
-    private String imageUrl;
-
-    @Column(name = "object_key", length = 255)
+    @Column(name = "object_key", nullable = false, length = 255)
     private String objectKey;
 
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder;
 
-    private MeetingImage(Meeting meeting, String imageUrl, Integer sortOrder) {
-        this.meeting = meeting;
-        this.imageUrl = imageUrl;
-        this.sortOrder = sortOrder;
-    }
-
-    private MeetingImage(Meeting meeting, String objectKey, String imageUrl, Integer sortOrder) {
+    private MeetingImage(Meeting meeting, String objectKey, Integer sortOrder) {
         this.meeting = meeting;
         this.objectKey = objectKey;
-        this.imageUrl = imageUrl;
         this.sortOrder = sortOrder;
     }
 
-    public static MeetingImage create(Meeting meeting, String imageUrl, Integer sortOrder) {
-        return new MeetingImage(meeting, imageUrl, sortOrder);
-    }
-
-    public static MeetingImage createWithObjectKey(
-            Meeting meeting,
-            String objectKey,
-            String imageUrl,
-            Integer sortOrder
-    ) {
-        return new MeetingImage(meeting, objectKey, imageUrl, sortOrder);
+    public static MeetingImage create(Meeting meeting, String objectKey, Integer sortOrder) {
+        return new MeetingImage(meeting, objectKey, sortOrder);
     }
 }

@@ -1,5 +1,6 @@
 package com.meetple.backend.domain.meeting.service;
 
+import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.dto.response.MeetingEngagementResponse;
 import com.meetple.backend.domain.meeting.dto.response.MeetingMemberResponse;
 import com.meetple.backend.domain.meeting.dto.response.MeetingParticipationResponse;
@@ -32,6 +33,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -58,20 +60,27 @@ public class MeetingEngagementService {
     private final MeetingBookmarkRepository bookmarkRepository;
     private final MeetingImageRepository meetingImageRepository;
     private final MemberRepository memberRepository;
+    private final ImageService imageService;
 
     public MeetingEngagementResponse getEngagement(Long memberId, Long meetingId) {
         Meeting meeting = getMeeting(meetingId);
         boolean host = meeting.isHostedBy(memberId);
         MeetingParticipationResponse participation = participationRepository
                 .findByMeetingIdAndMemberId(meetingId, memberId)
-                .map(MeetingParticipationResponse::from)
+                .map(this::toParticipationResponse)
                 .orElse(null);
 
         List<MeetingMemberResponse> members = new ArrayList<>();
-        members.add(MeetingMemberResponse.host(meeting.getHost()));
+        members.add(MeetingMemberResponse.host(
+                meeting.getHost(),
+                profileImageUrl(meeting.getHost())
+        ));
         participationRepository.findByMeetingIdAndStatus(meetingId, ParticipationStatus.APPROVED)
                 .stream()
-                .map(item -> MeetingMemberResponse.participant(item.getMember()))
+                .map(item -> MeetingMemberResponse.participant(
+                        item.getMember(),
+                        profileImageUrl(item.getMember())
+                ))
                 .forEach(members::add);
 
         return new MeetingEngagementResponse(
@@ -112,15 +121,15 @@ public class MeetingEngagementService {
                 memberId,
                 toBookmarkPageable(pageable)
         );
-        Map<Long, List<String>> imageUrlsByMeetingId = getImageUrlsByMeetingIds(
+        Map<Long, List<ImageReference>> imagesByMeetingId = getImagesByMeetingIds(
                 bookmarks.getContent()
                         .stream()
                         .map(bookmark -> bookmark.getMeeting().getId())
                         .toList()
         );
-        return PageResponse.from(bookmarks.map(bookmark -> MeetingResponse.from(
+        return PageResponse.from(bookmarks.map(bookmark -> toMeetingResponse(
                 bookmark.getMeeting(),
-                imageUrlsByMeetingId.getOrDefault(bookmark.getMeeting().getId(), List.of())
+                imagesByMeetingId.getOrDefault(bookmark.getMeeting().getId(), List.of())
         )));
     }
 
@@ -144,7 +153,7 @@ public class MeetingEngagementService {
         validateParticipationSort(pageable);
         return PageResponse.from(
                 participationRepository.findByMemberId(memberId, pageable)
-                        .map(MeetingParticipationResponse::from)
+                        .map(this::toParticipationResponse)
         );
     }
 
@@ -177,12 +186,12 @@ public class MeetingEngagementService {
     }
 
     private PageResponse<MeetingResponse> toMeetingPageResponse(Page<Meeting> meetings) {
-        Map<Long, List<String>> imageUrlsByMeetingId = getImageUrlsByMeetingIds(
+        Map<Long, List<ImageReference>> imagesByMeetingId = getImagesByMeetingIds(
                 meetings.getContent().stream().map(Meeting::getId).toList()
         );
-        return PageResponse.from(meetings.map(meeting -> MeetingResponse.from(
+        return PageResponse.from(meetings.map(meeting -> toMeetingResponse(
                 meeting,
-                imageUrlsByMeetingId.getOrDefault(meeting.getId(), List.of())
+                imagesByMeetingId.getOrDefault(meeting.getId(), List.of())
         )));
     }
 
@@ -223,16 +232,43 @@ public class MeetingEngagementService {
         }
     }
 
-    private Map<Long, List<String>> getImageUrlsByMeetingIds(List<Long> meetingIds) {
+    private Map<Long, List<ImageReference>> getImagesByMeetingIds(List<Long> meetingIds) {
         if (meetingIds.isEmpty()) {
             return Map.of();
         }
 
-        Map<Long, List<String>> imageUrlsByMeetingId = new HashMap<>();
+        Map<Long, List<ImageReference>> imagesByMeetingId = new HashMap<>();
         meetingImageRepository.findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(meetingIds)
-                .forEach(image -> imageUrlsByMeetingId
+                .stream()
+                .filter(image -> StringUtils.hasText(image.getObjectKey()))
+                .forEach(image -> imagesByMeetingId
                         .computeIfAbsent(image.getMeeting().getId(), id -> new ArrayList<>())
-                        .add(image.getImageUrl()));
-        return imageUrlsByMeetingId;
+                        .add(new ImageReference(
+                                image.getObjectKey(),
+                                imageService.createFileUrl(image.getObjectKey())
+                        )));
+        return imagesByMeetingId;
+    }
+
+    private MeetingResponse toMeetingResponse(Meeting meeting, List<ImageReference> images) {
+        return MeetingResponse.from(
+                meeting,
+                images.stream().map(ImageReference::fileUrl).toList(),
+                images.stream().map(ImageReference::objectKey).toList()
+        );
+    }
+
+    private MeetingParticipationResponse toParticipationResponse(MeetingParticipation participation) {
+        return MeetingParticipationResponse.from(
+                participation,
+                profileImageUrl(participation.getMember())
+        );
+    }
+
+    private String profileImageUrl(Member member) {
+        return imageService.createFileUrl(member.getProfileImageObjectKey());
+    }
+
+    private record ImageReference(String objectKey, String fileUrl) {
     }
 }

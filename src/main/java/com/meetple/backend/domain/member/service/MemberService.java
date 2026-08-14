@@ -42,27 +42,16 @@ public class MemberService {
     }
 
     @Transactional
-    public MemberProfileResponse updateMyProfileImage(Long memberId, String profileImageUrl) {
-        return updateMyProfileImage(memberId, null, profileImageUrl);
-    }
-
-    @Transactional
-    public MemberProfileResponse updateMyProfileImage(
-            Long memberId,
-            String profileImageObjectKey,
-            String profileImageUrl
-    ) {
+    public MemberProfileResponse updateMyProfileImage(Long memberId, String profileImageObjectKey) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
 
-        String trustedObjectKey = StringUtils.hasText(profileImageObjectKey)
-                ? imageService.resolveOwnedObjectKey(memberId, ImageUploadPurpose.PROFILE, profileImageObjectKey)
-                : imageService.resolveOwnedObjectKeyFromFileUrl(
-                        memberId,
-                        ImageUploadPurpose.PROFILE,
-                        profileImageUrl
-                );
-        member.updateProfileImage(trustedObjectKey, imageService.createFileUrl(trustedObjectKey));
+        String trustedObjectKey = imageService.resolveOwnedObjectKey(
+                memberId,
+                ImageUploadPurpose.PROFILE,
+                profileImageObjectKey
+        );
+        member.updateProfileImage(trustedObjectKey);
         return toProfileResponse(member, memberId);
     }
 
@@ -71,7 +60,7 @@ public class MemberService {
                 member,
                 StringUtils.hasText(member.getProfileImageObjectKey())
                         ? imageService.createFileUrl(member.getProfileImageObjectKey())
-                        : member.getProfileImageUrl(),
+                        : null,
                 meetingRepository.countByHostId(memberId),
                 participationRepository.countByMemberIdAndStatusAndMeetingStatusIn(
                         memberId,

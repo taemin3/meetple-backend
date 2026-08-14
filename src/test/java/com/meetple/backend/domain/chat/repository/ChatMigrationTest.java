@@ -14,19 +14,30 @@ class ChatMigrationTest {
         String url = "jdbc:h2:mem:chat-migration;MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
         try (var connection = DriverManager.getConnection(url, "sa", "");
              var statement = connection.createStatement()) {
-            statement.execute("create table members (id bigint primary key)");
+            statement.execute("""
+                    create table members (
+                        id bigint primary key,
+                        profile_image_url varchar(255)
+                    )
+                    """);
             statement.execute("""
                     create table meetings (
                         id bigint primary key,
                         meeting_date timestamp not null,
-                        end_date timestamp null
+                        end_date timestamp null,
+                        thumbnail_image_url varchar(2048)
                     )
                     """);
             statement.execute("""
-                    insert into meetings (id, meeting_date, end_date)
+                    insert into members (id, profile_image_url)
+                    values (1, 'https://cdn.meetple.com/images/profile/1/550e8400-e29b-41d4-a716-446655440000.png')
+                    """);
+            statement.execute("""
+                    insert into meetings (id, meeting_date, end_date, thumbnail_image_url)
                     values
-                        (1, timestamp '2026-08-20 14:00:00', null),
-                        (2, timestamp '2026-08-20 14:00:00', timestamp '2026-08-20 18:00:00')
+                        (1, timestamp '2026-08-20 14:00:00', null,
+                            'https://cdn.meetple.com/images/meeting/1/550e8400-e29b-41d4-a716-446655440001.png'),
+                        (2, timestamp '2026-08-20 14:00:00', timestamp '2026-08-20 18:00:00', null)
                     """);
             statement.execute("""
                     create table meeting_images (
@@ -34,6 +45,15 @@ class ChatMigrationTest {
                         meeting_id bigint not null,
                         image_url varchar(2048) not null,
                         sort_order integer not null
+                    )
+                    """);
+            statement.execute("""
+                    insert into meeting_images (id, meeting_id, image_url, sort_order)
+                    values (
+                        1,
+                        1,
+                        'https://cdn.meetple.com/images/meeting/1/550e8400-e29b-41d4-a716-446655440001.png',
+                        0
                     )
                     """);
         }
@@ -61,6 +81,18 @@ class ChatMigrationTest {
                     .isEqualTo(Types.VARCHAR);
             assertThat(columnDataType(connection, "MEETING_IMAGES", "OBJECT_KEY"))
                     .isEqualTo(Types.VARCHAR);
+            assertThat(singleStringValue(
+                    connection,
+                    "select profile_image_object_key from members where id = 1"
+            )).isEqualTo("images/profile/1/550e8400-e29b-41d4-a716-446655440000.png");
+            assertThat(singleStringValue(
+                    connection,
+                    "select thumbnail_image_object_key from meetings where id = 1"
+            )).isEqualTo("images/meeting/1/550e8400-e29b-41d4-a716-446655440001.png");
+            assertThat(singleStringValue(
+                    connection,
+                    "select object_key from meeting_images where id = 1"
+            )).isEqualTo("images/meeting/1/550e8400-e29b-41d4-a716-446655440001.png");
             assertThat(columnTypeName(connection, "PUSH_EVENT_DELIVERIES", "CLAIM_ID"))
                     .isEqualTo("UUID");
             assertThat(columnDataType(connection, "PUSH_EVENT_DELIVERIES", "CLAIMED_UNTIL"))
@@ -105,6 +137,14 @@ class ChatMigrationTest {
         try (var columns = connection.getMetaData().getColumns(null, null, tableName, columnName)) {
             assertThat(columns.next()).isTrue();
             return columns.getString("TYPE_NAME");
+        }
+    }
+
+    private String singleStringValue(java.sql.Connection connection, String sql) throws Exception {
+        try (var statement = connection.createStatement();
+             var resultSet = statement.executeQuery(sql)) {
+            assertThat(resultSet.next()).isTrue();
+            return resultSet.getString(1);
         }
     }
 }

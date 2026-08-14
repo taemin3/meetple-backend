@@ -48,8 +48,7 @@ public class MemberController {
                 SuccessStatus.OK,
                 memberService.updateMyProfileImage(
                         authenticatedMember.id(),
-                        request.profileImageObjectKey(),
-                        request.profileImageUrl()
+                        request.profileImageObjectKey()
                 )
         );
     }

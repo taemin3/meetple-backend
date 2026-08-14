@@ -1,12 +1,30 @@
 ALTER TABLE members
-    ADD COLUMN IF NOT EXISTS profile_image_object_key VARCHAR(255);
+    ADD COLUMN profile_image_object_key VARCHAR(255);
+
+UPDATE members
+SET profile_image_object_key = SUBSTRING(
+        profile_image_url FROM POSITION('images/profile/' IN profile_image_url)
+    )
+WHERE profile_image_url IS NOT NULL
+  AND POSITION('images/profile/' IN profile_image_url) > 0;
+
+ALTER TABLE meetings
+    ADD COLUMN thumbnail_image_object_key VARCHAR(255);
+
+UPDATE meetings
+SET thumbnail_image_object_key = SUBSTRING(
+        thumbnail_image_url FROM POSITION('images/meeting/' IN thumbnail_image_url)
+    )
+WHERE thumbnail_image_url IS NOT NULL
+  AND POSITION('images/meeting/' IN thumbnail_image_url) > 0;
 
 ALTER TABLE meeting_images
-    ADD COLUMN IF NOT EXISTS object_key VARCHAR(255);
+    ADD COLUMN object_key VARCHAR(255);
+
+UPDATE meeting_images
+SET object_key = SUBSTRING(image_url FROM POSITION('images/meeting/' IN image_url))
+WHERE image_url IS NOT NULL
+  AND POSITION('images/meeting/' IN image_url) > 0;
 
 ALTER TABLE meeting_images
     ALTER COLUMN image_url DROP NOT NULL;
-
-ALTER TABLE meeting_images
-    ADD CONSTRAINT chk_meeting_images_storage_reference
-        CHECK (object_key IS NOT NULL OR image_url IS NOT NULL);

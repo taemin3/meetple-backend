@@ -70,31 +70,6 @@ public class ImageService {
         );
     }
 
-    public String resolveOwnedFileUrl(Long memberId, ImageUploadPurpose purpose, String candidateUrl) {
-        return createFileUrl(resolveOwnedObjectKeyFromFileUrl(memberId, purpose, candidateUrl));
-    }
-
-    public String resolveOwnedObjectKeyFromFileUrl(
-            Long memberId,
-            ImageUploadPurpose purpose,
-            String candidateUrl
-    ) {
-        if (!StringUtils.hasText(candidateUrl)) {
-            throw new BadRequestException(UNTRUSTED_IMAGE_PATH_MESSAGE);
-        }
-
-        String ownerObjectKeyPrefix = ownerObjectKeyPrefix(memberId, purpose);
-        String ownerFileUrlPrefix = imageStorageClient.createFileUrl(ownerObjectKeyPrefix) + "/";
-        String normalizedCandidate = candidateUrl.trim();
-        if (!normalizedCandidate.startsWith(ownerFileUrlPrefix)) {
-            throw new BadRequestException(UNTRUSTED_IMAGE_PATH_MESSAGE);
-        }
-        return validateGeneratedObjectKey(
-                ownerObjectKeyPrefix,
-                normalizedCandidate.substring(ownerFileUrlPrefix.length())
-        );
-    }
-
     public String resolveOwnedObjectKey(
             Long memberId,
             ImageUploadPurpose purpose,

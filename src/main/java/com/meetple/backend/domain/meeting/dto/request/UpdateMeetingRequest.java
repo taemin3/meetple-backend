@@ -52,14 +52,8 @@ public final class UpdateMeetingRequest {
 
     @Size(max = 10, message = "이미지는 최대 10장까지 등록할 수 있습니다.")
     private List<
-            @NotBlank(message = "이미지 URL을 입력해주세요.")
-            @Size(max = 2048, message = "이미지 URL은 2048자 이하여야 합니다.")
-            String> imageUrls;
-
-    @Size(max = 10, message = "Up to 10 image object keys are allowed.")
-    private List<
-            @NotBlank(message = "Image object key is required.")
-            @Size(max = 255, message = "Image object key must be 255 characters or fewer.")
+            @NotBlank(message = "이미지 object key를 입력해주세요.")
+            @Size(max = 255, message = "이미지 object key는 255자 이하여야 합니다.")
             String> imageObjectKeys;
 
     private LocalDateTime endsAt;
@@ -77,7 +71,7 @@ public final class UpdateMeetingRequest {
             LocalDateTime scheduledAt,
             Integer capacity,
             String description,
-            List<String> imageUrls,
+            List<String> imageObjectKeys,
             LocalDateTime endsAt
     ) {
         this(
@@ -90,7 +84,7 @@ public final class UpdateMeetingRequest {
                 scheduledAt,
                 capacity,
                 description,
-                imageUrls
+                imageObjectKeys
         );
         this.endsAt = endsAt;
         this.endsAtProvided = true;
@@ -106,7 +100,7 @@ public final class UpdateMeetingRequest {
             LocalDateTime scheduledAt,
             Integer capacity,
             String description,
-            List<String> imageUrls
+            List<String> imageObjectKeys
     ) {
         this.title = title;
         this.category = category;
@@ -117,7 +111,7 @@ public final class UpdateMeetingRequest {
         this.scheduledAt = scheduledAt;
         this.capacity = capacity;
         this.description = description;
-        this.imageUrls = imageUrls;
+        this.imageObjectKeys = imageObjectKeys;
     }
 
     public UpdateMeetingRequest(

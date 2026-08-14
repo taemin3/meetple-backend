@@ -91,21 +91,21 @@ class MeetingServiceTest {
         Member host = member(1L, "host@meetple.com", "host");
         Category category = category(1L, "exercise");
         CreateMeetingRequest request = createRequestWithImageUrls(List.of(
-                "https://cdn.meetple.com/images/meeting/1/first.png",
-                "https://cdn.meetple.com/images/meeting/1/second.png"
+                "images/meeting/1/first.png",
+                "images/meeting/1/second.png"
         ));
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(host));
         given(categoryRepository.findByName("exercise")).willReturn(Optional.of(category));
-        given(imageService.resolveOwnedObjectKeyFromFileUrl(
+        given(imageService.resolveOwnedObjectKey(
                 1L,
                 ImageUploadPurpose.MEETING,
-                "https://cdn.meetple.com/images/meeting/1/first.png"
+                "images/meeting/1/first.png"
         )).willReturn("images/meeting/1/first.png");
-        given(imageService.resolveOwnedObjectKeyFromFileUrl(
+        given(imageService.resolveOwnedObjectKey(
                 1L,
                 ImageUploadPurpose.MEETING,
-                "https://cdn.meetple.com/images/meeting/1/second.png"
+                "images/meeting/1/second.png"
         )).willReturn("images/meeting/1/second.png");
         given(imageService.createFileUrl("images/meeting/1/first.png"))
                 .willReturn("https://cdn.meetple.com/images/meeting/1/first.png");
@@ -139,12 +139,6 @@ class MeetingServiceTest {
 
         ArgumentCaptor<List<MeetingImage>> imagesCaptor = ArgumentCaptor.forClass(List.class);
         verify(meetingImageRepository).saveAll(imagesCaptor.capture());
-        assertThat(imagesCaptor.getValue())
-                .extracting(MeetingImage::getImageUrl)
-                .containsExactly(
-                        "https://cdn.meetple.com/images/meeting/1/first.png",
-                        "https://cdn.meetple.com/images/meeting/1/second.png"
-                );
         assertThat(imagesCaptor.getValue())
                 .extracting(MeetingImage::getObjectKey)
                 .containsExactly(
@@ -180,13 +174,13 @@ class MeetingServiceTest {
     }
 
     @Test
-    void updateMeetingReplacesImagesWhenImageUrlsAreProvided() {
+    void updateMeetingReplacesImagesWhenObjectKeysAreProvided() {
         Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
-        given(imageService.resolveOwnedObjectKeyFromFileUrl(
+        given(imageService.resolveOwnedObjectKey(
                 1L,
                 ImageUploadPurpose.MEETING,
-                "https://cdn.meetple.com/images/meeting/1/updated.png"
+                "images/meeting/1/updated.png"
         )).willReturn("images/meeting/1/updated.png");
         given(imageService.createFileUrl("images/meeting/1/updated.png"))
                 .willReturn("https://cdn.meetple.com/images/meeting/1/updated.png");
@@ -201,7 +195,7 @@ class MeetingServiceTest {
                 null,
                 null,
                 null,
-                List.of("https://cdn.meetple.com/images/meeting/1/updated.png")
+                List.of("images/meeting/1/updated.png")
         );
 
         MeetingResponse response = meetingService.updateMeeting(1L, 10L, request);
@@ -255,7 +249,6 @@ class MeetingServiceTest {
                 LocalDateTime.now().plusDays(7),
                 10,
                 "Run together at an easy pace.",
-                null,
                 List.of("images/meeting/1/first.png"),
                 null
         );
@@ -379,15 +372,19 @@ class MeetingServiceTest {
                 .willReturn(List.of(
                         MeetingImage.create(
                                 nearby,
-                                "https://cdn.meetple.com/images/meeting/10/first.png",
+                                "images/meeting/10/first.png",
                                 0
                         ),
                         MeetingImage.create(
                                 nearby,
-                                "https://cdn.meetple.com/images/meeting/10/second.png",
+                                "images/meeting/10/second.png",
                                 1
                         )
                 ));
+        given(imageService.createFileUrl("images/meeting/10/first.png"))
+                .willReturn("https://cdn.meetple.com/images/meeting/10/first.png");
+        given(imageService.createFileUrl("images/meeting/10/second.png"))
+                .willReturn("https://cdn.meetple.com/images/meeting/10/second.png");
 
         PageResponse<MeetingResponse> response = meetingService.getNearbyMeetings(
                 new NearbyMeetingSearchRequest(37.5219, 126.9245, 1000, "exercise"),
@@ -568,8 +565,8 @@ class MeetingServiceTest {
 
     private CreateMeetingRequest createRequest() {
         return createRequestWithImageUrls(List.of(
-                "https://cdn.meetple.com/images/meeting/1/first.png",
-                "https://cdn.meetple.com/images/meeting/1/second.png"
+                "images/meeting/1/first.png",
+                "images/meeting/1/second.png"
         ));
     }
 

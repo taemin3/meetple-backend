@@ -122,9 +122,6 @@ public record MeetingResponse(
         if (!imageUrls.isEmpty() && hasText(imageUrls.get(0))) {
             return imageUrls.get(0);
         }
-        if (hasText(meeting.getThumbnailImageUrl())) {
-            return meeting.getThumbnailImageUrl();
-        }
         return meeting.getCategory().getDefaultImageUrl();
     }
 
