@@ -2,6 +2,8 @@ package com.meetple.backend.domain.meeting.service;
 
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
+import com.meetple.backend.domain.image.entity.ImageUploadPurpose;
+import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.request.MeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
@@ -81,12 +83,13 @@ public class MeetingService {
     private final MeetingBookmarkRepository bookmarkRepository;
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final ImageService imageService;
 
     @Transactional
     public MeetingResponse createMeeting(Long memberId, CreateMeetingRequest request) {
         Member host = getMember(memberId);
         Category category = getCategory(request.category());
-        List<String> imageUrls = normalizeImageUrls(request.imageUrls());
+        List<String> imageUrls = normalizeImageUrls(memberId, request.imageUrls());
 
         LocalDateTime endDate = validateEndDate(request.scheduledAt(), request.endsAt());
         Meeting meeting = Meeting.create(
@@ -168,6 +171,10 @@ public class MeetingService {
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
 
+        List<String> imageUrls = request.getImageUrls() == null
+                ? null
+                : normalizeImageUrls(memberId, request.getImageUrls());
+
         Category category = request.getCategory() == null
                 ? meeting.getCategory()
                 : getCategory(request.getCategory());
@@ -191,8 +198,7 @@ public class MeetingService {
                 resolveUpdatedEndDate(meeting, request)
         );
 
-        if (request.getImageUrls() != null) {
-            List<String> imageUrls = normalizeImageUrls(request.getImageUrls());
+        if (imageUrls != null) {
             meeting.changeThumbnailImageUrl(firstImageUrl(imageUrls));
             replaceMeetingImages(meeting, imageUrls);
             return MeetingResponse.from(meeting, imageUrls);
@@ -336,12 +342,16 @@ public class MeetingService {
         return new PageImpl<>(orderedMeetings, meetingIds.getPageable(), meetingIds.getTotalElements());
     }
 
-    private List<String> normalizeImageUrls(List<String> imageUrls) {
+    private List<String> normalizeImageUrls(Long memberId, List<String> imageUrls) {
         if (imageUrls == null) {
             return List.of();
         }
         return imageUrls.stream()
-                .map(String::trim)
+                .map(imageUrl -> imageService.resolveOwnedFileUrl(
+                        memberId,
+                        ImageUploadPurpose.MEETING,
+                        imageUrl
+                ))
                 .toList();
     }
 

@@ -13,6 +13,8 @@ import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
+import com.meetple.backend.domain.image.entity.ImageUploadPurpose;
+import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.request.MeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
@@ -78,6 +80,9 @@ class MeetingServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private ImageService imageService;
+
     @InjectMocks
     private MeetingService meetingService;
 
@@ -92,6 +97,16 @@ class MeetingServiceTest {
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(host));
         given(categoryRepository.findByName("exercise")).willReturn(Optional.of(category));
+        given(imageService.resolveOwnedFileUrl(
+                1L,
+                ImageUploadPurpose.MEETING,
+                "https://cdn.meetple.com/images/meeting/1/first.png"
+        )).willReturn("https://cdn.meetple.com/images/meeting/1/first.png");
+        given(imageService.resolveOwnedFileUrl(
+                1L,
+                ImageUploadPurpose.MEETING,
+                "https://cdn.meetple.com/images/meeting/1/second.png"
+        )).willReturn("https://cdn.meetple.com/images/meeting/1/second.png");
         given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> {
             Meeting meeting = invocation.getArgument(0);
             ReflectionTestUtils.setField(meeting, "id", 10L);
@@ -154,6 +169,11 @@ class MeetingServiceTest {
     void updateMeetingReplacesImagesWhenImageUrlsAreProvided() {
         Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(imageService.resolveOwnedFileUrl(
+                1L,
+                ImageUploadPurpose.MEETING,
+                "https://cdn.meetple.com/images/meeting/1/updated.png"
+        )).willReturn("https://cdn.meetple.com/images/meeting/1/updated.png");
 
         UpdateMeetingRequest request = new UpdateMeetingRequest(
                 null,

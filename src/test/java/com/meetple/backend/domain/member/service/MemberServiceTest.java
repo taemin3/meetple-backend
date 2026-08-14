@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
+import com.meetple.backend.domain.image.entity.ImageUploadPurpose;
+import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.member.dto.response.MemberProfileResponse;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
@@ -36,6 +38,9 @@ class MemberServiceTest {
 
     @Mock
     private MeetingBookmarkRepository bookmarkRepository;
+
+    @Mock
+    private ImageService imageService;
 
     @InjectMocks
     private MemberService memberService;
@@ -75,5 +80,27 @@ class MemberServiceTest {
         assertThatThrownBy(() -> memberService.getMyProfile(1L))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessage("회원을 찾을 수 없습니다.");
+    }
+
+    @Test
+    void updateMyProfileImageUpdatesMemberAndReturnsProfile() {
+        Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
+        ReflectionTestUtils.setField(member, "id", 1L);
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(imageService.resolveOwnedFileUrl(
+                1L,
+                ImageUploadPurpose.PROFILE,
+                " https://cdn.meetple.com/images/profile/1/avatar.png "
+        )).willReturn("https://cdn.meetple.com/images/profile/1/avatar.png");
+
+        MemberProfileResponse response = memberService.updateMyProfileImage(
+                1L,
+                " https://cdn.meetple.com/images/profile/1/avatar.png "
+        );
+
+        assertThat(member.getProfileImageUrl())
+                .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
+        assertThat(response.profileImageUrl())
+                .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
     }
 }

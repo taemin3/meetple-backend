@@ -60,6 +60,10 @@ public class Member extends BaseTimeEntity {
         return new Member(email, password, nickname, region, MemberRole.USER);
     }
 
+    public void updateProfileImage(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
+    }
+
     public void updateProfile(String nickname, String profileImageUrl, String region) {
         this.nickname = nickname;
         this.profileImageUrl = profileImageUrl;

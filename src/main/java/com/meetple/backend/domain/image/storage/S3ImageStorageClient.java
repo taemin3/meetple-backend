@@ -44,13 +44,25 @@ public class S3ImageStorageClient implements ImageStorageClient {
             PresignedPutObjectRequest presignedRequest = presigner.presignPutObject(presignRequest);
             return new PresignedImageUpload(
                     presignedRequest.url().toString(),
-                    buildFileUrl(uploadObject.objectKey()),
+                    createFileUrl(uploadObject.objectKey()),
                     uploadObject.objectKey(),
                     "PUT",
                     extractHeaders(presignedRequest),
                     uploadObject.expiresIn()
             );
         }
+    }
+
+    @Override
+    public String createFileUrl(String objectKey) {
+        if (StringUtils.hasText(properties.publicBaseUrl())) {
+            return joinUrl(properties.publicBaseUrl(), objectKey);
+        }
+        if (StringUtils.hasText(properties.endpoint())) {
+            return joinUrl(properties.endpoint(), properties.bucket(), objectKey);
+        }
+        return "https://" + properties.bucket() + ".s3." + properties.region()
+                + ".amazonaws.com/" + objectKey;
     }
 
     private Map<String, String> extractHeaders(PresignedPutObjectRequest presignedRequest) {
@@ -87,17 +99,6 @@ public class S3ImageStorageClient implements ImageStorageClient {
                 || !StringUtils.hasText(properties.secretKey())) {
             throw new BaseException(ErrorStatus.EXTERNAL_API_ERROR, "이미지 저장소 설정이 누락되었습니다.");
         }
-    }
-
-    private String buildFileUrl(String objectKey) {
-        if (StringUtils.hasText(properties.publicBaseUrl())) {
-            return joinUrl(properties.publicBaseUrl(), objectKey);
-        }
-        if (StringUtils.hasText(properties.endpoint())) {
-            return joinUrl(properties.endpoint(), properties.bucket(), objectKey);
-        }
-        return "https://" + properties.bucket() + ".s3." + properties.region()
-                + ".amazonaws.com/" + objectKey;
     }
 
     private String joinUrl(String baseUrl, String... paths) {
