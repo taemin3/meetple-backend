@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -26,6 +27,10 @@ public class ImageService {
             "image/png", "png",
             "image/webp", "webp"
     );
+    private static final Pattern GENERATED_IMAGE_FILE_NAME = Pattern.compile(
+            "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(jpg|png|webp)$"
+    );
+    private static final String UNTRUSTED_IMAGE_PATH_MESSAGE = "신뢰할 수 없는 이미지 경로입니다.";
 
     private final ImageStorageClient imageStorageClient;
     private final ImageStorageProperties properties;
@@ -63,6 +68,31 @@ public class ImageService {
                 upload.headers(),
                 upload.expiresIn().toSeconds()
         );
+    }
+
+    public String resolveOwnedFileUrl(Long memberId, ImageUploadPurpose purpose, String candidateUrl) {
+        if (!StringUtils.hasText(candidateUrl)) {
+            throw new BadRequestException(UNTRUSTED_IMAGE_PATH_MESSAGE);
+        }
+
+        String ownerObjectKeyPrefix = String.join("/",
+                sanitizePathSegment(properties.keyPrefix()),
+                purpose.pathSegment(),
+                memberId.toString()
+        );
+        String ownerFileUrlPrefix = imageStorageClient.createFileUrl(ownerObjectKeyPrefix) + "/";
+        String normalizedCandidate = candidateUrl.trim();
+
+        if (!normalizedCandidate.startsWith(ownerFileUrlPrefix)) {
+            throw new BadRequestException(UNTRUSTED_IMAGE_PATH_MESSAGE);
+        }
+
+        String fileName = normalizedCandidate.substring(ownerFileUrlPrefix.length());
+        if (!GENERATED_IMAGE_FILE_NAME.matcher(fileName).matches()) {
+            throw new BadRequestException(UNTRUSTED_IMAGE_PATH_MESSAGE);
+        }
+
+        return imageStorageClient.createFileUrl(ownerObjectKeyPrefix + "/" + fileName);
     }
 
     private String normalizeContentType(String contentType) {

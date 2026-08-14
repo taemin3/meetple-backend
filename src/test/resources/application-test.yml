@@ -34,3 +34,7 @@ chat:
     redis-enabled: false
   message-fan-out:
     redis-enabled: false
+
+image:
+  storage:
+    public-base-url: https://cdn.meetple.com

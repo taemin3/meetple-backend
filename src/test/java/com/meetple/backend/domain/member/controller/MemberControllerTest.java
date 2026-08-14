@@ -39,6 +39,7 @@ class MemberControllerTest {
     private RefreshTokenRepository refreshTokenRepository;
 
     private String accessToken;
+    private String profileImageUrl;
 
     @BeforeEach
     void setUp() {
@@ -46,6 +47,8 @@ class MemberControllerTest {
 
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
         Member savedMember = memberRepository.save(member);
+        profileImageUrl = "https://cdn.meetple.com/images/profile/" + savedMember.getId()
+                + "/550e8400-e29b-41d4-a716-446655440000.png";
         accessToken = jwtTokenProvider.createAccessToken(savedMember, "member-controller-test-session");
         refreshTokenRepository.save(
                 savedMember.getId(),
@@ -76,16 +79,29 @@ class MemberControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "profileImageUrl": "https://cdn.meetple.com/images/profile/1/avatar.png"
+                                  "profileImageUrl": "%s"
                                 }
-                                """))
+                                """.formatted(profileImageUrl)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.profileImageUrl")
-                        .value("https://cdn.meetple.com/images/profile/1/avatar.png"));
+                        .value(profileImageUrl));
 
         Member savedMember = memberRepository.findByEmail("user@meetple.com").orElseThrow();
         assertThat(savedMember.getProfileImageUrl())
-                .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
+                .isEqualTo(profileImageUrl);
+    }
+
+    @Test
+    void updateMyProfileImageRejectsExternalUrl() throws Exception {
+        mockMvc.perform(patch("/api/v1/users/me/profile-image")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "profileImageUrl": "https://tracker.example/avatar.png"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
