@@ -49,12 +49,14 @@ class ChatMigrationTest {
                     """);
             statement.execute("""
                     insert into meeting_images (id, meeting_id, image_url, sort_order)
-                    values (
-                        1,
-                        1,
-                        'https://cdn.meetple.com/images/meeting/1/550e8400-e29b-41d4-a716-446655440001.png',
-                        0
-                    )
+                    values
+                        (
+                            1,
+                            1,
+                            'https://cdn.meetple.com/images/meeting/1/550e8400-e29b-41d4-a716-446655440001.png',
+                            0
+                        ),
+                        (2, 2, 'https://example.com/legacy-image.png', 0)
                     """);
         }
 
@@ -93,6 +95,12 @@ class ChatMigrationTest {
                     connection,
                     "select object_key from meeting_images where id = 1"
             )).isEqualTo("images/meeting/1/550e8400-e29b-41d4-a716-446655440001.png");
+            assertThat(singleStringValue(
+                    connection,
+                    "select object_key from meeting_images where id = 2"
+            )).isNull();
+            assertThat(columnIsNullable(connection, "MEETING_IMAGES", "OBJECT_KEY"))
+                    .isTrue();
             assertThat(columnTypeName(connection, "PUSH_EVENT_DELIVERIES", "CLAIM_ID"))
                     .isEqualTo("UUID");
             assertThat(columnDataType(connection, "PUSH_EVENT_DELIVERIES", "CLAIMED_UNTIL"))
@@ -137,6 +145,17 @@ class ChatMigrationTest {
         try (var columns = connection.getMetaData().getColumns(null, null, tableName, columnName)) {
             assertThat(columns.next()).isTrue();
             return columns.getString("TYPE_NAME");
+        }
+    }
+
+    private boolean columnIsNullable(
+            java.sql.Connection connection,
+            String tableName,
+            String columnName
+    ) throws Exception {
+        try (var columns = connection.getMetaData().getColumns(null, null, tableName, columnName)) {
+            assertThat(columns.next()).isTrue();
+            return columns.getInt("NULLABLE") == java.sql.DatabaseMetaData.columnNullable;
         }
     }
 
