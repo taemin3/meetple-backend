@@ -8,20 +8,20 @@ public record MeetingMemberResponse(
         String profileImageUrl,
         boolean host
 ) {
-    public static MeetingMemberResponse host(Member member) {
+    public static MeetingMemberResponse host(Member member, String profileImageUrl) {
         return new MeetingMemberResponse(
                 member.getId(),
                 member.getNickname(),
-                member.getProfileImageUrl(),
+                profileImageUrl,
                 true
         );
     }
 
-    public static MeetingMemberResponse participant(Member member) {
+    public static MeetingMemberResponse participant(Member member, String profileImageUrl) {
         return new MeetingMemberResponse(
                 member.getId(),
                 member.getNickname(),
-                member.getProfileImageUrl(),
+                profileImageUrl,
                 false
         );
     }

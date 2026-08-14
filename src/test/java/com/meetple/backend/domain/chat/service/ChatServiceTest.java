@@ -1,5 +1,6 @@
 package com.meetple.backend.domain.chat.service;
 
+import com.meetple.backend.domain.image.service.ImageService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -67,6 +68,9 @@ class ChatServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private ImageService imageService;
 
     @InjectMocks
     private ChatService chatService;
@@ -270,6 +274,8 @@ class ChatServiceTest {
         ChatUnreadCountProjection unreadCount = unreadCount(10L, 2L);
         given(meetingRepository.findChatAccessibleMeetings(1L, pageable))
                 .willReturn(new PageImpl<>(List.of(firstMeeting, secondMeeting), pageable, 2));
+        given(meetingRepository.findAllWithHostAndCategoryByIdIn(List.of(10L, 11L)))
+                .willReturn(List.of(firstMeeting, secondMeeting));
         given(messageRepository.findLatestByMeetingIds(List.of(10L, 11L)))
                 .willReturn(List.of(latestMessage));
         given(messageRepository.countUnreadByMeetingIds(1L, List.of(10L, 11L)))
@@ -284,6 +290,7 @@ class ChatServiceTest {
         assertThat(response.content().get(1).unreadCount()).isZero();
         verify(messageRepository).findLatestByMeetingIds(List.of(10L, 11L));
         verify(messageRepository).countUnreadByMeetingIds(1L, List.of(10L, 11L));
+        verify(meetingRepository).findAllWithHostAndCategoryByIdIn(List.of(10L, 11L));
     }
 
     @Test

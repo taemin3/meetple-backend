@@ -53,9 +53,9 @@ public record CreateMeetingRequest(
 
         @Size(max = 10, message = "이미지는 최대 10장까지 등록할 수 있습니다.")
         List<
-                @NotBlank(message = "이미지 URL을 입력해주세요.")
-                @Size(max = 2048, message = "이미지 URL은 2048자 이하여야 합니다.")
-                String> imageUrls,
+                @NotBlank(message = "이미지 object key를 입력해주세요.")
+                @Size(max = 255, message = "이미지 object key는 255자 이하여야 합니다.")
+                String> imageObjectKeys,
 
         LocalDateTime endsAt
 ) {
@@ -70,7 +70,7 @@ public record CreateMeetingRequest(
             LocalDateTime scheduledAt,
             Integer capacity,
             String description,
-            List<String> imageUrls
+            List<String> imageObjectKeys
     ) {
         this(
                 title,
@@ -82,7 +82,7 @@ public record CreateMeetingRequest(
                 scheduledAt,
                 capacity,
                 description,
-                imageUrls,
+                imageObjectKeys,
                 null
         );
     }

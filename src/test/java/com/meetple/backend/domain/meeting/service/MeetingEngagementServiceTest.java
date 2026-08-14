@@ -6,6 +6,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.category.entity.Category;
+import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingBookmark;
@@ -52,6 +53,9 @@ class MeetingEngagementServiceTest {
     @Mock
     private MemberRepository memberRepository;
 
+    @Mock
+    private ImageService imageService;
+
     @InjectMocks
     private MeetingEngagementService engagementService;
 
@@ -61,7 +65,7 @@ class MeetingEngagementServiceTest {
         Member member = member(2L, "member@meetple.com", "member");
         Meeting meeting = meeting(10L, host);
         MeetingBookmark bookmark = MeetingBookmark.create(meeting, member);
-        MeetingImage image = MeetingImage.create(meeting, "https://cdn.meetple.com/meeting.png", 0);
+        MeetingImage image = MeetingImage.create(meeting, "images/meeting/1/meeting.png", 0);
         PageRequest request = PageRequest.of(
                 0,
                 20,
@@ -83,6 +87,8 @@ class MeetingEngagementServiceTest {
                 .willReturn(new PageImpl<>(List.of(bookmark), repositoryRequest, 1));
         given(meetingImageRepository.findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(List.of(10L)))
                 .willReturn(List.of(image));
+        given(imageService.createFileUrl("images/meeting/1/meeting.png"))
+                .willReturn("https://cdn.meetple.com/meeting.png");
 
         PageResponse<MeetingResponse> response = engagementService.getMyBookmarks(2L, request);
 
@@ -107,13 +113,15 @@ class MeetingEngagementServiceTest {
     void getMyHostedMeetingsIncludesImages() {
         Member host = member(1L, "host@meetple.com", "host");
         Meeting meeting = meeting(10L, host);
-        MeetingImage image = MeetingImage.create(meeting, "https://cdn.meetple.com/hosted.png", 0);
+        MeetingImage image = MeetingImage.create(meeting, "images/meeting/1/hosted.png", 0);
         PageRequest request = PageRequest.of(0, 20, Sort.by(Sort.Order.desc("createdAt")));
 
         given(meetingRepository.findByHostId(1L, request))
                 .willReturn(new PageImpl<>(List.of(meeting), request, 1));
         given(meetingImageRepository.findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(List.of(10L)))
                 .willReturn(List.of(image));
+        given(imageService.createFileUrl("images/meeting/1/hosted.png"))
+                .willReturn("https://cdn.meetple.com/hosted.png");
 
         PageResponse<MeetingResponse> response = engagementService.getMyHostedMeetings(1L, request);
 

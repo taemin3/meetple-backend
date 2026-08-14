@@ -1,5 +1,6 @@
 package com.meetple.backend.domain.meeting.service;
 
+import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingParticipationRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingParticipationResponse;
 import com.meetple.backend.domain.meeting.entity.Meeting;
@@ -62,6 +63,7 @@ public class MeetingParticipationService {
     private final MemberRepository memberRepository;
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final ImageService imageService;
 
     @Transactional
     public MeetingParticipationResponse applyParticipation(
@@ -85,7 +87,7 @@ public class MeetingParticipationService {
                         member.getNickname() + "님이 " + meeting.getTitle() + " 모임에 참여를 신청했습니다.",
                         meetingId
                 );
-                return MeetingParticipationResponse.from(participation);
+                return toResponse(participation);
             }
             throw new ConflictException(DUPLICATE_PARTICIPATION_MESSAGE);
         }
@@ -105,7 +107,7 @@ public class MeetingParticipationService {
                     member.getNickname() + "님이 " + meeting.getTitle() + " 모임에 참여를 신청했습니다.",
                     meetingId
             );
-            return MeetingParticipationResponse.from(saved);
+            return toResponse(saved);
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException(DUPLICATE_PARTICIPATION_MESSAGE);
         }
@@ -125,7 +127,7 @@ public class MeetingParticipationService {
         Page<MeetingParticipationResponse> participations = (participationStatus == null
                 ? participationRepository.findByMeetingId(meetingId, pageable)
                 : participationRepository.findByMeetingIdAndStatus(meetingId, participationStatus, pageable))
-                .map(MeetingParticipationResponse::from);
+                .map(this::toResponse);
         return PageResponse.from(participations);
     }
 
@@ -146,7 +148,7 @@ public class MeetingParticipationService {
                 meeting.getTitle() + " 모임 참여가 승인되었습니다.",
                 meetingId
         );
-        return MeetingParticipationResponse.from(participation);
+        return toResponse(participation);
     }
 
     @Transactional
@@ -164,7 +166,7 @@ public class MeetingParticipationService {
                 meeting.getTitle() + " 모임 참여 신청이 거절되었습니다.",
                 meetingId
         );
-        return MeetingParticipationResponse.from(participation);
+        return toResponse(participation);
     }
 
     @Transactional
@@ -197,7 +199,7 @@ public class MeetingParticipationService {
                     )
             );
         }
-        return MeetingParticipationResponse.from(participation);
+        return toResponse(participation);
     }
 
     @Transactional
@@ -232,12 +234,19 @@ public class MeetingParticipationService {
                         participation.getMember().getId()
                 )
         );
-        return MeetingParticipationResponse.from(participation);
+        return toResponse(participation);
     }
 
     private Meeting getMeeting(Long meetingId) {
         return meetingRepository.findById(meetingId)
                 .orElseThrow(() -> new NotFoundException(MEETING_NOT_FOUND_MESSAGE));
+    }
+
+    private MeetingParticipationResponse toResponse(MeetingParticipation participation) {
+        return MeetingParticipationResponse.from(
+                participation,
+                imageService.createFileUrl(participation.getMember().getProfileImageObjectKey())
+        );
     }
 
     private Meeting getMeetingForUpdate(Long meetingId) {

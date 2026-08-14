@@ -15,6 +15,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -41,22 +42,25 @@ public class MemberService {
     }
 
     @Transactional
-    public MemberProfileResponse updateMyProfileImage(Long memberId, String profileImageUrl) {
+    public MemberProfileResponse updateMyProfileImage(Long memberId, String profileImageObjectKey) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
 
-        String trustedProfileImageUrl = imageService.resolveOwnedFileUrl(
+        String trustedObjectKey = imageService.resolveOwnedObjectKey(
                 memberId,
                 ImageUploadPurpose.PROFILE,
-                profileImageUrl
+                profileImageObjectKey
         );
-        member.updateProfileImage(trustedProfileImageUrl);
+        member.updateProfileImage(trustedObjectKey);
         return toProfileResponse(member, memberId);
     }
 
     private MemberProfileResponse toProfileResponse(Member member, Long memberId) {
         return MemberProfileResponse.from(
                 member,
+                StringUtils.hasText(member.getProfileImageObjectKey())
+                        ? imageService.createFileUrl(member.getProfileImageObjectKey())
+                        : null,
                 meetingRepository.countByHostId(memberId),
                 participationRepository.countByMemberIdAndStatusAndMeetingStatusIn(
                         memberId,

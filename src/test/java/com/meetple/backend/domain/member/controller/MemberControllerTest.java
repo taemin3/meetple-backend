@@ -40,6 +40,7 @@ class MemberControllerTest {
 
     private String accessToken;
     private String profileImageUrl;
+    private String profileImageObjectKey;
 
     @BeforeEach
     void setUp() {
@@ -47,8 +48,9 @@ class MemberControllerTest {
 
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
         Member savedMember = memberRepository.save(member);
-        profileImageUrl = "https://cdn.meetple.com/images/profile/" + savedMember.getId()
+        profileImageObjectKey = "images/profile/" + savedMember.getId()
                 + "/550e8400-e29b-41d4-a716-446655440000.png";
+        profileImageUrl = "https://cdn.meetple.com/" + profileImageObjectKey;
         accessToken = jwtTokenProvider.createAccessToken(savedMember, "member-controller-test-session");
         refreshTokenRepository.save(
                 savedMember.getId(),
@@ -73,45 +75,45 @@ class MemberControllerTest {
     }
 
     @Test
-    void updateMyProfileImagePersistsUploadedImageUrl() throws Exception {
+    void updateMyProfileImagePersistsUploadedImageObjectKey() throws Exception {
         mockMvc.perform(patch("/api/v1/users/me/profile-image")
                         .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "profileImageUrl": "%s"
+                                  "profileImageObjectKey": "%s"
                                 }
-                                """.formatted(profileImageUrl)))
+                                """.formatted(profileImageObjectKey)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.profileImageUrl")
                         .value(profileImageUrl));
 
         Member savedMember = memberRepository.findByEmail("user@meetple.com").orElseThrow();
-        assertThat(savedMember.getProfileImageUrl())
-                .isEqualTo(profileImageUrl);
+        assertThat(savedMember.getProfileImageObjectKey())
+                .isEqualTo(profileImageObjectKey);
     }
 
     @Test
-    void updateMyProfileImageRejectsExternalUrl() throws Exception {
+    void updateMyProfileImageRejectsExternalObjectKey() throws Exception {
         mockMvc.perform(patch("/api/v1/users/me/profile-image")
                         .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "profileImageUrl": "https://tracker.example/avatar.png"
+                                  "profileImageObjectKey": "https://tracker.example/avatar.png"
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    void updateMyProfileImageRejectsBlankUrl() throws Exception {
+    void updateMyProfileImageRejectsBlankObjectKey() throws Exception {
         mockMvc.perform(patch("/api/v1/users/me/profile-image")
                         .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "profileImageUrl": " "
+                                  "profileImageObjectKey": " "
                                 }
                                 """))
                 .andExpect(status().isBadRequest());

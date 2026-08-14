@@ -75,8 +75,8 @@ public class Meeting extends BaseTimeEntity {
     @Column(nullable = false, length = 30)
     private MeetingStatus status;
 
-    @Column(name = "thumbnail_image_url", length = 2048)
-    private String thumbnailImageUrl;
+    @Column(name = "thumbnail_image_object_key", length = 255)
+    private String thumbnailImageObjectKey;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "host_id", nullable = false)
@@ -98,7 +98,7 @@ public class Meeting extends BaseTimeEntity {
             Integer maxPeople,
             LocalDateTime meetingDate,
             LocalDateTime endDate,
-            String thumbnailImageUrl
+            String thumbnailImageObjectKey
     ) {
         this.host = host;
         this.category = category;
@@ -112,7 +112,7 @@ public class Meeting extends BaseTimeEntity {
         this.currentPeople = 1;
         this.meetingDate = meetingDate;
         this.endDate = endDate;
-        this.thumbnailImageUrl = thumbnailImageUrl;
+        this.thumbnailImageObjectKey = thumbnailImageObjectKey;
         this.status = MeetingStatus.RECRUITING;
     }
 
@@ -127,7 +127,7 @@ public class Meeting extends BaseTimeEntity {
             BigDecimal longitude,
             Integer maxPeople,
             LocalDateTime meetingDate,
-            String thumbnailImageUrl
+            String thumbnailImageObjectKey
     ) {
         return create(
                 host,
@@ -141,7 +141,7 @@ public class Meeting extends BaseTimeEntity {
                 maxPeople,
                 meetingDate,
                 null,
-                thumbnailImageUrl
+                thumbnailImageObjectKey
         );
     }
 
@@ -157,7 +157,7 @@ public class Meeting extends BaseTimeEntity {
             Integer maxPeople,
             LocalDateTime meetingDate,
             LocalDateTime endDate,
-            String thumbnailImageUrl
+            String thumbnailImageObjectKey
     ) {
         return new Meeting(
                 host,
@@ -171,7 +171,7 @@ public class Meeting extends BaseTimeEntity {
                 maxPeople,
                 meetingDate,
                 endDate,
-                thumbnailImageUrl
+                thumbnailImageObjectKey
         );
     }
 
@@ -209,8 +209,8 @@ public class Meeting extends BaseTimeEntity {
         updateRecruitmentStatusByCapacity();
     }
 
-    public void changeThumbnailImageUrl(String thumbnailImageUrl) {
-        this.thumbnailImageUrl = thumbnailImageUrl;
+    public void changeThumbnailImageObjectKey(String thumbnailImageObjectKey) {
+        this.thumbnailImageObjectKey = thumbnailImageObjectKey;
     }
 
     public boolean isHostedBy(Long memberId) {
