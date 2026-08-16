@@ -13,9 +13,11 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 @Getter
 @Entity
+@DynamicUpdate
 @Table(
         name = "members",
         uniqueConstraints = {
