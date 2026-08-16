@@ -1,6 +1,7 @@
 package com.meetple.backend.domain.member.controller;
 
 import com.meetple.backend.domain.member.dto.request.UpdateProfileImageRequest;
+import com.meetple.backend.domain.member.dto.request.UpdateProfileRequest;
 import com.meetple.backend.domain.member.dto.response.MemberProfileResponse;
 import com.meetple.backend.domain.member.service.MemberService;
 import com.meetple.backend.global.config.OpenApiConfig;
@@ -14,6 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,6 +39,23 @@ public class MemberController {
         return ApiResponse.success(SuccessStatus.OK, memberService.getMyProfile(authenticatedMember.id()));
     }
 
+    @PatchMapping("/me")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(summary = "프로필 수정", description = "로그인한 회원의 닉네임과 한줄 소개를 수정합니다.")
+    public ResponseEntity<ApiResponse<MemberProfileResponse>> updateMyProfile(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @Valid @RequestBody UpdateProfileRequest request
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                memberService.updateMyProfile(
+                        authenticatedMember.id(),
+                        request.nickname(),
+                        request.introduction()
+                )
+        );
+    }
+
     @PatchMapping("/me/profile-image")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
     @Operation(summary = "프로필 이미지 수정", description = "로그인한 회원의 프로필 이미지 URL을 수정합니다.")
@@ -50,6 +69,18 @@ public class MemberController {
                         authenticatedMember.id(),
                         request.profileImageObjectKey()
                 )
+        );
+    }
+
+    @DeleteMapping("/me/profile-image")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(summary = "프로필 이미지 삭제", description = "로그인한 회원의 프로필 이미지를 기본 이미지로 변경합니다.")
+    public ResponseEntity<ApiResponse<MemberProfileResponse>> deleteMyProfileImage(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                memberService.deleteMyProfileImage(authenticatedMember.id())
         );
     }
 }
