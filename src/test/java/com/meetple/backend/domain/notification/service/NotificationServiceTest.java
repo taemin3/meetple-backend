@@ -10,7 +10,7 @@ import com.meetple.backend.domain.notification.entity.Notification;
 import com.meetple.backend.domain.notification.repository.NotificationRepository;
 import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
 import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
-import com.meetple.backend.domain.push.event.PushEventTopic;
+import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -62,7 +62,7 @@ class NotificationServiceTest {
         assertThat(request.aggregateId()).isEqualTo("501");
         assertThat(request.eventType()).isEqualTo("PARTICIPATION_APPROVED");
         assertThat(request.eventKey()).isEqualTo("member:7");
-        assertThat(request.topic()).isEqualTo(PushEventTopic.NOTIFICATION);
+        assertThat(request.topic()).isEqualTo(OutboxEventTopic.PUSH_NOTIFICATION);
         assertThat(request.schemaVersion()).isEqualTo(1);
         assertThat(request.deduplicationKey()).isEqualTo("notification:501");
 

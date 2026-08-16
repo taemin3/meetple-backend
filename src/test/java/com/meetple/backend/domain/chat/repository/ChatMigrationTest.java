@@ -77,7 +77,7 @@ class ChatMigrationTest {
             assertThat(tableExists(connection, "PUSH_DEVICE_TOKENS")).isTrue();
             assertThat(tableExists(connection, "PUSH_EVENT_DELIVERIES")).isTrue();
             assertThat(tableExists(connection, "CHAT_NOTIFICATION_SETTINGS")).isTrue();
-            assertThat(tableExists(connection, "IMAGE_DELETION_TASKS")).isTrue();
+            assertThat(tableExists(connection, "IMAGE_DELETION_TASKS")).isFalse();
             assertThat(columnDataType(connection, "PUSH_DEVICE_TOKENS", "TOKEN_HASH"))
                     .isEqualTo(Types.VARCHAR);
             assertThat(columnDataType(connection, "MEMBERS", "PROFILE_IMAGE_OBJECT_KEY"))
@@ -110,8 +110,6 @@ class ChatMigrationTest {
                     .isEqualTo(Types.TIMESTAMP);
             assertThat(columnIsNullable(connection, "MEETINGS", "DELETED_AT"))
                     .isTrue();
-            assertThat(columnDataType(connection, "IMAGE_DELETION_TASKS", "OBJECT_KEY"))
-                    .isEqualTo(Types.VARCHAR);
             assertThat(columnTypeName(connection, "PUSH_EVENT_DELIVERIES", "CLAIM_ID"))
                     .isEqualTo("UUID");
             assertThat(columnDataType(connection, "PUSH_EVENT_DELIVERIES", "CLAIMED_UNTIL"))

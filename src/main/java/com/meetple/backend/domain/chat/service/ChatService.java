@@ -19,7 +19,7 @@ import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
 import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
-import com.meetple.backend.domain.push.event.PushEventTopic;
+import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
@@ -200,7 +200,7 @@ public class ChatService {
                 message.id().toString(),
                 CHAT_MESSAGE_CREATED_EVENT,
                 "room:" + message.roomId(),
-                PushEventTopic.CHAT,
+                OutboxEventTopic.PUSH_CHAT,
                 PUSH_SCHEMA_VERSION,
                 "chat-message:" + message.id(),
                 data

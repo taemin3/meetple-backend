@@ -3,8 +3,8 @@ package com.meetple.backend.domain.outbox.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.outbox.entity.OutboxEvent;
+import com.meetple.backend.domain.outbox.event.OutboxEventEnvelope;
 import com.meetple.backend.domain.outbox.repository.OutboxEventRepository;
-import com.meetple.backend.domain.push.event.PushEventEnvelope;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +24,7 @@ public class OutboxEventPublisher {
         UUID eventId = UUID.randomUUID();
         Instant occurredAt = Instant.now();
         JsonNode data = objectMapper.valueToTree(request.data());
-        JsonNode payload = objectMapper.valueToTree(new PushEventEnvelope(
+        JsonNode payload = objectMapper.valueToTree(new OutboxEventEnvelope(
                 eventId,
                 request.eventType(),
                 request.schemaVersion(),

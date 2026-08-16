@@ -1,11 +1,14 @@
 package com.meetple.backend.domain.image.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import com.meetple.backend.domain.image.entity.ImageDeletionTask;
-import com.meetple.backend.domain.image.repository.ImageDeletionTaskRepository;
+import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
+import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
+import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -17,19 +20,25 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class ImageDeletionServiceTest {
 
     @Mock
-    private ImageDeletionTaskRepository taskRepository;
+    private OutboxEventPublisher outboxEventPublisher;
 
     @InjectMocks
     private ImageDeletionService imageDeletionService;
 
     @Test
-    void scheduleStoresOnlyDistinctNonBlankObjectKeys() {
+    void schedulePublishesOnlyDistinctNonBlankObjectKeysToOutbox() {
         imageDeletionService.schedule(List.of(" images/profile/1/old.png ", "", "images/profile/1/old.png"));
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<ImageDeletionTask>> captor = ArgumentCaptor.forClass(List.class);
-        verify(taskRepository).saveAll(captor.capture());
-        assertThat(captor.getValue()).extracting(ImageDeletionTask::getObjectKey)
-                .containsExactly("images/profile/1/old.png");
+        ArgumentCaptor<OutboxEventRequest> captor = ArgumentCaptor.forClass(OutboxEventRequest.class);
+        verify(outboxEventPublisher, times(1)).publish(captor.capture());
+        OutboxEventRequest request = captor.getValue();
+        assertThat(request.aggregateType()).isEqualTo("image");
+        assertThat(request.aggregateId()).isEqualTo("images/profile/1/old.png");
+        assertThat(request.eventType()).isEqualTo("IMAGE_DELETE_REQUESTED");
+        assertThat(request.eventKey()).isEqualTo("images/profile/1/old.png");
+        assertThat(request.topic()).isEqualTo(OutboxEventTopic.IMAGE_DELETION);
+        assertThat(request.schemaVersion()).isEqualTo(1);
+        assertThat(request.deduplicationKey()).startsWith("image-delete:");
+        assertThat(request.data()).isEqualTo(Map.of("objectKey", "images/profile/1/old.png"));
     }
 }

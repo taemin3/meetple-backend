@@ -151,7 +151,7 @@ class PushKafkaRetryIntegrationTest {
                 .isInstanceOfSatisfying(
                         ThreadPoolTaskScheduler.class,
                         scheduler -> assertThat(scheduler.getThreadNamePrefix())
-                                .isEqualTo("push-kafka-retry-")
+                                .isEqualTo("kafka-retry-")
                 );
     }
 
