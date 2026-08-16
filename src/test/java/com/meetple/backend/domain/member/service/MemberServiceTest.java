@@ -3,9 +3,11 @@ package com.meetple.backend.domain.member.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.image.entity.ImageUploadPurpose;
 import com.meetple.backend.domain.image.service.ImageService;
+import com.meetple.backend.domain.image.service.ImageDeletionService;
 import com.meetple.backend.domain.member.dto.response.MemberProfileResponse;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
@@ -41,6 +43,9 @@ class MemberServiceTest {
 
     @Mock
     private ImageService imageService;
+
+    @Mock
+    private ImageDeletionService imageDeletionService;
 
     @InjectMocks
     private MemberService memberService;
@@ -89,6 +94,7 @@ class MemberServiceTest {
     void updateMyProfileImageUpdatesMemberAndReturnsProfile() {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
         ReflectionTestUtils.setField(member, "id", 1L);
+        ReflectionTestUtils.setField(member, "profileImageObjectKey", "images/profile/1/old.png");
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(imageService.resolveOwnedObjectKey(
                 1L,
@@ -106,6 +112,7 @@ class MemberServiceTest {
         assertThat(member.getProfileImageObjectKey()).isEqualTo("images/profile/1/avatar.png");
         assertThat(response.profileImageUrl())
                 .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
+        verify(imageDeletionService).schedule("images/profile/1/old.png");
     }
 
     @Test
@@ -119,6 +126,7 @@ class MemberServiceTest {
 
         assertThat(member.getProfileImageObjectKey()).isNull();
         assertThat(response.profileImageUrl()).isNull();
+        verify(imageDeletionService).schedule("images/profile/1/avatar.png");
     }
 
     @Test

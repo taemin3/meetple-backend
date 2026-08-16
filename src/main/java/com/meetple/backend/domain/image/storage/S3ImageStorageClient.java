@@ -13,6 +13,9 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
@@ -65,6 +68,18 @@ public class S3ImageStorageClient implements ImageStorageClient {
                 + ".amazonaws.com/" + objectKey;
     }
 
+    @Override
+    public void deleteObject(String objectKey) {
+        validateConfiguration();
+        DeleteObjectRequest request = DeleteObjectRequest.builder()
+                .bucket(properties.bucket())
+                .key(objectKey)
+                .build();
+        try (S3Client client = createClient()) {
+            client.deleteObject(request);
+        }
+    }
+
     private Map<String, String> extractHeaders(PresignedPutObjectRequest presignedRequest) {
         Map<String, String> headers = new LinkedHashMap<>();
         presignedRequest.httpRequest().headers().forEach((name, values) -> {
@@ -77,6 +92,23 @@ public class S3ImageStorageClient implements ImageStorageClient {
 
     private S3Presigner createPresigner() {
         S3Presigner.Builder builder = S3Presigner.builder()
+                .region(Region.of(properties.region()))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())
+                ))
+                .serviceConfiguration(S3Configuration.builder()
+                        .pathStyleAccessEnabled(properties.pathStyleAccessEnabled())
+                        .build());
+
+        if (StringUtils.hasText(properties.endpoint())) {
+            builder.endpointOverride(URI.create(properties.endpoint()));
+        }
+
+        return builder.build();
+    }
+
+    private S3Client createClient() {
+        S3ClientBuilder builder = S3Client.builder()
                 .region(Region.of(properties.region()))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())

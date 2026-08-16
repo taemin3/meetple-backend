@@ -20,9 +20,11 @@ import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.SQLRestriction;
 
 @Getter
 @Entity
+@SQLRestriction("deleted_at is null")
 @Table(
         name = "meetings",
         indexes = {
@@ -70,6 +72,9 @@ public class Meeting extends BaseTimeEntity {
 
     @Column(name = "cancel_reason", length = 500)
     private String cancelReason;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
@@ -211,6 +216,10 @@ public class Meeting extends BaseTimeEntity {
 
     public void changeThumbnailImageObjectKey(String thumbnailImageObjectKey) {
         this.thumbnailImageObjectKey = thumbnailImageObjectKey;
+    }
+
+    public void softDelete(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
     }
 
     public boolean isHostedBy(Long memberId) {

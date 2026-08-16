@@ -5,4 +5,6 @@ public interface ImageStorageClient {
     PresignedImageUpload createPresignedUpload(ImageUploadObject uploadObject);
 
     String createFileUrl(String objectKey);
+
+    void deleteObject(String objectKey);
 }

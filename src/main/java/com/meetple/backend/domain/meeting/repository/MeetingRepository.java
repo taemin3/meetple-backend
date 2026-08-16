@@ -4,6 +4,7 @@ import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -12,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -28,14 +30,17 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
             value = """
                     select m.*
                     from meetings m
-                    where m.host_id = :memberId
-                       or exists (
+                    where m.deleted_at is null
+                      and (
+                        m.host_id = :memberId
+                        or exists (
                             select 1
                             from meeting_participations p
                             where p.meeting_id = m.id
                               and p.member_id = :memberId
                               and p.status = 'APPROVED'
-                       )
+                        )
+                      )
                     order by coalesce((
                         select cm.created_at
                         from chat_messages cm
@@ -47,14 +52,17 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
             countQuery = """
                     select count(*)
                     from meetings m
-                    where m.host_id = :memberId
-                       or exists (
+                    where m.deleted_at is null
+                      and (
+                        m.host_id = :memberId
+                        or exists (
                             select 1
                             from meeting_participations p
                             where p.meeting_id = m.id
                               and p.member_id = :memberId
                               and p.status = 'APPROVED'
-                       )
+                        )
+                      )
                     """,
             nativeQuery = true
     )
@@ -94,6 +102,7 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                     from meetings m
                     join categories c on c.id = m.category_id
                     where m.status = :status
+                      and m.deleted_at is null
                       and (
                             lower(m.title) like :keywordPattern escape '!'
                             or lower(m.location_name) like :keywordPattern escape '!'
@@ -114,6 +123,7 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                     from meetings m
                     join categories c on c.id = m.category_id
                     where m.status = :status
+                      and m.deleted_at is null
                       and (
                             lower(m.title) like :keywordPattern escape '!'
                             or lower(m.location_name) like :keywordPattern escape '!'
@@ -140,6 +150,7 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                     from meetings m
                     join categories c on c.id = m.category_id
                     where m.status = :status
+                      and m.deleted_at is null
                       and m.latitude between :minLatitude and :maxLatitude
                       and (
                             (:crossesAntimeridian = false and m.longitude between :minLongitude and :maxLongitude)
@@ -162,6 +173,7 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                     from meetings m
                     join categories c on c.id = m.category_id
                     where m.status = :status
+                      and m.deleted_at is null
                       and m.latitude between :minLatitude and :maxLatitude
                       and (
                             (:crossesAntimeridian = false and m.longitude between :minLongitude and :maxLongitude)
@@ -190,4 +202,20 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
             @Param("earthRadiusMeters") double earthRadiusMeters,
             Pageable pageable
     );
+
+    @Query(
+            value = """
+                    select m.id
+                    from meetings m
+                    where m.deleted_at is not null
+                      and m.deleted_at <= :cutoff
+                    order by m.deleted_at asc, m.id asc
+                    """,
+            nativeQuery = true
+    )
+    List<Long> findPurgeCandidateIds(@Param("cutoff") LocalDateTime cutoff, Pageable pageable);
+
+    @Modifying
+    @Query(value = "delete from meetings where id in (:meetingIds) and deleted_at is not null", nativeQuery = true)
+    int deletePermanentlyByIdIn(@Param("meetingIds") Collection<Long> meetingIds);
 }
