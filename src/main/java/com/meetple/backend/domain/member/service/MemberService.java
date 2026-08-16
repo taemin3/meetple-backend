@@ -56,6 +56,15 @@ public class MemberService {
     }
 
     @Transactional
+    public MemberProfileResponse deleteMyProfileImage(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
+
+        member.deleteProfileImage();
+        return toProfileResponse(member, memberId);
+    }
+
+    @Transactional
     public MemberProfileResponse updateMyProfile(
             Long memberId,
             String nickname,

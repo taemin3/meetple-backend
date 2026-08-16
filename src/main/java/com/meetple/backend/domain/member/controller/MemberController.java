@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -68,6 +69,18 @@ public class MemberController {
                         authenticatedMember.id(),
                         request.profileImageObjectKey()
                 )
+        );
+    }
+
+    @DeleteMapping("/me/profile-image")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(summary = "프로필 이미지 삭제", description = "로그인한 회원의 프로필 이미지를 기본 이미지로 변경합니다.")
+    public ResponseEntity<ApiResponse<MemberProfileResponse>> deleteMyProfileImage(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                memberService.deleteMyProfileImage(authenticatedMember.id())
         );
     }
 }

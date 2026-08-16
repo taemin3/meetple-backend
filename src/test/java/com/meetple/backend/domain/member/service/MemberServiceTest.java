@@ -109,6 +109,19 @@ class MemberServiceTest {
     }
 
     @Test
+    void deleteMyProfileImageClearsMemberImage() {
+        Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
+        ReflectionTestUtils.setField(member, "id", 1L);
+        ReflectionTestUtils.setField(member, "profileImageObjectKey", "images/profile/1/avatar.png");
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+
+        MemberProfileResponse response = memberService.deleteMyProfileImage(1L);
+
+        assertThat(member.getProfileImageObjectKey()).isNull();
+        assertThat(response.profileImageUrl()).isNull();
+    }
+
+    @Test
     void updateMyProfileUpdatesNicknameAndIntroduction() {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
         ReflectionTestUtils.setField(member, "id", 1L);

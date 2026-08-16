@@ -1,6 +1,7 @@
 package com.meetple.backend.domain.member.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -152,5 +153,20 @@ class MemberControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void deleteMyProfileImageClearsUploadedImageObjectKey() throws Exception {
+        Member member = memberRepository.findByEmail("user@meetple.com").orElseThrow();
+        member.updateProfileImage(profileImageObjectKey);
+        memberRepository.saveAndFlush(member);
+
+        mockMvc.perform(delete("/api/v1/users/me/profile-image")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.profileImageUrl").isEmpty());
+
+        Member savedMember = memberRepository.findByEmail("user@meetple.com").orElseThrow();
+        assertThat(savedMember.getProfileImageObjectKey()).isNull();
     }
 }

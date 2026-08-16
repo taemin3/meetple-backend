@@ -67,6 +67,10 @@ public class Member extends BaseTimeEntity {
         this.profileImageObjectKey = profileImageObjectKey;
     }
 
+    public void deleteProfileImage() {
+        this.profileImageObjectKey = null;
+    }
+
     public void updateProfile(String nickname, String introduction) {
         this.nickname = nickname;
         this.introduction = introduction;
