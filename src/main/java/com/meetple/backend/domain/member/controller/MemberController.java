@@ -1,6 +1,7 @@
 package com.meetple.backend.domain.member.controller;
 
 import com.meetple.backend.domain.member.dto.request.UpdateProfileImageRequest;
+import com.meetple.backend.domain.member.dto.request.UpdateProfileRequest;
 import com.meetple.backend.domain.member.dto.response.MemberProfileResponse;
 import com.meetple.backend.domain.member.service.MemberService;
 import com.meetple.backend.global.config.OpenApiConfig;
@@ -35,6 +36,23 @@ public class MemberController {
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember
     ) {
         return ApiResponse.success(SuccessStatus.OK, memberService.getMyProfile(authenticatedMember.id()));
+    }
+
+    @PatchMapping("/me")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(summary = "프로필 수정", description = "로그인한 회원의 닉네임과 한줄 소개를 수정합니다.")
+    public ResponseEntity<ApiResponse<MemberProfileResponse>> updateMyProfile(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @Valid @RequestBody UpdateProfileRequest request
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                memberService.updateMyProfile(
+                        authenticatedMember.id(),
+                        request.nickname(),
+                        request.introduction()
+                )
+        );
     }
 
     @PatchMapping("/me/profile-image")

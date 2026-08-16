@@ -67,6 +67,7 @@ class MemberServiceTest {
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.email()).isEqualTo("user@meetple.com");
         assertThat(response.nickname()).isEqualTo("tester");
+        assertThat(response.introduction()).isNull();
         assertThat(response.profileImageUrl()).isEqualTo("https://example.com/profile.png");
         assertThat(response.region()).isEqualTo("Seoul");
         assertThat(response.role()).isEqualTo(MemberRole.USER);
@@ -105,6 +106,24 @@ class MemberServiceTest {
         assertThat(member.getProfileImageObjectKey()).isEqualTo("images/profile/1/avatar.png");
         assertThat(response.profileImageUrl())
                 .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
+    }
+
+    @Test
+    void updateMyProfileUpdatesNicknameAndIntroduction() {
+        Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
+        ReflectionTestUtils.setField(member, "id", 1L);
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+
+        MemberProfileResponse response = memberService.updateMyProfile(
+                1L,
+                " 모임친구 ",
+                "같이 산책해요"
+        );
+
+        assertThat(member.getNickname()).isEqualTo("모임친구");
+        assertThat(member.getIntroduction()).isEqualTo("같이 산책해요");
+        assertThat(response.nickname()).isEqualTo("모임친구");
+        assertThat(response.introduction()).isEqualTo("같이 산책해요");
     }
 
 }

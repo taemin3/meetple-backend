@@ -69,7 +69,7 @@ class ChatMigrationTest {
 
         var result = flyway.migrate();
 
-        assertThat(result.migrationsExecuted).isEqualTo(7);
+        assertThat(result.migrationsExecuted).isEqualTo(8);
         try (var connection = DriverManager.getConnection(url, "sa", "")) {
             assertThat(tableExists(connection, "CHAT_MESSAGES")).isTrue();
             assertThat(tableExists(connection, "CHAT_READ_STATES")).isTrue();
@@ -81,6 +81,10 @@ class ChatMigrationTest {
                     .isEqualTo(Types.VARCHAR);
             assertThat(columnDataType(connection, "MEMBERS", "PROFILE_IMAGE_OBJECT_KEY"))
                     .isEqualTo(Types.VARCHAR);
+            assertThat(columnDataType(connection, "MEMBERS", "INTRODUCTION"))
+                    .isEqualTo(Types.VARCHAR);
+            assertThat(columnIsNullable(connection, "MEMBERS", "INTRODUCTION"))
+                    .isTrue();
             assertThat(columnDataType(connection, "MEETING_IMAGES", "OBJECT_KEY"))
                     .isEqualTo(Types.VARCHAR);
             assertThat(singleStringValue(

@@ -70,8 +70,43 @@ class MemberControllerTest {
                 .andExpect(jsonPath("$.code").value(SuccessStatus.OK.getCode()))
                 .andExpect(jsonPath("$.data.email").value("user@meetple.com"))
                 .andExpect(jsonPath("$.data.nickname").value("tester"))
+                .andExpect(jsonPath("$.data.introduction").isEmpty())
                 .andExpect(jsonPath("$.data.region").value("Seoul"))
                 .andExpect(jsonPath("$.data.role").value("USER"));
+    }
+
+    @Test
+    void updateMyProfilePersistsNicknameAndIntroduction() throws Exception {
+        mockMvc.perform(patch("/api/v1/users/me")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nickname": " 모임친구 ",
+                                  "introduction": " 같이 산책해요 "
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.nickname").value("모임친구"))
+                .andExpect(jsonPath("$.data.introduction").value("같이 산책해요"));
+
+        Member savedMember = memberRepository.findByEmail("user@meetple.com").orElseThrow();
+        assertThat(savedMember.getNickname()).isEqualTo("모임친구");
+        assertThat(savedMember.getIntroduction()).isEqualTo("같이 산책해요");
+    }
+
+    @Test
+    void updateMyProfileRejectsInvalidFields() throws Exception {
+        mockMvc.perform(patch("/api/v1/users/me")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nickname": " ",
+                                  "introduction": "1234567890123456789012345678901"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

@@ -55,6 +55,22 @@ public class MemberService {
         return toProfileResponse(member, memberId);
     }
 
+    @Transactional
+    public MemberProfileResponse updateMyProfile(
+            Long memberId,
+            String nickname,
+            String introduction
+    ) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
+
+        member.updateProfile(
+                nickname.trim(),
+                StringUtils.hasText(introduction) ? introduction.trim() : null
+        );
+        return toProfileResponse(member, memberId);
+    }
+
     private MemberProfileResponse toProfileResponse(Member member, Long memberId) {
         return MemberProfileResponse.from(
                 member,
