@@ -176,7 +176,7 @@ class MeetingServiceTest {
     @Test
     void updateMeetingReplacesImagesWhenObjectKeysAreProvided() {
         Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
         given(meetingImageRepository.findByMeetingIdOrderBySortOrderAsc(10L)).willReturn(List.of(
                 MeetingImage.create(meeting, "images/meeting/1/old.png", 0),
                 MeetingImage.create(meeting, "images/meeting/1/updated.png", 1)
@@ -206,6 +206,7 @@ class MeetingServiceTest {
 
         assertThat(response.thumbnailImageUrl()).isEqualTo("https://cdn.meetple.com/images/meeting/1/updated.png");
         assertThat(response.imageUrls()).containsExactly("https://cdn.meetple.com/images/meeting/1/updated.png");
+        verify(meetingRepository).findByIdForUpdate(10L);
         verify(meetingImageRepository).deleteByMeetingId(10L);
         verify(imageDeletionService).schedule(List.of("images/meeting/1/old.png"));
     }
@@ -213,14 +214,27 @@ class MeetingServiceTest {
     @Test
     void deleteMeetingMarksMeetingAsDeletedWithoutRemovingRelatedRows() {
         Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
         given(participationRepository.existsByMeetingId(10L)).willReturn(false);
 
         meetingService.deleteMeeting(1L, 10L);
 
         assertThat(meeting.getDeletedAt()).isNotNull();
+        verify(meetingRepository).findByIdForUpdate(10L);
         verify(meetingRepository, never()).delete(meeting);
         verify(meetingImageRepository, never()).deleteByMeetingId(10L);
+    }
+
+    @Test
+    void completeMeetingUsesSameRowLockAsDeletion() {
+        Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
+        ReflectionTestUtils.setField(meeting, "meetingDate", LocalDateTime.now().minusHours(1));
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
+
+        MeetingResponse response = meetingService.completeMeeting(1L, 10L);
+
+        assertThat(response.status()).isEqualTo(MeetingStatus.COMPLETED);
+        verify(meetingRepository).findByIdForUpdate(10L);
     }
 
     @Test
@@ -230,7 +244,7 @@ class MeetingServiceTest {
                 member(1L, "host@meetple.com", "host"),
                 category(1L, "exercise", "https://cdn.meetple.com/categories/exercise.png")
         );
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
 
         UpdateMeetingRequest request = new UpdateMeetingRequest(
                 null,
@@ -295,7 +309,7 @@ class MeetingServiceTest {
     void updateMeetingClearsEndTimeWhenExplicitNullIsSubmittedWithoutSchedule() {
         Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
         ReflectionTestUtils.setField(meeting, "endDate", meeting.getMeetingDate().plusHours(2));
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
         UpdateMeetingRequest request = new UpdateMeetingRequest(
                 null,
                 null,
@@ -321,7 +335,7 @@ class MeetingServiceTest {
         Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
         LocalDateTime existingEndDate = meeting.getMeetingDate().plusHours(2);
         ReflectionTestUtils.setField(meeting, "endDate", existingEndDate);
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
         UpdateMeetingRequest request = new UpdateMeetingRequest(
                 null,
                 null,
@@ -343,7 +357,7 @@ class MeetingServiceTest {
     @Test
     void updateMeetingRejectsNonHost() {
         Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
 
         UpdateMeetingRequest request = new UpdateMeetingRequest(
                 "Updated title",
@@ -557,12 +571,13 @@ class MeetingServiceTest {
         MeetingParticipation participation = MeetingParticipation.apply(meeting, participant, null);
         participation.approve();
 
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
         given(participationRepository.findByMeetingIdAndStatus(10L, ParticipationStatus.APPROVED))
                 .willReturn(List.of(participation));
 
         meetingService.cancelMeeting(1L, 10L, "a".repeat(500));
 
+        verify(meetingRepository).findByIdForUpdate(10L);
         ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
         verify(notificationService).notify(
                 eq(participant),

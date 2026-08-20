@@ -167,7 +167,7 @@ public class MeetingService {
 
     @Transactional
     public MeetingResponse updateMeeting(Long memberId, Long meetingId, UpdateMeetingRequest request) {
-        Meeting meeting = getMeetingEntity(meetingId);
+        Meeting meeting = getMeetingEntityForUpdate(meetingId);
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
 
@@ -210,7 +210,7 @@ public class MeetingService {
 
     @Transactional
     public void deleteMeeting(Long memberId, Long meetingId) {
-        Meeting meeting = getMeetingEntity(meetingId);
+        Meeting meeting = getMeetingEntityForUpdate(meetingId);
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
         if (participationRepository.existsByMeetingId(meetingId)) {
@@ -221,7 +221,7 @@ public class MeetingService {
 
     @Transactional
     public MeetingResponse completeMeeting(Long memberId, Long meetingId) {
-        Meeting meeting = getMeetingEntity(meetingId);
+        Meeting meeting = getMeetingEntityForUpdate(meetingId);
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
         if (LocalDateTime.now().isBefore(meeting.getMeetingDate())) {
@@ -234,7 +234,7 @@ public class MeetingService {
 
     @Transactional
     public MeetingResponse cancelMeeting(Long memberId, Long meetingId, String reason) {
-        Meeting meeting = getMeetingEntity(meetingId);
+        Meeting meeting = getMeetingEntityForUpdate(meetingId);
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
 
@@ -412,6 +412,11 @@ public class MeetingService {
 
     private Meeting getMeetingEntity(Long meetingId) {
         return meetingRepository.findById(meetingId)
+                .orElseThrow(() -> new NotFoundException(MEETING_NOT_FOUND_MESSAGE));
+    }
+
+    private Meeting getMeetingEntityForUpdate(Long meetingId) {
+        return meetingRepository.findByIdForUpdate(meetingId)
                 .orElseThrow(() -> new NotFoundException(MEETING_NOT_FOUND_MESSAGE));
     }
 
