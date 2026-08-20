@@ -2,7 +2,7 @@ package com.meetple.backend.domain.outbox.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.meetple.backend.domain.push.event.PushEventTopic;
+import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -15,7 +15,7 @@ class OutboxEventRequestTest {
                 "101",
                 "PARTICIPATION_APPROVED",
                 "member:7",
-                PushEventTopic.NOTIFICATION,
+                OutboxEventTopic.PUSH_NOTIFICATION,
                 0,
                 "notification:participation-approved:101:7",
                 Map.of("recipientMemberId", 7L)
@@ -30,7 +30,7 @@ class OutboxEventRequestTest {
                 "101",
                 "PARTICIPATION_APPROVED",
                 " ",
-                PushEventTopic.NOTIFICATION,
+                OutboxEventTopic.PUSH_NOTIFICATION,
                 1,
                 "notification:participation-approved:101:7",
                 Map.of("recipientMemberId", 7L)

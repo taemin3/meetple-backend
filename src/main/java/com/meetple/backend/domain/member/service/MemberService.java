@@ -1,6 +1,7 @@
 package com.meetple.backend.domain.member.service;
 
 import com.meetple.backend.domain.image.entity.ImageUploadPurpose;
+import com.meetple.backend.domain.image.service.ImageDeletionService;
 import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
@@ -32,6 +33,7 @@ public class MemberService {
     private final MeetingParticipationRepository participationRepository;
     private final MeetingBookmarkRepository bookmarkRepository;
     private final ImageService imageService;
+    private final ImageDeletionService imageDeletionService;
 
     @Transactional(readOnly = true)
     public MemberProfileResponse getMyProfile(Long memberId) {
@@ -43,24 +45,32 @@ public class MemberService {
 
     @Transactional
     public MemberProfileResponse updateMyProfileImage(Long memberId, String profileImageObjectKey) {
-        Member member = memberRepository.findById(memberId)
+        Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
 
+        String previousObjectKey = member.getProfileImageObjectKey();
         String trustedObjectKey = imageService.resolveOwnedObjectKey(
                 memberId,
                 ImageUploadPurpose.PROFILE,
                 profileImageObjectKey
         );
         member.updateProfileImage(trustedObjectKey);
+        if (StringUtils.hasText(previousObjectKey) && !previousObjectKey.equals(trustedObjectKey)) {
+            imageDeletionService.schedule(previousObjectKey);
+        }
         return toProfileResponse(member, memberId);
     }
 
     @Transactional
     public MemberProfileResponse deleteMyProfileImage(Long memberId) {
-        Member member = memberRepository.findById(memberId)
+        Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
 
+        String previousObjectKey = member.getProfileImageObjectKey();
         member.deleteProfileImage();
+        if (StringUtils.hasText(previousObjectKey)) {
+            imageDeletionService.schedule(previousObjectKey);
+        }
         return toProfileResponse(member, memberId);
     }
 
@@ -70,7 +80,7 @@ public class MemberService {
             String nickname,
             String introduction
     ) {
-        Member member = memberRepository.findById(memberId)
+        Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
 
         member.updateProfile(

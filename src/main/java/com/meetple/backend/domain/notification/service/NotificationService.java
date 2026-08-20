@@ -6,7 +6,7 @@ import com.meetple.backend.domain.notification.entity.Notification;
 import com.meetple.backend.domain.notification.repository.NotificationRepository;
 import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
 import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
-import com.meetple.backend.domain.push.event.PushEventTopic;
+import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
 import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
 import java.util.LinkedHashMap;
@@ -51,7 +51,7 @@ public class NotificationService {
                 notificationId.toString(),
                 type,
                 "member:" + member.getId(),
-                PushEventTopic.NOTIFICATION,
+                OutboxEventTopic.PUSH_NOTIFICATION,
                 SCHEMA_VERSION,
                 "notification:" + notificationId,
                 data

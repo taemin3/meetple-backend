@@ -3,6 +3,7 @@ package com.meetple.backend.domain.meeting.service;
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
 import com.meetple.backend.domain.image.entity.ImageUploadPurpose;
+import com.meetple.backend.domain.image.service.ImageDeletionService;
 import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.request.MeetingSearchRequest;
@@ -13,7 +14,6 @@ import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingImage;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.repository.MeetingImageRepository;
-import com.meetple.backend.domain.meeting.repository.MeetingBookmarkRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
@@ -80,10 +80,10 @@ public class MeetingService {
     private final MemberRepository memberRepository;
     private final CategoryRepository categoryRepository;
     private final MeetingParticipationRepository participationRepository;
-    private final MeetingBookmarkRepository bookmarkRepository;
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
     private final ImageService imageService;
+    private final ImageDeletionService imageDeletionService;
 
     @Transactional
     public MeetingResponse createMeeting(Long memberId, CreateMeetingRequest request) {
@@ -167,7 +167,7 @@ public class MeetingService {
 
     @Transactional
     public MeetingResponse updateMeeting(Long memberId, Long meetingId, UpdateMeetingRequest request) {
-        Meeting meeting = getMeetingEntity(meetingId);
+        Meeting meeting = getMeetingEntityForUpdate(meetingId);
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
 
@@ -210,20 +210,18 @@ public class MeetingService {
 
     @Transactional
     public void deleteMeeting(Long memberId, Long meetingId) {
-        Meeting meeting = getMeetingEntity(meetingId);
+        Meeting meeting = getMeetingEntityForUpdate(meetingId);
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
         if (participationRepository.existsByMeetingId(meetingId)) {
             throw new BadRequestException("참여 신청 내역이 있는 모임은 삭제할 수 없습니다.");
         }
-        bookmarkRepository.deleteByMeetingId(meetingId);
-        meetingImageRepository.deleteByMeetingId(meetingId);
-        meetingRepository.delete(meeting);
+        meeting.softDelete(LocalDateTime.now());
     }
 
     @Transactional
     public MeetingResponse completeMeeting(Long memberId, Long meetingId) {
-        Meeting meeting = getMeetingEntity(meetingId);
+        Meeting meeting = getMeetingEntityForUpdate(meetingId);
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
         if (LocalDateTime.now().isBefore(meeting.getMeetingDate())) {
@@ -236,7 +234,7 @@ public class MeetingService {
 
     @Transactional
     public MeetingResponse cancelMeeting(Long memberId, Long meetingId, String reason) {
-        Meeting meeting = getMeetingEntity(meetingId);
+        Meeting meeting = getMeetingEntityForUpdate(meetingId);
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
 
@@ -294,8 +292,22 @@ public class MeetingService {
     }
 
     private void replaceMeetingImages(Meeting meeting, List<ImageReference> images) {
+        Set<String> replacementObjectKeys = images.stream()
+                .map(ImageReference::objectKey)
+                .collect(java.util.stream.Collectors.toSet());
+        List<String> removedObjectKeys = java.util.stream.Stream.concat(
+                        java.util.stream.Stream.of(meeting.getThumbnailImageObjectKey()),
+                        meetingImageRepository.findByMeetingIdOrderBySortOrderAsc(meeting.getId())
+                                .stream()
+                                .map(MeetingImage::getObjectKey)
+                )
+                .filter(StringUtils::hasText)
+                .distinct()
+                .filter(objectKey -> !replacementObjectKeys.contains(objectKey))
+                .toList();
         meetingImageRepository.deleteByMeetingId(meeting.getId());
         saveMeetingImages(meeting, images);
+        imageDeletionService.schedule(removedObjectKeys);
     }
 
     private MeetingResponse toResponse(Meeting meeting) {
@@ -400,6 +412,11 @@ public class MeetingService {
 
     private Meeting getMeetingEntity(Long meetingId) {
         return meetingRepository.findById(meetingId)
+                .orElseThrow(() -> new NotFoundException(MEETING_NOT_FOUND_MESSAGE));
+    }
+
+    private Meeting getMeetingEntityForUpdate(Long meetingId) {
+        return meetingRepository.findByIdForUpdate(meetingId)
                 .orElseThrow(() -> new NotFoundException(MEETING_NOT_FOUND_MESSAGE));
     }
 

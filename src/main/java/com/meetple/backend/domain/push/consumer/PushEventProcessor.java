@@ -4,10 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.chat.service.ChatNotificationSettingService;
+import com.meetple.backend.domain.outbox.event.OutboxEventEnvelope;
+import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
 import com.meetple.backend.domain.push.delivery.PushDeliveryClaim;
 import com.meetple.backend.domain.push.delivery.PushDeliveryService;
-import com.meetple.backend.domain.push.event.PushEventEnvelope;
-import com.meetple.backend.domain.push.event.PushEventTopic;
 import com.meetple.backend.domain.push.fcm.PushMessage;
 import com.meetple.backend.domain.push.fcm.PushMessageSender;
 import com.meetple.backend.domain.push.fcm.PushSendException;
@@ -40,7 +40,7 @@ public class PushEventProcessor {
     private final ChatNotificationSettingService chatNotificationSettingService;
 
     public void process(String topic, String payload) {
-        PushEventEnvelope envelope = parseEnvelope(payload);
+        OutboxEventEnvelope envelope = parseEnvelope(payload);
         validateEnvelope(envelope);
         DispatchPlan plan = createDispatchPlan(topic, envelope);
 
@@ -80,15 +80,15 @@ public class PushEventProcessor {
         }
     }
 
-    private PushEventEnvelope parseEnvelope(String payload) {
+    private OutboxEventEnvelope parseEnvelope(String payload) {
         try {
-            return objectMapper.readValue(payload, PushEventEnvelope.class);
+            return objectMapper.readValue(payload, OutboxEventEnvelope.class);
         } catch (JsonProcessingException exception) {
             throw new NonRetryablePushEventException("Invalid push event JSON.", exception);
         }
     }
 
-    private void validateEnvelope(PushEventEnvelope envelope) {
+    private void validateEnvelope(OutboxEventEnvelope envelope) {
         if (envelope.eventId() == null || !StringUtils.hasText(envelope.eventType())) {
             throw new NonRetryablePushEventException("Push event metadata is missing.");
         }
@@ -102,17 +102,17 @@ public class PushEventProcessor {
         }
     }
 
-    private DispatchPlan createDispatchPlan(String topic, PushEventEnvelope envelope) {
-        if (PushEventTopic.NOTIFICATION.getValue().equals(topic)) {
+    private DispatchPlan createDispatchPlan(String topic, OutboxEventEnvelope envelope) {
+        if (OutboxEventTopic.PUSH_NOTIFICATION.getValue().equals(topic)) {
             return generalNotificationPlan(envelope);
         }
-        if (PushEventTopic.CHAT.getValue().equals(topic)) {
+        if (OutboxEventTopic.PUSH_CHAT.getValue().equals(topic)) {
             return chatNotificationPlan(envelope);
         }
         throw new NonRetryablePushEventException("Unsupported push topic: " + topic);
     }
 
-    private DispatchPlan generalNotificationPlan(PushEventEnvelope envelope) {
+    private DispatchPlan generalNotificationPlan(OutboxEventEnvelope envelope) {
         JsonNode data = envelope.data();
         Long recipientMemberId = requiredLong(data, "recipientMemberId");
         String title = requiredText(data, "title");
@@ -128,7 +128,7 @@ public class PushEventProcessor {
         );
     }
 
-    private DispatchPlan chatNotificationPlan(PushEventEnvelope envelope) {
+    private DispatchPlan chatNotificationPlan(OutboxEventEnvelope envelope) {
         JsonNode data = envelope.data();
         Set<Long> recipientMemberIds = requiredLongSet(data, "recipientMemberIds");
         Long senderMemberId = optionalLong(data, "senderMemberId");
@@ -155,7 +155,7 @@ public class PushEventProcessor {
         );
     }
 
-    private Map<String, String> baseMessageData(PushEventEnvelope envelope, String route) {
+    private Map<String, String> baseMessageData(OutboxEventEnvelope envelope, String route) {
         Map<String, String> data = new LinkedHashMap<>();
         data.put("eventId", envelope.eventId().toString());
         data.put("eventType", envelope.eventType());

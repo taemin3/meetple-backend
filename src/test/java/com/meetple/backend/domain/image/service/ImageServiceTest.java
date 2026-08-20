@@ -182,5 +182,9 @@ class ImageServiceTest {
         public String createFileUrl(String objectKey) {
             return "https://cdn.meetple.com/" + objectKey;
         }
+
+        @Override
+        public void deleteObject(String objectKey) {
+        }
     }
 }

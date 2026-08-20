@@ -3,9 +3,10 @@ package com.meetple.backend.domain.outbox.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.meetple.backend.domain.image.service.ImageDeletionService;
 import com.meetple.backend.domain.outbox.entity.OutboxEvent;
+import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
 import com.meetple.backend.domain.outbox.repository.OutboxEventRepository;
-import com.meetple.backend.domain.push.event.PushEventTopic;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,9 @@ class OutboxEventPublisherIntegrationTest {
 
     @Autowired
     private OutboxEventRepository outboxEventRepository;
+
+    @Autowired
+    private ImageDeletionService imageDeletionService;
 
     @Autowired
     private PlatformTransactionManager transactionManager;
@@ -95,13 +99,29 @@ class OutboxEventPublisherIntegrationTest {
         assertThat(outboxEventRepository.count()).isZero();
     }
 
+    @Test
+    void imageDeletionRequestIsStoredAsKafkaRoutableOutboxEvent() {
+        String objectKey = "images/profile/7/old.png";
+
+        transactionTemplate.executeWithoutResult(status -> imageDeletionService.schedule(objectKey));
+
+        OutboxEvent saved = outboxEventRepository.findAll().getFirst();
+        assertThat(saved.getAggregateType()).isEqualTo("image");
+        assertThat(saved.getAggregateId()).isEqualTo(objectKey);
+        assertThat(saved.getEventType()).isEqualTo("IMAGE_DELETE_REQUESTED");
+        assertThat(saved.getEventKey()).isEqualTo(objectKey);
+        assertThat(saved.getTopic()).isEqualTo("meetple.image.delete.v1");
+        assertThat(saved.getPayload().path("data").path("objectKey").asText())
+                .isEqualTo(objectKey);
+    }
+
     private OutboxEventRequest request(String deduplicationKey) {
         return new OutboxEventRequest(
                 "notification",
                 "101",
                 "PARTICIPATION_APPROVED",
                 "member:7",
-                PushEventTopic.NOTIFICATION,
+                OutboxEventTopic.PUSH_NOTIFICATION,
                 1,
                 deduplicationKey,
                 Map.of(

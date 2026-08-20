@@ -17,8 +17,7 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     listener:
       ack-mode: record
-      concurrency: ${PUSH_KAFKA_CONSUMER_CONCURRENCY:3}
-      auto-startup: ${PUSH_KAFKA_CONSUMER_ENABLED:false}
+      concurrency: ${KAFKA_CONSUMER_CONCURRENCY:${PUSH_KAFKA_CONSUMER_CONCURRENCY:3}}
 
 server:
   port: ${SERVER_PORT:8080}
@@ -53,6 +52,13 @@ naver:
     maps-client-secret: ${NAVER_MAPS_CLIENT_SECRET:}
 
 image:
+  deletion:
+    kafka:
+      consumer-enabled: ${IMAGE_DELETION_KAFKA_CONSUMER_ENABLED:${PUSH_KAFKA_CONSUMER_ENABLED:false}}
+      retry:
+        initial-delay-ms: ${IMAGE_DELETION_KAFKA_RETRY_INITIAL_DELAY_MS:60000}
+        multiplier: ${IMAGE_DELETION_KAFKA_RETRY_MULTIPLIER:5.0}
+        max-delay-ms: ${IMAGE_DELETION_KAFKA_RETRY_MAX_DELAY_MS:3600000}
   storage:
     bucket: ${IMAGE_STORAGE_BUCKET:}
     region: ${IMAGE_STORAGE_REGION:ap-northeast-2}

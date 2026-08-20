@@ -36,5 +36,8 @@ chat:
     redis-enabled: false
 
 image:
+  deletion:
+    kafka:
+      consumer-enabled: false
   storage:
     public-base-url: https://cdn.meetple.com

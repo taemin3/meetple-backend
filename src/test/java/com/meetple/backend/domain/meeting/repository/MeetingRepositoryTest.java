@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
 import com.meetple.backend.domain.meeting.entity.Meeting;
+import com.meetple.backend.domain.meeting.entity.MeetingBookmark;
+import com.meetple.backend.domain.meeting.entity.MeetingImage;
 import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
@@ -41,6 +43,12 @@ class MeetingRepositoryTest {
 
     @Autowired
     private MeetingParticipationRepository participationRepository;
+
+    @Autowired
+    private MeetingBookmarkRepository bookmarkRepository;
+
+    @Autowired
+    private MeetingImageRepository meetingImageRepository;
 
     @Autowired
     private EntityManager entityManager;
@@ -204,6 +212,104 @@ class MeetingRepositoryTest {
             assertThat(Hibernate.isInitialized(meeting.getHost())).isTrue();
             assertThat(Hibernate.isInitialized(meeting.getCategory())).isTrue();
         });
+    }
+
+    @Test
+    void softDeletedMeetingIsExcludedFromEntitySearchAndNearbyQueries() {
+        Member host = memberRepository.save(Member.createUser(
+                "deleted-host@meetple.com",
+                "encoded-password",
+                "host",
+                "Seoul"
+        ));
+        Category category = categoryRepository.save(Category.create("exercise"));
+        Meeting deleted = meetingRepository.save(createMeeting(
+                host,
+                category,
+                "Deleted running",
+                new BigDecimal("37.521900"),
+                new BigDecimal("126.924500")
+        ));
+        Long deletedId = deleted.getId();
+        bookmarkRepository.save(MeetingBookmark.create(deleted, host));
+        deleted.softDelete(LocalDateTime.now());
+        meetingRepository.flush();
+        entityManager.clear();
+
+        assertThat(meetingRepository.findById(deletedId)).isEmpty();
+        assertThat(meetingRepository.findByHostId(host.getId())).isEmpty();
+        assertThat(bookmarkRepository.countByMemberId(host.getId())).isZero();
+        assertThat(meetingRepository.searchMeetingIds(
+                MeetingStatus.RECRUITING.name(),
+                "%deleted%",
+                "exercise",
+                37.5219,
+                126.9245,
+                6371000.0,
+                PageRequest.of(0, 20)
+        )).isEmpty();
+        assertThat(meetingRepository.findNearbyMeetings(
+                MeetingStatus.RECRUITING.name(),
+                new BigDecimal("37.500000"),
+                new BigDecimal("37.550000"),
+                new BigDecimal("126.900000"),
+                new BigDecimal("126.950000"),
+                false,
+                "exercise",
+                37.5219,
+                126.9245,
+                1000,
+                6371000.0,
+                PageRequest.of(0, 20)
+        )).isEmpty();
+    }
+
+    @Test
+    void permanentlyDeletesExpiredMeetingAndReturnsAllStoredImageKeys() {
+        Member host = memberRepository.save(Member.createUser(
+                "purge-host@meetple.com",
+                "encoded-password",
+                "host",
+                "Seoul"
+        ));
+        Category category = categoryRepository.save(Category.create("exercise"));
+        Meeting meeting = meetingRepository.save(Meeting.create(
+                host,
+                category,
+                "Expired meeting",
+                "Meeting scheduled for permanent deletion.",
+                "Yeouido Park",
+                "330 Yeouidong-ro, Seoul",
+                new BigDecimal("37.521900"),
+                new BigDecimal("126.924500"),
+                10,
+                LocalDateTime.now().plusDays(7),
+                "images/meeting/1/thumbnail.png"
+        ));
+        meetingImageRepository.save(MeetingImage.create(
+                meeting,
+                "images/meeting/1/detail.png",
+                0
+        ));
+        bookmarkRepository.save(MeetingBookmark.create(meeting, host));
+        meeting.softDelete(LocalDateTime.now().minusDays(31));
+        meetingRepository.flush();
+        entityManager.clear();
+
+        List<Long> candidateIds = meetingRepository.findPurgeCandidateIds(
+                LocalDateTime.now().minusDays(30),
+                PageRequest.of(0, 20)
+        );
+
+        assertThat(candidateIds).containsExactly(meeting.getId());
+        assertThat(meetingImageRepository.findObjectKeysIncludingDeletedMeetings(candidateIds))
+                .containsExactlyInAnyOrder(
+                        "images/meeting/1/thumbnail.png",
+                        "images/meeting/1/detail.png"
+                );
+        bookmarkRepository.deleteByMeetingIdInIncludingDeletedMeetings(candidateIds);
+        meetingImageRepository.deleteByMeetingIdInIncludingDeletedMeetings(candidateIds);
+        assertThat(meetingRepository.deletePermanentlyByIdIn(candidateIds)).isEqualTo(1);
     }
 
     @Test

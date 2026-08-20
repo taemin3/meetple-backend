@@ -23,7 +23,7 @@ import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
 import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
-import com.meetple.backend.domain.push.event.PushEventTopic;
+import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
 import com.meetple.backend.global.exception.BadRequestException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -124,7 +124,7 @@ class ChatServiceTest {
         assertThat(outbox.aggregateId()).isEqualTo("21");
         assertThat(outbox.eventType()).isEqualTo("CHAT_MESSAGE_CREATED");
         assertThat(outbox.eventKey()).isEqualTo("room:10");
-        assertThat(outbox.topic()).isEqualTo(PushEventTopic.CHAT);
+        assertThat(outbox.topic()).isEqualTo(OutboxEventTopic.PUSH_CHAT);
         assertThat(outbox.schemaVersion()).isEqualTo(1);
         assertThat(outbox.deduplicationKey()).isEqualTo("chat-message:21");
         @SuppressWarnings("unchecked")

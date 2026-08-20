@@ -1,6 +1,6 @@
 package com.meetple.backend.domain.outbox.service;
 
-import com.meetple.backend.domain.push.event.PushEventTopic;
+import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
 import java.util.Objects;
 
 public record OutboxEventRequest(
@@ -8,7 +8,7 @@ public record OutboxEventRequest(
         String aggregateId,
         String eventType,
         String eventKey,
-        PushEventTopic topic,
+        OutboxEventTopic topic,
         int schemaVersion,
         String deduplicationKey,
         Object data
