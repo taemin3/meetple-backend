@@ -71,7 +71,6 @@ services:
         condition: service_healthy
     environment:
       KAFKA_PUSH_TOPIC_PARTITIONS: ${KAFKA_PUSH_TOPIC_PARTITIONS:-3}
-      IMAGE_DELETION_KAFKA_RETRY_ATTEMPTS: ${IMAGE_DELETION_KAFKA_RETRY_ATTEMPTS:-5}
     entrypoint: ["/bin/bash", "-ec"]
     command:
       - |
@@ -107,6 +106,10 @@ services:
           meetple.push.chat.v1.retry-2 \
           meetple.push.chat.v1.retry-3 \
           meetple.push.chat.v1.dlq \
+          meetple.image.delete.v1.retry-0 \
+          meetple.image.delete.v1.retry-1 \
+          meetple.image.delete.v1.retry-2 \
+          meetple.image.delete.v1.retry-3 \
           meetple.image.delete.v1.dlq
         do
           /opt/kafka/bin/kafka-topics.sh \
@@ -114,21 +117,6 @@ services:
             --create \
             --if-not-exists \
             --topic "$${topic}" \
-            --partitions "$${KAFKA_PUSH_TOPIC_PARTITIONS}" \
-            --replication-factor 1
-        done
-        image_retry_topic_count=$$((IMAGE_DELETION_KAFKA_RETRY_ATTEMPTS - 1))
-        if (( image_retry_topic_count < 0 )); then
-          echo "IMAGE_DELETION_KAFKA_RETRY_ATTEMPTS must be at least 1" >&2
-          exit 1
-        fi
-        for ((index = 0; index < image_retry_topic_count; index++))
-        do
-          /opt/kafka/bin/kafka-topics.sh \
-            --bootstrap-server kafka:29092 \
-            --create \
-            --if-not-exists \
-            --topic "meetple.image.delete.v1.retry-$${index}" \
             --partitions "$${KAFKA_PUSH_TOPIC_PARTITIONS}" \
             --replication-factor 1
         done

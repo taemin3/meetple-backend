@@ -56,7 +56,6 @@ image:
     kafka:
       consumer-enabled: ${IMAGE_DELETION_KAFKA_CONSUMER_ENABLED:${PUSH_KAFKA_CONSUMER_ENABLED:false}}
       retry:
-        attempts: ${IMAGE_DELETION_KAFKA_RETRY_ATTEMPTS:5}
         initial-delay-ms: ${IMAGE_DELETION_KAFKA_RETRY_INITIAL_DELAY_MS:60000}
         multiplier: ${IMAGE_DELETION_KAFKA_RETRY_MULTIPLIER:5.0}
         max-delay-ms: ${IMAGE_DELETION_KAFKA_RETRY_MAX_DELAY_MS:3600000}

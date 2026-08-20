@@ -22,7 +22,7 @@ public class ImageDeletionKafkaConsumer {
     private final ImageDeletionEventProcessor eventProcessor;
 
     @RetryableTopic(
-            attempts = "${image.deletion.kafka.retry.attempts:5}",
+            attempts = "5",
             backOff = @BackOff(
                     delayString = "${image.deletion.kafka.retry.initial-delay-ms:60000}",
                     multiplierString = "${image.deletion.kafka.retry.multiplier:5.0}",
