@@ -33,8 +33,19 @@ public class ImageDeletionEventProcessor {
     }
 
     private OutboxEventEnvelope parseEnvelope(String payload) {
+        if (!StringUtils.hasText(payload)) {
+            throw new NonRetryableImageDeletionEventException(
+                    "Image deletion event payload must not be null or blank."
+            );
+        }
         try {
-            return objectMapper.readValue(payload, OutboxEventEnvelope.class);
+            OutboxEventEnvelope envelope = objectMapper.readValue(payload, OutboxEventEnvelope.class);
+            if (envelope == null) {
+                throw new NonRetryableImageDeletionEventException(
+                        "Image deletion event payload must not be JSON null."
+                );
+            }
+            return envelope;
         } catch (JsonProcessingException exception) {
             throw new NonRetryableImageDeletionEventException(
                     "Invalid image deletion event JSON.",
@@ -74,7 +85,7 @@ public class ImageDeletionEventProcessor {
     }
 
     private void validateDeletableObjectKey(String objectKey) {
-        String keyPrefix = properties.keyPrefix().replaceAll("^/+|/+$", "");
+        String keyPrefix = properties.keyPrefix();
         boolean deletable = Arrays.stream(ImageUploadPurpose.values())
                 .map(purpose -> keyPrefix + "/" + purpose.pathSegment() + "/")
                 .anyMatch(objectKey::startsWith);

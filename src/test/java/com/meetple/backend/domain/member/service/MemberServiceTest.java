@@ -95,7 +95,7 @@ class MemberServiceTest {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
         ReflectionTestUtils.setField(member, "id", 1L);
         ReflectionTestUtils.setField(member, "profileImageObjectKey", "images/profile/1/old.png");
-        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(memberRepository.findByIdForUpdate(1L)).willReturn(Optional.of(member));
         given(imageService.resolveOwnedObjectKey(
                 1L,
                 ImageUploadPurpose.PROFILE,
@@ -112,6 +112,7 @@ class MemberServiceTest {
         assertThat(member.getProfileImageObjectKey()).isEqualTo("images/profile/1/avatar.png");
         assertThat(response.profileImageUrl())
                 .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
+        verify(memberRepository).findByIdForUpdate(1L);
         verify(imageDeletionService).schedule("images/profile/1/old.png");
     }
 
@@ -120,12 +121,13 @@ class MemberServiceTest {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
         ReflectionTestUtils.setField(member, "id", 1L);
         ReflectionTestUtils.setField(member, "profileImageObjectKey", "images/profile/1/avatar.png");
-        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(memberRepository.findByIdForUpdate(1L)).willReturn(Optional.of(member));
 
         MemberProfileResponse response = memberService.deleteMyProfileImage(1L);
 
         assertThat(member.getProfileImageObjectKey()).isNull();
         assertThat(response.profileImageUrl()).isNull();
+        verify(memberRepository).findByIdForUpdate(1L);
         verify(imageDeletionService).schedule("images/profile/1/avatar.png");
     }
 
@@ -133,7 +135,7 @@ class MemberServiceTest {
     void updateMyProfileUpdatesNicknameAndIntroduction() {
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
         ReflectionTestUtils.setField(member, "id", 1L);
-        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(memberRepository.findByIdForUpdate(1L)).willReturn(Optional.of(member));
 
         MemberProfileResponse response = memberService.updateMyProfile(
                 1L,
@@ -145,6 +147,7 @@ class MemberServiceTest {
         assertThat(member.getIntroduction()).isEqualTo("같이 산책해요");
         assertThat(response.nickname()).isEqualTo("모임친구");
         assertThat(response.introduction()).isEqualTo("같이 산책해요");
+        verify(memberRepository).findByIdForUpdate(1L);
     }
 
 }

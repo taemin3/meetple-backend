@@ -107,6 +107,47 @@ class ImageDeletionEventProcessorTest {
                 .hasMessage("Invalid image deletion event JSON.");
     }
 
+    @Test
+    void processRejectsNullPayloadWithoutRetry() {
+        assertThatThrownBy(() -> processor.process(null))
+                .isInstanceOf(NonRetryableImageDeletionEventException.class)
+                .hasMessage("Image deletion event payload must not be null or blank.");
+    }
+
+    @Test
+    void processRejectsJsonNullWithoutRetry() {
+        assertThatThrownBy(() -> processor.process("null"))
+                .isInstanceOf(NonRetryableImageDeletionEventException.class)
+                .hasMessage("Image deletion event payload must not be JSON null.");
+    }
+
+    @Test
+    void processUsesSameNormalizedKeyPrefixAsUpload() throws Exception {
+        ImageStorageProperties normalizedProperties = new ImageStorageProperties(
+                "meetple-images",
+                "ap-northeast-2",
+                "",
+                "https://cdn.meetple.com",
+                "access-key",
+                "secret-key",
+                " /my images\\nested/ ",
+                Duration.ofMinutes(5),
+                5 * 1024 * 1024,
+                false,
+                List.of("image/jpeg", "image/png", "image/webp")
+        );
+        ImageDeletionEventProcessor normalizedProcessor = new ImageDeletionEventProcessor(
+                objectMapper,
+                imageStorageClient,
+                normalizedProperties
+        );
+        String objectKey = "myimages/nested/profile/1/old.png";
+
+        normalizedProcessor.process(payload(objectKey));
+
+        verify(imageStorageClient).deleteObject(objectKey);
+    }
+
     private String payload(String objectKey) throws Exception {
         OutboxEventEnvelope envelope = new OutboxEventEnvelope(
                 UUID.randomUUID(),

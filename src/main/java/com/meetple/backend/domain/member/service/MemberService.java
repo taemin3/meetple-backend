@@ -45,7 +45,7 @@ public class MemberService {
 
     @Transactional
     public MemberProfileResponse updateMyProfileImage(Long memberId, String profileImageObjectKey) {
-        Member member = memberRepository.findById(memberId)
+        Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
 
         String previousObjectKey = member.getProfileImageObjectKey();
@@ -63,7 +63,7 @@ public class MemberService {
 
     @Transactional
     public MemberProfileResponse deleteMyProfileImage(Long memberId) {
-        Member member = memberRepository.findById(memberId)
+        Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
 
         String previousObjectKey = member.getProfileImageObjectKey();
@@ -80,7 +80,7 @@ public class MemberService {
             String nickname,
             String introduction
     ) {
-        Member member = memberRepository.findById(memberId)
+        Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
 
         member.updateProfile(
