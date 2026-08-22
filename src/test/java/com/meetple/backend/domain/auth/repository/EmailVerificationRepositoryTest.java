@@ -3,7 +3,6 @@ package com.meetple.backend.domain.auth.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.auth.repository.EmailVerificationRepository.CodeVerificationResult;
 import java.time.Duration;
@@ -56,25 +55,58 @@ class EmailVerificationRepositoryTest {
     }
 
     @Test
-    void verifyCodeMapsAtomicScriptResults() {
+    void verifyCodeAndSaveSignupTokenMapsAtomicScriptResults() {
+        String emailHash = TokenHashUtil.sha256("user@meetple.com");
+        String tokenHash = TokenHashUtil.sha256("signup-token");
+        List<String> keys = List.of(
+                "email-verification:challenge:" + emailHash,
+                "email-verification:signup-token:" + tokenHash
+        );
         given(stringRedisTemplate.execute(
                 ArgumentMatchers.<RedisScript<Long>>any(),
-                ArgumentMatchers.<List<String>>any(),
+                eq(keys),
                 eq("code-hash"),
-                eq("5")
+                eq("5"),
+                eq(emailHash),
+                eq("900000")
         )).willReturn(1L, -1L, -2L, null);
         EmailVerificationRepository repository = new EmailVerificationRepository(
                 stringRedisTemplate
         );
 
-        assertThat(repository.verifyCode("user@meetple.com", "code-hash", 5))
+        assertThat(repository.verifyCodeAndSaveSignupToken(
+                "user@meetple.com",
+                "code-hash",
+                5,
+                "signup-token",
+                Duration.ofMinutes(15)
+        ))
                 .isEqualTo(CodeVerificationResult.VERIFIED);
-        assertThat(repository.verifyCode("user@meetple.com", "code-hash", 5))
+        assertThat(repository.verifyCodeAndSaveSignupToken(
+                "user@meetple.com",
+                "code-hash",
+                5,
+                "signup-token",
+                Duration.ofMinutes(15)
+        ))
                 .isEqualTo(CodeVerificationResult.INVALID);
-        assertThat(repository.verifyCode("user@meetple.com", "code-hash", 5))
+        assertThat(repository.verifyCodeAndSaveSignupToken(
+                "user@meetple.com",
+                "code-hash",
+                5,
+                "signup-token",
+                Duration.ofMinutes(15)
+        ))
                 .isEqualTo(CodeVerificationResult.ATTEMPTS_EXCEEDED);
-        assertThat(repository.verifyCode("user@meetple.com", "code-hash", 5))
+        assertThat(repository.verifyCodeAndSaveSignupToken(
+                "user@meetple.com",
+                "code-hash",
+                5,
+                "signup-token",
+                Duration.ofMinutes(15)
+        ))
                 .isEqualTo(CodeVerificationResult.EXPIRED);
+        assertThat(keys).allMatch(key -> !key.contains("user@meetple.com"));
     }
 
     @Test
@@ -129,23 +161,29 @@ class EmailVerificationRepositoryTest {
     }
 
     @Test
-    void saveSignupTokenStoresOnlyHashedTokenAndEmail() {
-        given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
+    void acquireConfirmPermitUsesHashedRequesterKey() {
+        String requesterHash = TokenHashUtil.sha256("127.0.0.1");
+        List<String> keys = List.of(
+                "email-verification:rate-limit:confirm-requester:" + requesterHash
+        );
+        given(stringRedisTemplate.execute(
+                ArgumentMatchers.<RedisScript<Long>>any(),
+                eq(keys),
+                eq("10"),
+                eq("60000")
+        )).willReturn(1L);
         EmailVerificationRepository repository = new EmailVerificationRepository(
                 stringRedisTemplate
         );
 
-        repository.saveSignupToken(
-                "signup-token",
-                "user@meetple.com",
-                Duration.ofMinutes(15)
+        boolean allowed = repository.acquireConfirmPermit(
+                "127.0.0.1",
+                Duration.ofMinutes(1),
+                10
         );
 
-        verify(valueOperations).set(
-                "email-verification:signup-token:" + TokenHashUtil.sha256("signup-token"),
-                TokenHashUtil.sha256("user@meetple.com"),
-                Duration.ofMinutes(15)
-        );
+        assertThat(allowed).isTrue();
+        assertThat(keys.getFirst()).doesNotContain("127.0.0.1");
     }
 
     @Test

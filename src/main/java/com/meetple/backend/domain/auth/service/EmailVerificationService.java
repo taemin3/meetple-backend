@@ -64,22 +64,31 @@ public class EmailVerificationService {
         }
     }
 
-    public EmailVerificationConfirmResponse confirm(EmailVerificationConfirmRequest request) {
+    public EmailVerificationConfirmResponse confirm(
+            EmailVerificationConfirmRequest request,
+            String requesterIdentifier
+    ) {
         String email = EmailAddressNormalizer.normalize(request.email());
+        if (!emailVerificationRepository.acquireConfirmPermit(
+                requesterIdentifier,
+                properties.confirmationRequesterRateLimitWindow(),
+                properties.confirmationRequesterRateLimit()
+        )) {
+            throw new BaseException(ErrorStatus.EMAIL_VERIFICATION_CONFIRM_RATE_LIMITED);
+        }
+
         String codeHash = hasher.hashCode(email, request.code());
-        CodeVerificationResult result = emailVerificationRepository.verifyCode(
-                email,
-                codeHash,
-                properties.maxAttempts()
-        );
+        String signupToken = secretGenerator.generateToken();
+        CodeVerificationResult result = emailVerificationRepository
+                .verifyCodeAndSaveSignupToken(
+                        email,
+                        codeHash,
+                        properties.maxAttempts(),
+                        signupToken,
+                        properties.signupTokenTtl()
+                );
         validateResult(result);
 
-        String signupToken = secretGenerator.generateToken();
-        emailVerificationRepository.saveSignupToken(
-                signupToken,
-                email,
-                properties.signupTokenTtl()
-        );
         return new EmailVerificationConfirmResponse(
                 signupToken,
                 properties.signupTokenTtl().toSeconds()

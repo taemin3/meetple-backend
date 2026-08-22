@@ -67,6 +67,8 @@ auth:
     requester-rate-limit: ${EMAIL_VERIFICATION_REQUESTER_RATE_LIMIT:5}
     global-rate-limit-window: ${EMAIL_VERIFICATION_GLOBAL_RATE_LIMIT_WINDOW:1m}
     global-rate-limit: ${EMAIL_VERIFICATION_GLOBAL_RATE_LIMIT:100}
+    confirmation-requester-rate-limit-window: ${EMAIL_VERIFICATION_CONFIRMATION_REQUESTER_RATE_LIMIT_WINDOW:1m}
+    confirmation-requester-rate-limit: ${EMAIL_VERIFICATION_CONFIRMATION_REQUESTER_RATE_LIMIT:10}
     hmac-secret: ${EMAIL_VERIFICATION_HMAC_SECRET:${JWT_SECRET}}
     from-address: ${EMAIL_FROM_ADDRESS:noreply@meetple.local}
 

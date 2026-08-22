@@ -53,11 +53,12 @@ public class AuthController {
             description = "인증번호를 확인하고 회원가입 전용 1회성 토큰을 발급합니다."
     )
     public ResponseEntity<ApiResponse<EmailVerificationConfirmResponse>> confirmEmailVerificationCode(
-            @Valid @RequestBody EmailVerificationConfirmRequest request
+            @Valid @RequestBody EmailVerificationConfirmRequest request,
+            HttpServletRequest httpServletRequest
     ) {
         return ApiResponse.success(
                 SuccessStatus.OK,
-                emailVerificationService.confirm(request)
+                emailVerificationService.confirm(request, httpServletRequest.getRemoteAddr())
         );
     }
 

@@ -79,7 +79,10 @@ class AuthControllerTest {
                 "user@meetple.com",
                 "123456"
         );
-        given(emailVerificationService.confirm(any(EmailVerificationConfirmRequest.class)))
+        given(emailVerificationService.confirm(
+                any(EmailVerificationConfirmRequest.class),
+                eq("127.0.0.1")
+        ))
                 .willReturn(new EmailVerificationConfirmResponse("signup-token", 900));
 
         mockMvc.perform(post("/api/v1/auth/email-verifications/confirm")

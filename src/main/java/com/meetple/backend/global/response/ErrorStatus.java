@@ -43,6 +43,7 @@ public enum ErrorStatus {
     EMAIL_VERIFICATION_SEND_TOO_SOON(HttpStatus.TOO_MANY_REQUESTS, "인증번호 재전송은 잠시 후 시도해주세요.", 12901),
     EMAIL_VERIFICATION_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "인증번호 확인 횟수를 초과했습니다. 다시 요청해주세요.", 12902),
     EMAIL_VERIFICATION_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "이메일 인증 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.", 12903),
+    EMAIL_VERIFICATION_CONFIRM_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "인증번호 확인 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.", 12904),
 
     // 500 INTERNAL_SERVER_ERROR
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.",10501),

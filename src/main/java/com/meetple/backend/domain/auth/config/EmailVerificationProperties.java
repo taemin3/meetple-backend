@@ -15,6 +15,8 @@ public record EmailVerificationProperties(
         int requesterRateLimit,
         Duration globalRateLimitWindow,
         int globalRateLimit,
+        Duration confirmationRequesterRateLimitWindow,
+        int confirmationRequesterRateLimit,
         String hmacSecret,
         String fromAddress
 ) {
@@ -27,6 +29,9 @@ public record EmailVerificationProperties(
     private static final int DEFAULT_REQUESTER_RATE_LIMIT = 5;
     private static final Duration DEFAULT_GLOBAL_RATE_LIMIT_WINDOW = Duration.ofMinutes(1);
     private static final int DEFAULT_GLOBAL_RATE_LIMIT = 100;
+    private static final Duration DEFAULT_CONFIRMATION_REQUESTER_RATE_LIMIT_WINDOW =
+            Duration.ofMinutes(1);
+    private static final int DEFAULT_CONFIRMATION_REQUESTER_RATE_LIMIT = 10;
     private static final int MINIMUM_SECRET_BYTES = 32;
 
     public EmailVerificationProperties {
@@ -48,6 +53,13 @@ public record EmailVerificationProperties(
         globalRateLimit = globalRateLimit > 0
                 ? globalRateLimit
                 : DEFAULT_GLOBAL_RATE_LIMIT;
+        confirmationRequesterRateLimitWindow = positiveOrDefault(
+                confirmationRequesterRateLimitWindow,
+                DEFAULT_CONFIRMATION_REQUESTER_RATE_LIMIT_WINDOW
+        );
+        confirmationRequesterRateLimit = confirmationRequesterRateLimit > 0
+                ? confirmationRequesterRateLimit
+                : DEFAULT_CONFIRMATION_REQUESTER_RATE_LIMIT;
 
         if (!StringUtils.hasText(hmacSecret)
                 || hmacSecret.getBytes(StandardCharsets.UTF_8).length < MINIMUM_SECRET_BYTES) {

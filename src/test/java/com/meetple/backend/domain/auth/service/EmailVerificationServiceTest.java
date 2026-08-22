@@ -65,6 +65,8 @@ class EmailVerificationServiceTest {
                 5,
                 Duration.ofMinutes(1),
                 100,
+                Duration.ofMinutes(1),
+                10,
                 "test-email-verification-secret-1234567890",
                 "noreply@meetple.test"
         );
@@ -189,32 +191,50 @@ class EmailVerificationServiceTest {
 
     @Test
     void confirmReturnsSignupTokenForValidCode() {
+        allowConfirm();
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
-        given(emailVerificationRepository.verifyCode(EMAIL, CODE_HASH, 5))
-                .willReturn(CodeVerificationResult.VERIFIED);
         given(secretGenerator.generateToken()).willReturn(SIGNUP_TOKEN);
+        given(emailVerificationRepository.verifyCodeAndSaveSignupToken(
+                EMAIL,
+                CODE_HASH,
+                5,
+                SIGNUP_TOKEN,
+                properties.signupTokenTtl()
+        )).willReturn(CodeVerificationResult.VERIFIED);
 
         EmailVerificationConfirmResponse response = emailVerificationService.confirm(
-                new EmailVerificationConfirmRequest(EMAIL, CODE)
+                new EmailVerificationConfirmRequest(EMAIL, CODE),
+                "127.0.0.1"
         );
 
         assertThat(response.signupVerificationToken()).isEqualTo(SIGNUP_TOKEN);
         assertThat(response.expiresIn()).isEqualTo(Duration.ofMinutes(15).toSeconds());
-        verify(emailVerificationRepository).saveSignupToken(
-                SIGNUP_TOKEN,
+        verify(emailVerificationRepository).verifyCodeAndSaveSignupToken(
                 EMAIL,
+                CODE_HASH,
+                5,
+                SIGNUP_TOKEN,
                 properties.signupTokenTtl()
         );
     }
 
     @Test
     void confirmRejectsInvalidCode() {
+        allowConfirm();
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
-        given(emailVerificationRepository.verifyCode(EMAIL, CODE_HASH, 5))
+        given(secretGenerator.generateToken()).willReturn(SIGNUP_TOKEN);
+        given(emailVerificationRepository.verifyCodeAndSaveSignupToken(
+                EMAIL,
+                CODE_HASH,
+                5,
+                SIGNUP_TOKEN,
+                properties.signupTokenTtl()
+        ))
                 .willReturn(CodeVerificationResult.INVALID);
 
         assertThatThrownBy(() -> emailVerificationService.confirm(
-                new EmailVerificationConfirmRequest(EMAIL, CODE)
+                new EmailVerificationConfirmRequest(EMAIL, CODE),
+                "127.0.0.1"
         ))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage(ErrorStatus.EMAIL_VERIFICATION_CODE_INVALID.getMessage());
@@ -222,12 +242,21 @@ class EmailVerificationServiceTest {
 
     @Test
     void confirmRejectsExpiredCode() {
+        allowConfirm();
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
-        given(emailVerificationRepository.verifyCode(EMAIL, CODE_HASH, 5))
+        given(secretGenerator.generateToken()).willReturn(SIGNUP_TOKEN);
+        given(emailVerificationRepository.verifyCodeAndSaveSignupToken(
+                EMAIL,
+                CODE_HASH,
+                5,
+                SIGNUP_TOKEN,
+                properties.signupTokenTtl()
+        ))
                 .willReturn(CodeVerificationResult.EXPIRED);
 
         assertThatThrownBy(() -> emailVerificationService.confirm(
-                new EmailVerificationConfirmRequest(EMAIL, CODE)
+                new EmailVerificationConfirmRequest(EMAIL, CODE),
+                "127.0.0.1"
         ))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage(ErrorStatus.EMAIL_VERIFICATION_CODE_EXPIRED.getMessage());
@@ -235,15 +264,42 @@ class EmailVerificationServiceTest {
 
     @Test
     void confirmRejectsAttemptsExceeded() {
+        allowConfirm();
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
-        given(emailVerificationRepository.verifyCode(EMAIL, CODE_HASH, 5))
+        given(secretGenerator.generateToken()).willReturn(SIGNUP_TOKEN);
+        given(emailVerificationRepository.verifyCodeAndSaveSignupToken(
+                EMAIL,
+                CODE_HASH,
+                5,
+                SIGNUP_TOKEN,
+                properties.signupTokenTtl()
+        ))
                 .willReturn(CodeVerificationResult.ATTEMPTS_EXCEEDED);
 
         assertThatThrownBy(() -> emailVerificationService.confirm(
-                new EmailVerificationConfirmRequest(EMAIL, CODE)
+                new EmailVerificationConfirmRequest(EMAIL, CODE),
+                "127.0.0.1"
         ))
                 .isInstanceOf(BaseException.class)
                 .hasMessage(ErrorStatus.EMAIL_VERIFICATION_ATTEMPTS_EXCEEDED.getMessage());
+    }
+
+    @Test
+    void confirmRejectsRequesterRateLimit() {
+        given(emailVerificationRepository.acquireConfirmPermit(
+                "127.0.0.1",
+                properties.confirmationRequesterRateLimitWindow(),
+                properties.confirmationRequesterRateLimit()
+        )).willReturn(false);
+
+        assertThatThrownBy(() -> emailVerificationService.confirm(
+                new EmailVerificationConfirmRequest(EMAIL, CODE),
+                "127.0.0.1"
+        ))
+                .isInstanceOf(BaseException.class)
+                .hasMessage(ErrorStatus.EMAIL_VERIFICATION_CONFIRM_RATE_LIMITED.getMessage());
+
+        verify(hasher, never()).hashCode(anyString(), anyString());
     }
 
     @Test
@@ -266,6 +322,14 @@ class EmailVerificationServiceTest {
                 properties.requesterRateLimit(),
                 properties.globalRateLimitWindow(),
                 properties.globalRateLimit()
+        )).willReturn(true);
+    }
+
+    private void allowConfirm() {
+        given(emailVerificationRepository.acquireConfirmPermit(
+                "127.0.0.1",
+                properties.confirmationRequesterRateLimitWindow(),
+                properties.confirmationRequesterRateLimit()
         )).willReturn(true);
     }
 }

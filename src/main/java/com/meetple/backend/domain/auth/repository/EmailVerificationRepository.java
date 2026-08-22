@@ -16,6 +16,8 @@ public class EmailVerificationRepository {
     private static final String COOLDOWN_KEY_PREFIX = "email-verification:cooldown:";
     private static final String SIGNUP_TOKEN_KEY_PREFIX = "email-verification:signup-token:";
     private static final String REQUESTER_RATE_LIMIT_KEY_PREFIX = "email-verification:rate-limit:requester:";
+    private static final String CONFIRM_REQUESTER_RATE_LIMIT_KEY_PREFIX =
+            "email-verification:rate-limit:confirm-requester:";
     private static final String GLOBAL_RATE_LIMIT_KEY = "email-verification:rate-limit:global";
     private static final RedisScript<Long> SAVE_CHALLENGE_SCRIPT = createScript("""
             local cooldownCreated = redis.call('SET', KEYS[2], '1', 'PX', ARGV[2], 'NX')
@@ -49,6 +51,7 @@ public class EmailVerificationRepository {
                 return -1
             end
 
+            redis.call('SET', KEYS[2], ARGV[3], 'PX', ARGV[4])
             redis.call('DEL', KEYS[1])
             return 1
             """);
@@ -59,6 +62,18 @@ public class EmailVerificationRepository {
             end
 
             redis.call('DEL', KEYS[1], KEYS[2])
+            return 1
+            """);
+    private static final RedisScript<Long> ACQUIRE_CONFIRM_PERMIT_SCRIPT = createScript("""
+            local requesterCount = tonumber(redis.call('GET', KEYS[1]) or '0')
+            if requesterCount >= tonumber(ARGV[1]) then
+                return 0
+            end
+
+            requesterCount = redis.call('INCR', KEYS[1])
+            if requesterCount == 1 then
+                redis.call('PEXPIRE', KEYS[1], ARGV[2])
+            end
             return 1
             """);
     private static final RedisScript<Long> ACQUIRE_SEND_PERMIT_SCRIPT = createScript("""
@@ -108,13 +123,24 @@ public class EmailVerificationRepository {
         return Long.valueOf(1L).equals(result);
     }
 
-    public CodeVerificationResult verifyCode(String email, String codeHash, int maxAttempts) {
+    public CodeVerificationResult verifyCodeAndSaveSignupToken(
+            String email,
+            String codeHash,
+            int maxAttempts,
+            String signupToken,
+            Duration signupTokenTtl
+    ) {
         String emailHash = TokenHashUtil.sha256(email);
         Long result = stringRedisTemplate.execute(
                 VERIFY_CODE_SCRIPT,
-                List.of(createChallengeKey(emailHash)),
+                List.of(
+                        createChallengeKey(emailHash),
+                        createSignupTokenKey(TokenHashUtil.sha256(signupToken))
+                ),
                 codeHash,
-                String.valueOf(maxAttempts)
+                String.valueOf(maxAttempts),
+                emailHash,
+                String.valueOf(signupTokenTtl.toMillis())
         );
         return CodeVerificationResult.from(result);
     }
@@ -148,12 +174,19 @@ public class EmailVerificationRepository {
         return Long.valueOf(1L).equals(result);
     }
 
-    public void saveSignupToken(String token, String email, Duration ttl) {
-        stringRedisTemplate.opsForValue().set(
-                createSignupTokenKey(TokenHashUtil.sha256(token)),
-                TokenHashUtil.sha256(email),
-                ttl
+    public boolean acquireConfirmPermit(
+            String requesterIdentifier,
+            Duration requesterWindow,
+            int requesterLimit
+    ) {
+        Long result = stringRedisTemplate.execute(
+                ACQUIRE_CONFIRM_PERMIT_SCRIPT,
+                List.of(CONFIRM_REQUESTER_RATE_LIMIT_KEY_PREFIX
+                        + TokenHashUtil.sha256(requesterIdentifier)),
+                String.valueOf(requesterLimit),
+                String.valueOf(requesterWindow.toMillis())
         );
+        return Long.valueOf(1L).equals(result);
     }
 
     public boolean consumeSignupToken(String token, String email) {
