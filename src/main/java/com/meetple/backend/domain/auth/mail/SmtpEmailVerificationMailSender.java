@@ -19,18 +19,45 @@ public class SmtpEmailVerificationMailSender implements EmailVerificationMailSen
 
     @Override
     public void sendVerificationCode(String recipient, String code, Duration expiresIn) {
+        send(
+                recipient,
+                "[밋플] 이메일 인증번호 안내",
+                "밋플 회원가입 이메일 인증번호입니다.",
+                code,
+                expiresIn
+        );
+    }
+
+    @Override
+    public void sendPasswordResetCode(String recipient, String code, Duration expiresIn) {
+        send(
+                recipient,
+                "[밋플] 비밀번호 재설정 인증번호 안내",
+                "밋플 비밀번호 재설정 인증번호입니다.",
+                code,
+                expiresIn
+        );
+    }
+
+    private void send(
+            String recipient,
+            String subject,
+            String introduction,
+            String code,
+            Duration expiresIn
+    ) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(properties.fromAddress());
         message.setTo(recipient);
-        message.setSubject("[밋플] 이메일 인증번호 안내");
+        message.setSubject(subject);
         message.setText("""
-                밋플 회원가입 이메일 인증번호입니다.
+                %s
 
                 인증번호: %s
 
                 인증번호는 %d분 동안 유효합니다.
                 본인이 요청하지 않았다면 이 메일을 무시해주세요.
-                """.formatted(code, expiresIn.toMinutes()));
+                """.formatted(introduction, code, expiresIn.toMinutes()));
 
         try {
             javaMailSender.send(message);

@@ -5,4 +5,6 @@ import java.time.Duration;
 public interface EmailVerificationMailSender {
 
     void sendVerificationCode(String recipient, String code, Duration expiresIn);
+
+    void sendPasswordResetCode(String recipient, String code, Duration expiresIn);
 }

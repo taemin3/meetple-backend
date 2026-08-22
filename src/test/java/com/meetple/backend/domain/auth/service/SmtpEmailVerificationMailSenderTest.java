@@ -81,4 +81,21 @@ class SmtpEmailVerificationMailSenderTest {
                 .extracting(exception -> ((BaseException) exception).getErrorStatus())
                 .isEqualTo(ErrorStatus.EXTERNAL_API_ERROR);
     }
+
+    @Test
+    void sendPasswordResetCodeBuildsPasswordResetEmail() {
+        mailSender.sendPasswordResetCode(
+                "user@meetple.com",
+                "654321",
+                Duration.ofMinutes(5)
+        );
+
+        ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(
+                SimpleMailMessage.class
+        );
+        verify(javaMailSender).send(captor.capture());
+        SimpleMailMessage message = captor.getValue();
+        assertThat(message.getSubject()).contains("비밀번호 재설정");
+        assertThat(message.getText()).contains("비밀번호 재설정", "654321", "5분");
+    }
 }

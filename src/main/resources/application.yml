@@ -71,6 +71,8 @@ auth:
     confirmation-requester-rate-limit: ${EMAIL_VERIFICATION_CONFIRMATION_REQUESTER_RATE_LIMIT:10}
     hmac-secret: ${EMAIL_VERIFICATION_HMAC_SECRET:${JWT_SECRET}}
     from-address: ${EMAIL_FROM_ADDRESS:noreply@meetple.local}
+  password-reset:
+    token-ttl: ${PASSWORD_RESET_TOKEN_TTL:15m}
 
 naver:
   location:

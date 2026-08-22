@@ -4,13 +4,16 @@ import com.meetple.backend.domain.auth.dto.request.EmailVerificationConfirmReque
 import com.meetple.backend.domain.auth.dto.request.EmailVerificationSendRequest;
 import com.meetple.backend.domain.auth.dto.request.LoginRequest;
 import com.meetple.backend.domain.auth.dto.request.LogoutRequest;
+import com.meetple.backend.domain.auth.dto.request.PasswordResetRequest;
 import com.meetple.backend.domain.auth.dto.request.ReissueRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.auth.dto.response.EmailVerificationConfirmResponse;
 import com.meetple.backend.domain.auth.dto.response.LoginResponse;
+import com.meetple.backend.domain.auth.dto.response.PasswordResetVerificationResponse;
 import com.meetple.backend.domain.auth.service.AuthService;
 import com.meetple.backend.domain.auth.service.EmailVerificationService;
+import com.meetple.backend.domain.auth.service.PasswordResetService;
 import com.meetple.backend.global.config.OpenApiConfig;
 import com.meetple.backend.global.response.ApiResponse;
 import com.meetple.backend.global.response.SuccessStatus;
@@ -36,6 +39,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final EmailVerificationService emailVerificationService;
+    private final PasswordResetService passwordResetService;
 
     @PostMapping("/email-verifications")
     @Operation(summary = "회원가입 이메일 인증번호 발송", description = "입력한 이메일로 6자리 인증번호를 발송합니다.")
@@ -60,6 +64,46 @@ public class AuthController {
                 SuccessStatus.OK,
                 emailVerificationService.confirm(request, httpServletRequest.getRemoteAddr())
         );
+    }
+
+    @PostMapping("/password-resets/email-verifications")
+    @Operation(
+            summary = "비밀번호 재설정 인증번호 발송",
+            description = "계정 존재 여부를 노출하지 않고 입력한 이메일의 비밀번호 재설정 인증을 시작합니다."
+    )
+    public ResponseEntity<ApiResponse<Void>> sendPasswordResetVerificationCode(
+            @Valid @RequestBody EmailVerificationSendRequest request,
+            HttpServletRequest httpServletRequest
+    ) {
+        passwordResetService.sendVerificationCode(request, httpServletRequest.getRemoteAddr());
+        return ApiResponse.successOnly(SuccessStatus.OK);
+    }
+
+    @PostMapping("/password-resets/email-verifications/confirm")
+    @Operation(
+            summary = "비밀번호 재설정 인증번호 확인",
+            description = "인증번호를 확인하고 비밀번호 재설정 전용 1회성 토큰을 발급합니다."
+    )
+    public ResponseEntity<ApiResponse<PasswordResetVerificationResponse>> confirmPasswordResetVerificationCode(
+            @Valid @RequestBody EmailVerificationConfirmRequest request,
+            HttpServletRequest httpServletRequest
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                passwordResetService.confirm(request, httpServletRequest.getRemoteAddr())
+        );
+    }
+
+    @PostMapping("/password-resets")
+    @Operation(
+            summary = "비밀번호 재설정",
+            description = "1회성 재설정 토큰으로 새 비밀번호를 저장하고 기존 로그인 세션을 모두 종료합니다."
+    )
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @Valid @RequestBody PasswordResetRequest request
+    ) {
+        passwordResetService.resetPassword(request);
+        return ApiResponse.successOnly(SuccessStatus.OK);
     }
 
     @PostMapping("/signup")
