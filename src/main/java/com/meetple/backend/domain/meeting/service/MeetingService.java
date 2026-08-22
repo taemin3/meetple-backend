@@ -382,7 +382,8 @@ public class MeetingService {
                 images.stream().map(ImageReference::fileUrl).toList(),
                 images.stream()
                         .map(ImageReference::objectKey)
-                        .toList()
+                        .toList(),
+                imageService.createFileUrl(meeting.getHost().getProfileImageObjectKey())
         );
     }
 

@@ -254,7 +254,8 @@ public class MeetingEngagementService {
         return MeetingResponse.from(
                 meeting,
                 images.stream().map(ImageReference::fileUrl).toList(),
-                images.stream().map(ImageReference::objectKey).toList()
+                images.stream().map(ImageReference::objectKey).toList(),
+                profileImageUrl(meeting.getHost())
         );
     }
 

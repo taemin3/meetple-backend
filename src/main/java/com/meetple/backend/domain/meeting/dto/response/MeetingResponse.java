@@ -9,6 +9,8 @@ public record MeetingResponse(
         Long id,
         Long hostId,
         String hostNickname,
+        String hostProfileImageUrl,
+        String hostIntroduction,
         Long categoryId,
         String categoryName,
         String title,
@@ -55,6 +57,8 @@ public record MeetingResponse(
                 id,
                 hostId,
                 hostNickname,
+                null,
+                null,
                 categoryId,
                 categoryName,
                 title,
@@ -90,12 +94,23 @@ public record MeetingResponse(
             List<String> imageUrls,
             List<String> imageObjectKeys
     ) {
+        return from(meeting, imageUrls, imageObjectKeys, null);
+    }
+
+    public static MeetingResponse from(
+            Meeting meeting,
+            List<String> imageUrls,
+            List<String> imageObjectKeys,
+            String hostProfileImageUrl
+    ) {
         List<String> resolvedImageUrls = imageUrls == null ? List.of() : imageUrls;
         List<String> resolvedImageObjectKeys = imageObjectKeys == null ? List.of() : imageObjectKeys;
         return new MeetingResponse(
                 meeting.getId(),
                 meeting.getHost().getId(),
                 meeting.getHost().getNickname(),
+                hostProfileImageUrl,
+                meeting.getHost().getIntroduction(),
                 meeting.getCategory().getId(),
                 meeting.getCategory().getName(),
                 meeting.getTitle(),

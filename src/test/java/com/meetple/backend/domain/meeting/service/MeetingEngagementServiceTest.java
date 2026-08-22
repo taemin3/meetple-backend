@@ -25,6 +25,7 @@ import com.meetple.backend.global.response.PageResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -58,6 +59,33 @@ class MeetingEngagementServiceTest {
 
     @InjectMocks
     private MeetingEngagementService engagementService;
+
+    @Test
+    void getEngagementIncludesMemberIntroductions() {
+        Member host = member(1L, "host@meetple.com", "host");
+        host.updateProfile("host", "모임을 즐겁게 이끌어요.");
+        Member participant = member(2L, "member@meetple.com", "member");
+        participant.updateProfile("member", "러닝을 좋아해요.");
+        Meeting meeting = meeting(10L, host);
+        MeetingParticipation approved = MeetingParticipation.apply(meeting, participant, null);
+        approved.approve();
+
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(participationRepository.findByMeetingIdAndMemberId(10L, 3L))
+                .willReturn(Optional.empty());
+        given(participationRepository.findByMeetingIdAndStatus(10L, ParticipationStatus.APPROVED))
+                .willReturn(List.of(approved));
+
+        var response = engagementService.getEngagement(3L, 10L);
+
+        assertThat(response.members()).hasSize(2);
+        assertThat(response.members().get(0).nickname()).isEqualTo("host");
+        assertThat(response.members().get(0).introduction()).isEqualTo("모임을 즐겁게 이끌어요.");
+        assertThat(response.members().get(0).host()).isTrue();
+        assertThat(response.members().get(1).nickname()).isEqualTo("member");
+        assertThat(response.members().get(1).introduction()).isEqualTo("러닝을 좋아해요.");
+        assertThat(response.members().get(1).host()).isFalse();
+    }
 
     @Test
     void getMyBookmarksIncludesImagesAndTranslatesMeetingSortProperties() {

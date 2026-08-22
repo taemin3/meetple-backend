@@ -89,6 +89,8 @@ class MeetingServiceTest {
     @Test
     void createMeetingReturnsSavedMeetingResponse() {
         Member host = member(1L, "host@meetple.com", "host");
+        ReflectionTestUtils.setField(host, "profileImageObjectKey", "images/profile/1/avatar.png");
+        ReflectionTestUtils.setField(host, "introduction", "함께 즐겁게 운동해요.");
         Category category = category(1L, "exercise");
         CreateMeetingRequest request = createRequestWithImageUrls(List.of(
                 "images/meeting/1/first.png",
@@ -111,6 +113,8 @@ class MeetingServiceTest {
                 .willReturn("https://cdn.meetple.com/images/meeting/1/first.png");
         given(imageService.createFileUrl("images/meeting/1/second.png"))
                 .willReturn("https://cdn.meetple.com/images/meeting/1/second.png");
+        given(imageService.createFileUrl("images/profile/1/avatar.png"))
+                .willReturn("https://cdn.meetple.com/images/profile/1/avatar.png");
         given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> {
             Meeting meeting = invocation.getArgument(0);
             ReflectionTestUtils.setField(meeting, "id", 10L);
@@ -121,6 +125,10 @@ class MeetingServiceTest {
 
         assertThat(response.id()).isEqualTo(10L);
         assertThat(response.hostId()).isEqualTo(1L);
+        assertThat(response.hostNickname()).isEqualTo("host");
+        assertThat(response.hostProfileImageUrl())
+                .isEqualTo("https://cdn.meetple.com/images/profile/1/avatar.png");
+        assertThat(response.hostIntroduction()).isEqualTo("함께 즐겁게 운동해요.");
         assertThat(response.categoryName()).isEqualTo("exercise");
         assertThat(response.title()).isEqualTo("Weekend running");
         assertThat(response.capacity()).isEqualTo(10);
