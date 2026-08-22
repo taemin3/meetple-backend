@@ -5,6 +5,7 @@ import com.meetple.backend.domain.member.entity.Member;
 public record MeetingMemberResponse(
         Long memberId,
         String nickname,
+        String introduction,
         String profileImageUrl,
         boolean host
 ) {
@@ -12,6 +13,7 @@ public record MeetingMemberResponse(
         return new MeetingMemberResponse(
                 member.getId(),
                 member.getNickname(),
+                member.getIntroduction(),
                 profileImageUrl,
                 true
         );
@@ -21,6 +23,7 @@ public record MeetingMemberResponse(
         return new MeetingMemberResponse(
                 member.getId(),
                 member.getNickname(),
+                member.getIntroduction(),
                 profileImageUrl,
                 false
         );
