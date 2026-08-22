@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -37,6 +38,9 @@ public class Member extends BaseTimeEntity {
     @Column(nullable = false, length = 255)
     private String password;
 
+    @Column(name = "email_verified_at")
+    private LocalDateTime emailVerifiedAt;
+
     @Column(nullable = false, length = 50)
     private String nickname;
 
@@ -56,6 +60,7 @@ public class Member extends BaseTimeEntity {
     private Member(String email, String password, String nickname, String region, MemberRole role) {
         this.email = email;
         this.password = password;
+        this.emailVerifiedAt = LocalDateTime.now();
         this.nickname = nickname;
         this.region = region;
         this.role = role;

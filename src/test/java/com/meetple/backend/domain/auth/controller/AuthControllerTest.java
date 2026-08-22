@@ -10,14 +10,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.meetple.backend.domain.auth.dto.request.EmailVerificationConfirmRequest;
+import com.meetple.backend.domain.auth.dto.request.EmailVerificationSendRequest;
 import com.meetple.backend.domain.auth.dto.request.LoginRequest;
 import com.meetple.backend.domain.auth.dto.request.LogoutRequest;
 import com.meetple.backend.domain.auth.dto.request.ReissueRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupLegalDocumentRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
+import com.meetple.backend.domain.auth.dto.response.EmailVerificationConfirmResponse;
 import com.meetple.backend.domain.auth.dto.response.LoginResponse;
 import com.meetple.backend.domain.auth.service.AuthService;
+import com.meetple.backend.domain.auth.service.EmailVerificationService;
 import com.meetple.backend.domain.legal.entity.LegalDocumentType;
 import com.meetple.backend.global.exception.GlobalExceptionHandler;
 import com.meetple.backend.global.response.SuccessStatus;
@@ -38,14 +42,67 @@ class AuthControllerTest {
     @Mock
     private AuthService authService;
 
+    @Mock
+    private EmailVerificationService emailVerificationService;
+
     private MockMvc mockMvc;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(
+                        authService,
+                        emailVerificationService
+                ))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void sendEmailVerificationCodeReturnsOk() throws Exception {
+        EmailVerificationSendRequest request = new EmailVerificationSendRequest(
+                "user@meetple.com"
+        );
+
+        mockMvc.perform(post("/api/v1/auth/email-verifications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(emailVerificationService).sendVerificationCode(request);
+    }
+
+    @Test
+    void confirmEmailVerificationCodeReturnsSignupToken() throws Exception {
+        EmailVerificationConfirmRequest request = new EmailVerificationConfirmRequest(
+                "user@meetple.com",
+                "123456"
+        );
+        given(emailVerificationService.confirm(any(EmailVerificationConfirmRequest.class)))
+                .willReturn(new EmailVerificationConfirmResponse("signup-token", 900));
+
+        mockMvc.perform(post("/api/v1/auth/email-verifications/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.signupVerificationToken").value("signup-token"))
+                .andExpect(jsonPath("$.data.expiresIn").value(900));
+    }
+
+    @Test
+    void confirmEmailVerificationCodeRejectsMalformedCode() throws Exception {
+        EmailVerificationConfirmRequest request = new EmailVerificationConfirmRequest(
+                "user@meetple.com",
+                "12345"
+        );
+
+        mockMvc.perform(post("/api/v1/auth/email-verifications/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(emailVerificationService);
     }
 
     @Test
@@ -55,6 +112,7 @@ class AuthControllerTest {
 
         SignupRequest request = new SignupRequest(
                 "user@meetple.com",
+                "signup-verification-token",
                 "password123",
                 "tester",
                 List.of(
@@ -81,6 +139,7 @@ class AuthControllerTest {
         String request = """
                 {
                   "email": "user@meetple.com",
+                  "signupVerificationToken": "signup-verification-token",
                   "password": "password123",
                   "nickname": "tester",
                   "legalDocuments": [

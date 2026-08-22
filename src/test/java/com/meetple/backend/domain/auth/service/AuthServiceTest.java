@@ -72,6 +72,9 @@ class AuthServiceTest {
     private LegalDocumentService legalDocumentService;
 
     @Mock
+    private EmailVerificationService emailVerificationService;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
@@ -95,6 +98,10 @@ class AuthServiceTest {
         assertThat(savedMember.getNickname()).isEqualTo(request.nickname());
         assertThat(response.email()).isEqualTo(request.email());
         assertThat(response.nickname()).isEqualTo(request.nickname());
+        verify(emailVerificationService).consumeSignupToken(
+                request.email(),
+                request.signupVerificationToken()
+        );
         verify(legalDocumentService).recordSignup(savedMember, List.of());
     }
 
@@ -122,6 +129,21 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.signup(request))
                 .isInstanceOf(ConflictException.class)
                 .hasMessage(ErrorStatus.EMAIL_ALREADY_EXISTS.getMessage());
+    }
+
+    @Test
+    void signupRejectsInvalidEmailVerificationTokenBeforeSavingMember() {
+        SignupRequest request = validSignupRequest("password123");
+        doThrow(new BadRequestException(ErrorStatus.SIGNUP_EMAIL_VERIFICATION_INVALID))
+                .when(emailVerificationService)
+                .consumeSignupToken(request.email(), request.signupVerificationToken());
+
+        assertThatThrownBy(() -> authService.signup(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(ErrorStatus.SIGNUP_EMAIL_VERIFICATION_INVALID.getMessage());
+
+        verify(passwordEncoder, never()).encode(any());
+        verify(memberRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -408,6 +430,7 @@ class AuthServiceTest {
     private SignupRequest validSignupRequest(String password) {
         return new SignupRequest(
                 "user@meetple.com",
+                "signup-verification-token",
                 password,
                 "tester",
                 List.of(
