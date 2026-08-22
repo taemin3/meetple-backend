@@ -14,6 +14,8 @@ public enum ErrorStatus {
     MISSING_EMAIL_VERIFICATION_EXCEPTION(HttpStatus.BAD_REQUEST, "이메일 인증을 진행해주세요.",10002),
 
     VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다.",10004),
+    LEGAL_DOCUMENTS_REQUIRED(HttpStatus.BAD_REQUEST, "필수 약관 확인 정보가 올바르지 않습니다.", 10005),
+    LEGAL_DOCUMENT_VERSION_INVALID(HttpStatus.BAD_REQUEST, "최신 약관을 다시 확인해주세요.", 10006),
 
     // 401 UNAUTHORIZED
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다.", 10101),

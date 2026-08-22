@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -14,7 +15,7 @@ class AuthRequestValidationTest {
 
     @Test
     void signupRequestRejectsInvalidValues() {
-        SignupRequest request = new SignupRequest("not-email", "1234", "");
+        SignupRequest request = new SignupRequest("not-email", "1234", "", List.of());
 
         Set<ConstraintViolation<SignupRequest>> violations = validator.validate(request);
 
@@ -23,7 +24,8 @@ class AuthRequestValidationTest {
                 .contains(
                         "올바른 이메일 형식이 아닙니다.",
                         "비밀번호는 8자 이상 64자 이하여야 합니다.",
-                        "닉네임을 입력해주세요."
+                        "닉네임을 입력해주세요.",
+                        "필수 약관 확인 정보가 필요합니다."
                 );
     }
 

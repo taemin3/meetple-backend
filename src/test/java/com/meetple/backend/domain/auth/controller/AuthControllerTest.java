@@ -12,10 +12,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.auth.dto.request.LoginRequest;
 import com.meetple.backend.domain.auth.dto.request.LogoutRequest;
 import com.meetple.backend.domain.auth.dto.request.ReissueRequest;
+import com.meetple.backend.domain.auth.dto.request.SignupLegalDocumentRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.auth.dto.response.LoginResponse;
 import com.meetple.backend.domain.auth.service.AuthService;
+import com.meetple.backend.domain.legal.entity.LegalDocumentType;
 import com.meetple.backend.global.exception.GlobalExceptionHandler;
 import com.meetple.backend.global.response.SuccessStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +29,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import java.util.List;
 
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
@@ -49,7 +52,16 @@ class AuthControllerTest {
         given(authService.signup(any(SignupRequest.class)))
                 .willReturn(new AuthMemberResponse(1L, "user@meetple.com", "tester", null));
 
-        SignupRequest request = new SignupRequest("user@meetple.com", "password123", "tester");
+        SignupRequest request = new SignupRequest(
+                "user@meetple.com",
+                "password123",
+                "tester",
+                List.of(
+                        new SignupLegalDocumentRequest(LegalDocumentType.SERVICE_TERMS, "2026-08-22"),
+                        new SignupLegalDocumentRequest(LegalDocumentType.PRIVACY_POLICY, "2026-08-22"),
+                        new SignupLegalDocumentRequest(LegalDocumentType.AGE_14_CONFIRMATION, "2026-08-22")
+                )
+        );
 
         mockMvc.perform(post("/api/v1/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
