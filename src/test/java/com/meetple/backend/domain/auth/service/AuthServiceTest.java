@@ -14,11 +14,14 @@ import static org.mockito.Mockito.verify;
 import com.meetple.backend.domain.auth.dto.request.LoginRequest;
 import com.meetple.backend.domain.auth.dto.request.LogoutRequest;
 import com.meetple.backend.domain.auth.dto.request.ReissueRequest;
+import com.meetple.backend.domain.auth.dto.request.SignupLegalDocumentRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.auth.dto.response.LoginResponse;
 import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
+import com.meetple.backend.domain.legal.entity.LegalDocumentType;
+import com.meetple.backend.domain.legal.service.LegalDocumentService;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.push.service.PushDeviceTokenService;
@@ -30,6 +33,7 @@ import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
 import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -65,6 +69,9 @@ class AuthServiceTest {
     private PushDeviceTokenService pushDeviceTokenService;
 
     @Mock
+    private LegalDocumentService legalDocumentService;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
@@ -72,7 +79,7 @@ class AuthServiceTest {
 
     @Test
     void signupEncodesPasswordAndSavesMember() {
-        SignupRequest request = new SignupRequest("user@meetple.com", "password123", "tester");
+        SignupRequest request = validSignupRequest("password123");
         given(memberRepository.existsByEmail(request.email())).willReturn(false);
         given(passwordEncoder.encode(request.password())).willReturn("encoded-password");
         given(memberRepository.saveAndFlush(any(Member.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -88,11 +95,12 @@ class AuthServiceTest {
         assertThat(savedMember.getNickname()).isEqualTo(request.nickname());
         assertThat(response.email()).isEqualTo(request.email());
         assertThat(response.nickname()).isEqualTo(request.nickname());
+        verify(legalDocumentService).recordSignup(savedMember, List.of());
     }
 
     @Test
     void signupRejectsDuplicateEmail() {
-        SignupRequest request = new SignupRequest("user@meetple.com", "password123", "tester");
+        SignupRequest request = validSignupRequest("password123");
         given(memberRepository.existsByEmail(request.email())).willReturn(true);
 
         assertThatThrownBy(() -> authService.signup(request))
@@ -105,7 +113,7 @@ class AuthServiceTest {
 
     @Test
     void signupMapsUniqueConstraintViolationToDuplicateEmail() {
-        SignupRequest request = new SignupRequest("user@meetple.com", "password123", "tester");
+        SignupRequest request = validSignupRequest("password123");
         given(memberRepository.existsByEmail(request.email())).willReturn(false);
         given(passwordEncoder.encode(request.password())).willReturn("encoded-password");
         given(memberRepository.saveAndFlush(any(Member.class)))
@@ -118,7 +126,7 @@ class AuthServiceTest {
 
     @Test
     void signupRejectsPasswordOverBcryptByteLimit() {
-        SignupRequest request = new SignupRequest("user@meetple.com", "가".repeat(25), "tester");
+        SignupRequest request = validSignupRequest("가".repeat(25));
 
         assertThatThrownBy(() -> authService.signup(request))
                 .isInstanceOf(BadRequestException.class)
@@ -395,5 +403,18 @@ class AuthServiceTest {
                 .hasMessage("비밀번호는 UTF-8 기준 72바이트 이하여야 합니다.");
 
         verify(memberRepository, never()).findByEmail(any());
+    }
+
+    private SignupRequest validSignupRequest(String password) {
+        return new SignupRequest(
+                "user@meetple.com",
+                password,
+                "tester",
+                List.of(
+                        new SignupLegalDocumentRequest(LegalDocumentType.SERVICE_TERMS, "2026-08-22"),
+                        new SignupLegalDocumentRequest(LegalDocumentType.PRIVACY_POLICY, "2026-08-22"),
+                        new SignupLegalDocumentRequest(LegalDocumentType.AGE_14_CONFIRMATION, "2026-08-22")
+                )
+        );
     }
 }

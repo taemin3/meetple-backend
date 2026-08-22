@@ -8,6 +8,8 @@ import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.auth.dto.response.LoginResponse;
 import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
+import com.meetple.backend.domain.legal.entity.LegalDocument;
+import com.meetple.backend.domain.legal.service.LegalDocumentService;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.push.service.PushDeviceTokenService;
@@ -21,6 +23,7 @@ import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import io.jsonwebtoken.JwtException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -47,11 +50,15 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final AccessTokenBlacklistRepository accessTokenBlacklistRepository;
     private final PushDeviceTokenService pushDeviceTokenService;
+    private final LegalDocumentService legalDocumentService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public AuthMemberResponse signup(SignupRequest request) {
         validatePasswordByteLength(request.password());
+        List<LegalDocument> legalDocuments = legalDocumentService.resolveCurrentSignupDocuments(
+                request.legalDocuments()
+        );
 
         if (memberRepository.existsByEmail(request.email())) {
             throw new ConflictException(ErrorStatus.EMAIL_ALREADY_EXISTS);
@@ -59,8 +66,10 @@ public class AuthService {
 
         String encodedPassword = passwordEncoder.encode(request.password());
         Member member = Member.createUser(request.email(), encodedPassword, request.nickname(), null);
+        Member savedMember = saveMember(member);
+        legalDocumentService.recordSignup(savedMember, legalDocuments);
 
-        return AuthMemberResponse.from(saveMember(member));
+        return AuthMemberResponse.from(savedMember);
     }
 
     @Transactional

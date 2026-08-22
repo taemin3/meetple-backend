@@ -25,6 +25,7 @@ public class SecurityConfig {
             "/api/v1/auth/signup",
             "/api/v1/auth/login",
             "/api/v1/auth/reissue",
+            "/api/v1/legal-documents/signup",
             "/api/v1/categories",
             "/ws",
             "/swagger-ui.html",
