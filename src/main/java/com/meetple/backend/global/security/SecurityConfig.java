@@ -23,6 +23,8 @@ public class SecurityConfig {
             "/health-error",
             "/health-notfound",
             "/api/v1/auth/signup",
+            "/api/v1/auth/email-verifications",
+            "/api/v1/auth/email-verifications/confirm",
             "/api/v1/auth/login",
             "/api/v1/auth/reissue",
             "/api/v1/legal-documents/signup",

@@ -11,11 +11,12 @@ public enum ErrorStatus {
 
     // 400 BAD_REQUEST
     BAD_REQUEST(HttpStatus.BAD_REQUEST, "잘못된 요청입니다.",10001),
-    MISSING_EMAIL_VERIFICATION_EXCEPTION(HttpStatus.BAD_REQUEST, "이메일 인증을 진행해주세요.",10002),
-
+    EMAIL_VERIFICATION_CODE_INVALID(HttpStatus.BAD_REQUEST, "인증번호가 올바르지 않습니다.", 10002),
+    EMAIL_VERIFICATION_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증번호가 만료되었습니다. 다시 요청해주세요.", 10003),
     VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다.",10004),
     LEGAL_DOCUMENTS_REQUIRED(HttpStatus.BAD_REQUEST, "필수 약관 확인 정보가 올바르지 않습니다.", 10005),
     LEGAL_DOCUMENT_VERSION_INVALID(HttpStatus.BAD_REQUEST, "최신 약관을 다시 확인해주세요.", 10006),
+    SIGNUP_EMAIL_VERIFICATION_INVALID(HttpStatus.BAD_REQUEST, "이메일 인증이 만료되었거나 올바르지 않습니다.", 10007),
 
     // 401 UNAUTHORIZED
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다.", 10101),
@@ -37,6 +38,12 @@ public enum ErrorStatus {
     CONFLICT(HttpStatus.CONFLICT, "충돌이 발생했습니다.",10901),
     OPTIMISTIC_LOCK_CONFLICT(HttpStatus.CONFLICT, "리소스가 갱신되었습니다. 다시 시도해 주세요.",10902),
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 가입된 이메일입니다.",10903),
+
+    // 429 TOO_MANY_REQUESTS
+    EMAIL_VERIFICATION_SEND_TOO_SOON(HttpStatus.TOO_MANY_REQUESTS, "인증번호 재전송은 잠시 후 시도해주세요.", 12901),
+    EMAIL_VERIFICATION_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "인증번호 확인 횟수를 초과했습니다. 다시 요청해주세요.", 12902),
+    EMAIL_VERIFICATION_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "이메일 인증 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.", 12903),
+    EMAIL_VERIFICATION_CONFIRM_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "인증번호 확인 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.", 12904),
 
     // 500 INTERNAL_SERVER_ERROR
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.",10501),

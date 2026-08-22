@@ -51,23 +51,30 @@ public class AuthService {
     private final AccessTokenBlacklistRepository accessTokenBlacklistRepository;
     private final PushDeviceTokenService pushDeviceTokenService;
     private final LegalDocumentService legalDocumentService;
+    private final EmailVerificationService emailVerificationService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public AuthMemberResponse signup(SignupRequest request) {
         validatePasswordByteLength(request.password());
+        String email = EmailAddressNormalizer.normalize(request.email());
         List<LegalDocument> legalDocuments = legalDocumentService.resolveCurrentSignupDocuments(
                 request.legalDocuments()
         );
 
-        if (memberRepository.existsByEmail(request.email())) {
+        if (memberRepository.existsByEmail(email)) {
             throw new ConflictException(ErrorStatus.EMAIL_ALREADY_EXISTS);
         }
+        emailVerificationService.validateSignupToken(email, request.signupVerificationToken());
 
         String encodedPassword = passwordEncoder.encode(request.password());
-        Member member = Member.createUser(request.email(), encodedPassword, request.nickname(), null);
+        Member member = Member.createUser(email, encodedPassword, request.nickname(), null);
         Member savedMember = saveMember(member);
         legalDocumentService.recordSignup(savedMember, legalDocuments);
+        eventPublisher.publishEvent(new SignupEmailVerificationCompletedEvent(
+                email,
+                request.signupVerificationToken()
+        ));
 
         return AuthMemberResponse.from(savedMember);
     }
@@ -75,8 +82,9 @@ public class AuthService {
     @Transactional
     public LoginResponse login(LoginRequest request) {
         validatePasswordByteLength(request.password());
+        String email = EmailAddressNormalizer.normalize(request.email());
 
-        Member member = memberRepository.findByEmail(request.email())
+        Member member = memberRepository.findByEmail(email)
                 .orElseThrow(() -> new UnauthorizedException(INVALID_LOGIN_MESSAGE));
 
         if (!passwordEncoder.matches(request.password(), member.getPassword())) {

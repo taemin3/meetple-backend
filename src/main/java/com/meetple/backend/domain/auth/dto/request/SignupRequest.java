@@ -14,6 +14,10 @@ public record SignupRequest(
         @Size(max = 255, message = "이메일은 255자 이하여야 합니다.")
         String email,
 
+        @NotBlank(message = "이메일 인증을 진행해주세요.")
+        @Size(max = 512, message = "이메일 인증 정보가 올바르지 않습니다.")
+        String signupVerificationToken,
+
         @NotBlank(message = "비밀번호를 입력해주세요.")
         @Size(min = 8, max = 64, message = "비밀번호는 8자 이상 64자 이하여야 합니다.")
         String password,

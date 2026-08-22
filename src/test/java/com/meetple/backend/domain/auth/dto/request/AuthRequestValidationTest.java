@@ -16,7 +16,7 @@ class AuthRequestValidationTest {
 
     @Test
     void signupRequestRejectsInvalidValues() {
-        SignupRequest request = new SignupRequest("not-email", "1234", "", List.of());
+        SignupRequest request = new SignupRequest("not-email", "", "1234", "", List.of());
 
         Set<ConstraintViolation<SignupRequest>> violations = validator.validate(request);
 
@@ -44,6 +44,7 @@ class AuthRequestValidationTest {
         List<SignupLegalDocumentRequest> legalDocuments = Arrays.asList(null, null, null);
         SignupRequest request = new SignupRequest(
                 "user@meetple.com",
+                "signup-verification-token",
                 "password123",
                 "tester",
                 legalDocuments
