@@ -98,10 +98,14 @@ class AuthServiceTest {
         assertThat(savedMember.getNickname()).isEqualTo(request.nickname());
         assertThat(response.email()).isEqualTo(request.email());
         assertThat(response.nickname()).isEqualTo(request.nickname());
-        verify(emailVerificationService).consumeSignupToken(
+        verify(emailVerificationService).validateSignupToken(
                 request.email(),
                 request.signupVerificationToken()
         );
+        verify(eventPublisher).publishEvent(new SignupEmailVerificationCompletedEvent(
+                request.email(),
+                request.signupVerificationToken()
+        ));
         verify(legalDocumentService).recordSignup(savedMember, List.of());
     }
 
@@ -136,7 +140,7 @@ class AuthServiceTest {
         SignupRequest request = validSignupRequest("password123");
         doThrow(new BadRequestException(ErrorStatus.SIGNUP_EMAIL_VERIFICATION_INVALID))
                 .when(emailVerificationService)
-                .consumeSignupToken(request.email(), request.signupVerificationToken());
+                .validateSignupToken(request.email(), request.signupVerificationToken());
 
         assertThatThrownBy(() -> authService.signup(request))
                 .isInstanceOf(BadRequestException.class)

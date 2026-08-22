@@ -61,6 +61,10 @@ class EmailVerificationServiceTest {
                 Duration.ofMinutes(1),
                 Duration.ofMinutes(15),
                 5,
+                Duration.ofMinutes(1),
+                5,
+                Duration.ofMinutes(1),
+                100,
                 "test-email-verification-secret-1234567890",
                 "noreply@meetple.test"
         );
@@ -77,6 +81,7 @@ class EmailVerificationServiceTest {
     @Test
     void sendVerificationCodeStoresChallengeAndSendsNormalizedEmail() {
         given(memberRepository.existsByEmail(EMAIL)).willReturn(false);
+        allowSend();
         given(secretGenerator.generateCode()).willReturn(CODE);
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
         given(emailVerificationRepository.saveChallengeIfAllowed(
@@ -87,7 +92,8 @@ class EmailVerificationServiceTest {
         )).willReturn(true);
 
         emailVerificationService.sendVerificationCode(
-                new EmailVerificationSendRequest("  USER@Meetple.com ")
+                new EmailVerificationSendRequest("  USER@Meetple.com "),
+                "127.0.0.1"
         );
 
         verify(emailVerificationMailSender).sendVerificationCode(
@@ -102,7 +108,8 @@ class EmailVerificationServiceTest {
         given(memberRepository.existsByEmail(EMAIL)).willReturn(true);
 
         assertThatThrownBy(() -> emailVerificationService.sendVerificationCode(
-                new EmailVerificationSendRequest(EMAIL)
+                new EmailVerificationSendRequest(EMAIL),
+                "127.0.0.1"
         ))
                 .isInstanceOf(ConflictException.class)
                 .hasMessage(ErrorStatus.EMAIL_ALREADY_EXISTS.getMessage());
@@ -117,6 +124,7 @@ class EmailVerificationServiceTest {
 
     @Test
     void sendVerificationCodeRejectsRequestDuringCooldown() {
+        allowSend();
         given(secretGenerator.generateCode()).willReturn(CODE);
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
         given(emailVerificationRepository.saveChallengeIfAllowed(
@@ -127,7 +135,8 @@ class EmailVerificationServiceTest {
         )).willReturn(false);
 
         assertThatThrownBy(() -> emailVerificationService.sendVerificationCode(
-                new EmailVerificationSendRequest(EMAIL)
+                new EmailVerificationSendRequest(EMAIL),
+                "127.0.0.1"
         ))
                 .isInstanceOf(BaseException.class)
                 .hasMessage(ErrorStatus.EMAIL_VERIFICATION_SEND_TOO_SOON.getMessage());
@@ -137,6 +146,7 @@ class EmailVerificationServiceTest {
 
     @Test
     void sendVerificationCodeDeletesChallengeWhenMailDeliveryFails() {
+        allowSend();
         given(secretGenerator.generateCode()).willReturn(CODE);
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
         given(emailVerificationRepository.saveChallengeIfAllowed(
@@ -150,10 +160,31 @@ class EmailVerificationServiceTest {
                 .sendVerificationCode(EMAIL, CODE, properties.codeTtl());
 
         assertThatThrownBy(() -> emailVerificationService.sendVerificationCode(
-                new EmailVerificationSendRequest(EMAIL)
+                new EmailVerificationSendRequest(EMAIL),
+                "127.0.0.1"
         )).isInstanceOf(BaseException.class);
 
-        verify(emailVerificationRepository).deleteChallenge(EMAIL);
+        verify(emailVerificationRepository).deleteChallengeIfMatches(EMAIL, CODE_HASH);
+    }
+
+    @Test
+    void sendVerificationCodeRejectsRequesterOrGlobalRateLimit() {
+        given(emailVerificationRepository.acquireSendPermit(
+                "127.0.0.1",
+                properties.requesterRateLimitWindow(),
+                properties.requesterRateLimit(),
+                properties.globalRateLimitWindow(),
+                properties.globalRateLimit()
+        )).willReturn(false);
+
+        assertThatThrownBy(() -> emailVerificationService.sendVerificationCode(
+                new EmailVerificationSendRequest(EMAIL),
+                "127.0.0.1"
+        ))
+                .isInstanceOf(BaseException.class)
+                .hasMessage(ErrorStatus.EMAIL_VERIFICATION_RATE_LIMITED.getMessage());
+
+        verify(emailVerificationMailSender, never()).sendVerificationCode(any(), any(), any());
     }
 
     @Test
@@ -216,15 +247,25 @@ class EmailVerificationServiceTest {
     }
 
     @Test
-    void consumeSignupTokenRejectsMissingOrMismatchedToken() {
-        given(emailVerificationRepository.consumeSignupToken(SIGNUP_TOKEN, EMAIL))
+    void validateSignupTokenRejectsMissingOrMismatchedToken() {
+        given(emailVerificationRepository.matchesSignupToken(SIGNUP_TOKEN, EMAIL))
                 .willReturn(false);
 
-        assertThatThrownBy(() -> emailVerificationService.consumeSignupToken(
+        assertThatThrownBy(() -> emailVerificationService.validateSignupToken(
                 EMAIL,
                 SIGNUP_TOKEN
         ))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage(ErrorStatus.SIGNUP_EMAIL_VERIFICATION_INVALID.getMessage());
+    }
+
+    private void allowSend() {
+        given(emailVerificationRepository.acquireSendPermit(
+                "127.0.0.1",
+                properties.requesterRateLimitWindow(),
+                properties.requesterRateLimit(),
+                properties.globalRateLimitWindow(),
+                properties.globalRateLimit()
+        )).willReturn(true);
     }
 }

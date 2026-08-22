@@ -63,6 +63,10 @@ auth:
     resend-cooldown: ${EMAIL_VERIFICATION_RESEND_COOLDOWN:1m}
     signup-token-ttl: ${EMAIL_VERIFICATION_SIGNUP_TOKEN_TTL:15m}
     max-attempts: ${EMAIL_VERIFICATION_MAX_ATTEMPTS:5}
+    requester-rate-limit-window: ${EMAIL_VERIFICATION_REQUESTER_RATE_LIMIT_WINDOW:1m}
+    requester-rate-limit: ${EMAIL_VERIFICATION_REQUESTER_RATE_LIMIT:5}
+    global-rate-limit-window: ${EMAIL_VERIFICATION_GLOBAL_RATE_LIMIT_WINDOW:1m}
+    global-rate-limit: ${EMAIL_VERIFICATION_GLOBAL_RATE_LIMIT:100}
     hmac-secret: ${EMAIL_VERIFICATION_HMAC_SECRET:${JWT_SECRET}}
     from-address: ${EMAIL_FROM_ADDRESS:noreply@meetple.local}
 

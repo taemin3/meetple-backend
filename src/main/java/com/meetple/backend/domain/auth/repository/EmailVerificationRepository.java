@@ -15,6 +15,8 @@ public class EmailVerificationRepository {
     private static final String CHALLENGE_KEY_PREFIX = "email-verification:challenge:";
     private static final String COOLDOWN_KEY_PREFIX = "email-verification:cooldown:";
     private static final String SIGNUP_TOKEN_KEY_PREFIX = "email-verification:signup-token:";
+    private static final String REQUESTER_RATE_LIMIT_KEY_PREFIX = "email-verification:rate-limit:requester:";
+    private static final String GLOBAL_RATE_LIMIT_KEY = "email-verification:rate-limit:global";
     private static final RedisScript<Long> SAVE_CHALLENGE_SCRIPT = createScript("""
             local cooldownCreated = redis.call('SET', KEYS[2], '1', 'PX', ARGV[2], 'NX')
             if not cooldownCreated then
@@ -48,6 +50,33 @@ public class EmailVerificationRepository {
             end
 
             redis.call('DEL', KEYS[1])
+            return 1
+            """);
+    private static final RedisScript<Long> DELETE_CHALLENGE_IF_MATCHES_SCRIPT = createScript("""
+            local savedCodeHash = redis.call('HGET', KEYS[1], 'codeHash')
+            if not savedCodeHash or savedCodeHash ~= ARGV[1] then
+                return 0
+            end
+
+            redis.call('DEL', KEYS[1], KEYS[2])
+            return 1
+            """);
+    private static final RedisScript<Long> ACQUIRE_SEND_PERMIT_SCRIPT = createScript("""
+            local requesterCount = tonumber(redis.call('GET', KEYS[1]) or '0')
+            local globalCount = tonumber(redis.call('GET', KEYS[2]) or '0')
+            if requesterCount >= tonumber(ARGV[1]) or globalCount >= tonumber(ARGV[3]) then
+                return 0
+            end
+
+            requesterCount = redis.call('INCR', KEYS[1])
+            if requesterCount == 1 then
+                redis.call('PEXPIRE', KEYS[1], ARGV[2])
+            end
+
+            globalCount = redis.call('INCR', KEYS[2])
+            if globalCount == 1 then
+                redis.call('PEXPIRE', KEYS[2], ARGV[4])
+            end
             return 1
             """);
     private static final RedisScript<Long> CONSUME_SIGNUP_TOKEN_SCRIPT = createScript("""
@@ -90,12 +119,33 @@ public class EmailVerificationRepository {
         return CodeVerificationResult.from(result);
     }
 
-    public void deleteChallenge(String email) {
+    public boolean deleteChallengeIfMatches(String email, String codeHash) {
         String emailHash = TokenHashUtil.sha256(email);
-        stringRedisTemplate.delete(List.of(
-                createChallengeKey(emailHash),
-                createCooldownKey(emailHash)
-        ));
+        Long result = stringRedisTemplate.execute(
+                DELETE_CHALLENGE_IF_MATCHES_SCRIPT,
+                List.of(createChallengeKey(emailHash), createCooldownKey(emailHash)),
+                codeHash
+        );
+        return Long.valueOf(1L).equals(result);
+    }
+
+    public boolean acquireSendPermit(
+            String requesterIdentifier,
+            Duration requesterWindow,
+            int requesterLimit,
+            Duration globalWindow,
+            int globalLimit
+    ) {
+        String requesterHash = TokenHashUtil.sha256(requesterIdentifier);
+        Long result = stringRedisTemplate.execute(
+                ACQUIRE_SEND_PERMIT_SCRIPT,
+                List.of(REQUESTER_RATE_LIMIT_KEY_PREFIX + requesterHash, GLOBAL_RATE_LIMIT_KEY),
+                String.valueOf(requesterLimit),
+                String.valueOf(requesterWindow.toMillis()),
+                String.valueOf(globalLimit),
+                String.valueOf(globalWindow.toMillis())
+        );
+        return Long.valueOf(1L).equals(result);
     }
 
     public void saveSignupToken(String token, String email, Duration ttl) {
@@ -113,6 +163,13 @@ public class EmailVerificationRepository {
                 TokenHashUtil.sha256(email)
         );
         return Long.valueOf(1L).equals(result);
+    }
+
+    public boolean matchesSignupToken(String token, String email) {
+        String savedEmailHash = stringRedisTemplate.opsForValue().get(
+                createSignupTokenKey(TokenHashUtil.sha256(token))
+        );
+        return TokenHashUtil.sha256(email).equals(savedEmailHash);
     }
 
     private String createChallengeKey(String emailHash) {

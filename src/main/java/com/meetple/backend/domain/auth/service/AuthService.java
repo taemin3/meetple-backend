@@ -65,12 +65,16 @@ public class AuthService {
         if (memberRepository.existsByEmail(email)) {
             throw new ConflictException(ErrorStatus.EMAIL_ALREADY_EXISTS);
         }
-        emailVerificationService.consumeSignupToken(email, request.signupVerificationToken());
+        emailVerificationService.validateSignupToken(email, request.signupVerificationToken());
 
         String encodedPassword = passwordEncoder.encode(request.password());
         Member member = Member.createUser(email, encodedPassword, request.nickname(), null);
         Member savedMember = saveMember(member);
         legalDocumentService.recordSignup(savedMember, legalDocuments);
+        eventPublisher.publishEvent(new SignupEmailVerificationCompletedEvent(
+                email,
+                request.signupVerificationToken()
+        ));
 
         return AuthMemberResponse.from(savedMember);
     }

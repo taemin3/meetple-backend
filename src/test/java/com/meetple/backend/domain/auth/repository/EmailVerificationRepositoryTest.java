@@ -78,6 +78,57 @@ class EmailVerificationRepositoryTest {
     }
 
     @Test
+    void deleteChallengeOnlyWhenCodeHashMatches() {
+        String emailHash = TokenHashUtil.sha256("user@meetple.com");
+        List<String> keys = List.of(
+                "email-verification:challenge:" + emailHash,
+                "email-verification:cooldown:" + emailHash
+        );
+        given(stringRedisTemplate.execute(
+                ArgumentMatchers.<RedisScript<Long>>any(),
+                eq(keys),
+                eq("code-hash")
+        )).willReturn(1L);
+        EmailVerificationRepository repository = new EmailVerificationRepository(
+                stringRedisTemplate
+        );
+
+        assertThat(repository.deleteChallengeIfMatches("user@meetple.com", "code-hash"))
+                .isTrue();
+    }
+
+    @Test
+    void acquireSendPermitUsesHashedRequesterAndGlobalKeys() {
+        String requesterHash = TokenHashUtil.sha256("127.0.0.1");
+        List<String> keys = List.of(
+                "email-verification:rate-limit:requester:" + requesterHash,
+                "email-verification:rate-limit:global"
+        );
+        given(stringRedisTemplate.execute(
+                ArgumentMatchers.<RedisScript<Long>>any(),
+                eq(keys),
+                eq("5"),
+                eq("60000"),
+                eq("100"),
+                eq("60000")
+        )).willReturn(1L);
+        EmailVerificationRepository repository = new EmailVerificationRepository(
+                stringRedisTemplate
+        );
+
+        boolean allowed = repository.acquireSendPermit(
+                "127.0.0.1",
+                Duration.ofMinutes(1),
+                5,
+                Duration.ofMinutes(1),
+                100
+        );
+
+        assertThat(allowed).isTrue();
+        assertThat(keys.getFirst()).doesNotContain("127.0.0.1");
+    }
+
+    @Test
     void saveSignupTokenStoresOnlyHashedTokenAndEmail() {
         given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
         EmailVerificationRepository repository = new EmailVerificationRepository(
@@ -116,5 +167,20 @@ class EmailVerificationRepositoryTest {
         );
 
         assertThat(consumed).isTrue();
+    }
+
+    @Test
+    void matchesSignupTokenComparesHashedTokenAndEmail() {
+        String tokenKey = "email-verification:signup-token:"
+                + TokenHashUtil.sha256("signup-token");
+        given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get(tokenKey))
+                .willReturn(TokenHashUtil.sha256("user@meetple.com"));
+        EmailVerificationRepository repository = new EmailVerificationRepository(
+                stringRedisTemplate
+        );
+
+        assertThat(repository.matchesSignupToken("signup-token", "user@meetple.com"))
+                .isTrue();
     }
 }

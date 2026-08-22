@@ -70,7 +70,7 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
 
-        verify(emailVerificationService).sendVerificationCode(request);
+        verify(emailVerificationService).sendVerificationCode(request, "127.0.0.1");
     }
 
     @Test

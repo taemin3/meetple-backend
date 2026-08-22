@@ -26,10 +26,22 @@ public class EmailVerificationService {
     private final EmailVerificationHasher hasher;
     private final EmailVerificationProperties properties;
 
-    public void sendVerificationCode(EmailVerificationSendRequest request) {
+    public void sendVerificationCode(
+            EmailVerificationSendRequest request,
+            String requesterIdentifier
+    ) {
         String email = EmailAddressNormalizer.normalize(request.email());
         if (memberRepository.existsByEmail(email)) {
             throw new ConflictException(ErrorStatus.EMAIL_ALREADY_EXISTS);
+        }
+        if (!emailVerificationRepository.acquireSendPermit(
+                requesterIdentifier,
+                properties.requesterRateLimitWindow(),
+                properties.requesterRateLimit(),
+                properties.globalRateLimitWindow(),
+                properties.globalRateLimit()
+        )) {
+            throw new BaseException(ErrorStatus.EMAIL_VERIFICATION_RATE_LIMITED);
         }
 
         String code = secretGenerator.generateCode();
@@ -47,7 +59,7 @@ public class EmailVerificationService {
         try {
             emailVerificationMailSender.sendVerificationCode(email, code, properties.codeTtl());
         } catch (RuntimeException e) {
-            emailVerificationRepository.deleteChallenge(email);
+            emailVerificationRepository.deleteChallengeIfMatches(email, codeHash);
             throw e;
         }
     }
@@ -74,14 +86,21 @@ public class EmailVerificationService {
         );
     }
 
-    public void consumeSignupToken(String email, String signupVerificationToken) {
+    public void validateSignupToken(String email, String signupVerificationToken) {
         String normalizedEmail = EmailAddressNormalizer.normalize(email);
-        if (!emailVerificationRepository.consumeSignupToken(
+        if (!emailVerificationRepository.matchesSignupToken(
                 signupVerificationToken,
                 normalizedEmail
         )) {
             throw new BadRequestException(ErrorStatus.SIGNUP_EMAIL_VERIFICATION_INVALID);
         }
+    }
+
+    public void consumeSignupToken(String email, String signupVerificationToken) {
+        emailVerificationRepository.consumeSignupToken(
+                signupVerificationToken,
+                EmailAddressNormalizer.normalize(email)
+        );
     }
 
     private void validateResult(CodeVerificationResult result) {

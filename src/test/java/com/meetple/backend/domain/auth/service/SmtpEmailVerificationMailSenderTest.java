@@ -36,6 +36,10 @@ class SmtpEmailVerificationMailSenderTest {
                 Duration.ofMinutes(1),
                 Duration.ofMinutes(15),
                 5,
+                Duration.ofMinutes(1),
+                5,
+                Duration.ofMinutes(1),
+                100,
                 "test-email-verification-secret-1234567890",
                 "noreply@meetple.test"
         );

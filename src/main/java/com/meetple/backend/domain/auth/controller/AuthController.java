@@ -17,6 +17,7 @@ import com.meetple.backend.global.response.SuccessStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -39,9 +40,10 @@ public class AuthController {
     @PostMapping("/email-verifications")
     @Operation(summary = "회원가입 이메일 인증번호 발송", description = "입력한 이메일로 6자리 인증번호를 발송합니다.")
     public ResponseEntity<ApiResponse<Void>> sendEmailVerificationCode(
-            @Valid @RequestBody EmailVerificationSendRequest request
+            @Valid @RequestBody EmailVerificationSendRequest request,
+            HttpServletRequest httpServletRequest
     ) {
-        emailVerificationService.sendVerificationCode(request);
+        emailVerificationService.sendVerificationCode(request, httpServletRequest.getRemoteAddr());
         return ApiResponse.successOnly(SuccessStatus.OK);
     }
 
