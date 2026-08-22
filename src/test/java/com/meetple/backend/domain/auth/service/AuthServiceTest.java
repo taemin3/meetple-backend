@@ -166,7 +166,7 @@ class AuthServiceTest {
         LoginRequest request = new LoginRequest("user@meetple.com", "password123");
         Member member = Member.createUser(request.email(), "encoded-password", "tester", null);
         ReflectionTestUtils.setField(member, "id", 1L);
-        given(memberRepository.findByEmail(request.email())).willReturn(Optional.of(member));
+        given(memberRepository.findByEmailForUpdate(request.email())).willReturn(Optional.of(member));
         given(passwordEncoder.matches(request.password(), member.getPassword())).willReturn(true);
         given(jwtTokenProvider.createAccessToken(eq(member), anyString())).willReturn("access-token");
         given(jwtTokenProvider.createRefreshToken(eq(member), anyString())).willReturn("refresh-token");
@@ -199,7 +199,7 @@ class AuthServiceTest {
         JwtTokenSession tokenSession = new JwtTokenSession(1L, "session-id");
         given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken())).willReturn(tokenSession);
         given(refreshTokenRepository.matches(1L, "session-id", request.refreshToken())).willReturn(true);
-        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(memberRepository.findByIdForUpdate(1L)).willReturn(Optional.of(member));
         given(jwtTokenProvider.createAccessToken(member, "session-id")).willReturn("new-access-token");
         given(jwtTokenProvider.createRefreshToken(member, "session-id")).willReturn("new-refresh-token");
         given(jwtTokenProvider.getAccessTokenExpirationSeconds()).willReturn(3600L);
@@ -223,7 +223,29 @@ class AuthServiceTest {
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("유효하지 않은 refresh token입니다.");
 
-        verify(memberRepository, never()).findById(any());
+        verify(memberRepository, never()).findByIdForUpdate(any());
+    }
+
+    @Test
+    void reissueRejectsSessionDeletedWhileWaitingForMemberLock() {
+        ReissueRequest request = new ReissueRequest("refresh-token");
+        Member member = Member.createUser(
+                "user@meetple.com",
+                "encoded-password",
+                "tester",
+                null
+        );
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken()))
+                .willReturn(new JwtTokenSession(1L, "session-id"));
+        given(refreshTokenRepository.matches(1L, "session-id", request.refreshToken()))
+                .willReturn(true, false);
+        given(memberRepository.findByIdForUpdate(1L)).willReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> authService.reissue(request))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("유효하지 않은 refresh token입니다.");
+
+        verify(refreshTokenRepository, never()).save(any(), anyString(), anyString(), any());
     }
 
     @Test
@@ -401,7 +423,7 @@ class AuthServiceTest {
     @Test
     void loginRejectsUnknownEmail() {
         LoginRequest request = new LoginRequest("user@meetple.com", "password123");
-        given(memberRepository.findByEmail(request.email())).willReturn(Optional.empty());
+        given(memberRepository.findByEmailForUpdate(request.email())).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(UnauthorizedException.class)
@@ -412,7 +434,7 @@ class AuthServiceTest {
     void loginRejectsWrongPassword() {
         LoginRequest request = new LoginRequest("user@meetple.com", "password123");
         Member member = Member.createUser(request.email(), "encoded-password", "tester", null);
-        given(memberRepository.findByEmail(request.email())).willReturn(Optional.of(member));
+        given(memberRepository.findByEmailForUpdate(request.email())).willReturn(Optional.of(member));
         given(passwordEncoder.matches(request.password(), member.getPassword())).willReturn(false);
 
         assertThatThrownBy(() -> authService.login(request))
@@ -428,7 +450,7 @@ class AuthServiceTest {
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("비밀번호는 UTF-8 기준 72바이트 이하여야 합니다.");
 
-        verify(memberRepository, never()).findByEmail(any());
+        verify(memberRepository, never()).findByEmailForUpdate(any());
     }
 
     private SignupRequest validSignupRequest(String password) {

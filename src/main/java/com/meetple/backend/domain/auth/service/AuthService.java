@@ -84,7 +84,7 @@ public class AuthService {
         validatePasswordByteLength(request.password());
         String email = EmailAddressNormalizer.normalize(request.email());
 
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findByEmailForUpdate(email)
                 .orElseThrow(() -> new UnauthorizedException(INVALID_LOGIN_MESSAGE));
 
         if (!passwordEncoder.matches(request.password(), member.getPassword())) {
@@ -104,8 +104,12 @@ public class AuthService {
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
-        Member member = memberRepository.findById(memberId)
+        Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE));
+
+        if (!refreshTokenRepository.matches(memberId, sessionId, request.refreshToken())) {
+            throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
+        }
 
         return issueTokens(member, sessionId);
     }

@@ -53,6 +53,7 @@ class PasswordResetRepositoryTest {
     void verifyCodeStoresOnlyLatestResetTokenForHashedEmail() {
         String emailHash = TokenHashUtil.sha256("user@meetple.com");
         String tokenHash = TokenHashUtil.sha256("reset-token");
+        String requesterHash = TokenHashUtil.sha256("127.0.0.1");
         List<String> keys = List.of(
                 "password-reset:challenge:" + emailHash,
                 "password-reset:token:" + tokenHash,
@@ -66,21 +67,26 @@ class PasswordResetRepositoryTest {
                 eq(emailHash),
                 eq("900000"),
                 eq(tokenHash),
-                eq("password-reset:token:")
+                eq("password-reset:token:"),
+                eq(requesterHash)
         )).willReturn(1L, -1L, -2L, null);
         PasswordResetRepository repository = new PasswordResetRepository(stringRedisTemplate);
 
         assertThat(repository.verifyCodeAndSaveResetToken(
-                "user@meetple.com", "code-hash", 5, "reset-token", Duration.ofMinutes(15)
+                "user@meetple.com", "code-hash", 5, "reset-token",
+                Duration.ofMinutes(15), "127.0.0.1"
         )).isEqualTo(CodeVerificationResult.VERIFIED);
         assertThat(repository.verifyCodeAndSaveResetToken(
-                "user@meetple.com", "code-hash", 5, "reset-token", Duration.ofMinutes(15)
+                "user@meetple.com", "code-hash", 5, "reset-token",
+                Duration.ofMinutes(15), "127.0.0.1"
         )).isEqualTo(CodeVerificationResult.INVALID);
         assertThat(repository.verifyCodeAndSaveResetToken(
-                "user@meetple.com", "code-hash", 5, "reset-token", Duration.ofMinutes(15)
+                "user@meetple.com", "code-hash", 5, "reset-token",
+                Duration.ofMinutes(15), "127.0.0.1"
         )).isEqualTo(CodeVerificationResult.ATTEMPTS_EXCEEDED);
         assertThat(repository.verifyCodeAndSaveResetToken(
-                "user@meetple.com", "code-hash", 5, "reset-token", Duration.ofMinutes(15)
+                "user@meetple.com", "code-hash", 5, "reset-token",
+                Duration.ofMinutes(15), "127.0.0.1"
         )).isEqualTo(CodeVerificationResult.EXPIRED);
     }
 

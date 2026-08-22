@@ -6,7 +6,6 @@ import com.meetple.backend.domain.auth.dto.request.EmailVerificationConfirmReque
 import com.meetple.backend.domain.auth.dto.request.EmailVerificationSendRequest;
 import com.meetple.backend.domain.auth.dto.request.PasswordResetRequest;
 import com.meetple.backend.domain.auth.dto.response.PasswordResetVerificationResponse;
-import com.meetple.backend.domain.auth.mail.EmailVerificationMailSender;
 import com.meetple.backend.domain.auth.repository.PasswordResetRepository;
 import com.meetple.backend.domain.auth.repository.PasswordResetRepository.CodeVerificationResult;
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
@@ -19,6 +18,7 @@ import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -38,7 +38,6 @@ public class PasswordResetService {
 
     private final MemberRepository memberRepository;
     private final PasswordResetRepository passwordResetRepository;
-    private final EmailVerificationMailSender emailVerificationMailSender;
     private final EmailVerificationSecretGenerator secretGenerator;
     private final EmailVerificationHasher hasher;
     private final EmailVerificationProperties emailVerificationProperties;
@@ -75,16 +74,14 @@ public class PasswordResetService {
             throw new BaseException(ErrorStatus.EMAIL_VERIFICATION_SEND_TOO_SOON);
         }
 
-        if (!memberRepository.existsByEmail(email)) {
-            return;
-        }
-
+        PasswordResetMailRequestedEvent mailEvent = new PasswordResetMailRequestedEvent(
+                email,
+                code,
+                codeHash,
+                memberRepository.existsByEmail(email)
+        );
         try {
-            emailVerificationMailSender.sendPasswordResetCode(
-                    email,
-                    code,
-                    emailVerificationProperties.codeTtl()
-            );
+            eventPublisher.publishEvent(mailEvent);
         } catch (RuntimeException exception) {
             passwordResetRepository.deleteChallengeIfMatches(email, codeHash);
             throw exception;
@@ -111,7 +108,8 @@ public class PasswordResetService {
                 codeHash,
                 emailVerificationProperties.maxAttempts(),
                 resetToken,
-                passwordResetProperties.tokenTtl()
+                passwordResetProperties.tokenTtl(),
+                requesterIdentifier
         );
         validateVerificationResult(result);
 
@@ -125,9 +123,7 @@ public class PasswordResetService {
     public void resetPassword(PasswordResetRequest request) {
         validatePasswordByteLength(request.newPassword());
         String email = EmailAddressNormalizer.normalize(request.email());
-        Member member = memberRepository.findByEmailForUpdate(email)
-                .orElseThrow(() -> new BadRequestException(ErrorStatus.PASSWORD_RESET_TOKEN_INVALID));
-
+        Instant tokenClaimStartedAt = Instant.now();
         Duration remainingTtl = passwordResetRepository.claimResetToken(
                 request.passwordResetToken(),
                 email
@@ -135,21 +131,29 @@ public class PasswordResetService {
         if (remainingTtl.isZero() || remainingTtl.isNegative()) {
             throw new BadRequestException(ErrorStatus.PASSWORD_RESET_TOKEN_INVALID);
         }
+        Instant tokenExpiresAt = tokenClaimStartedAt.plus(remainingTtl);
 
         boolean transactionSynchronizationActive =
                 TransactionSynchronizationManager.isSynchronizationActive();
         if (transactionSynchronizationActive) {
-            registerRollbackRestore(request, email, remainingTtl);
+            registerRollbackRestore(request, email, tokenExpiresAt);
         }
 
         try {
+            Member member = memberRepository.findByEmailForUpdate(email)
+                    .orElseThrow(() -> new BadRequestException(
+                            ErrorStatus.PASSWORD_RESET_TOKEN_INVALID
+                    ));
+            if (!Instant.now().isBefore(tokenExpiresAt)) {
+                throw new BadRequestException(ErrorStatus.PASSWORD_RESET_TOKEN_INVALID);
+            }
             member.changePassword(passwordEncoder.encode(request.newPassword()));
             pushDeviceTokenService.removeAllDevices(member.getId());
             refreshTokenRepository.deleteAllByMemberId(member.getId());
             eventPublisher.publishEvent(ChatSessionInvalidationEvent.member(member.getId()));
         } catch (RuntimeException exception) {
             if (!transactionSynchronizationActive) {
-                restoreClaimQuietly(request.passwordResetToken(), email, remainingTtl);
+                restoreClaimQuietly(request.passwordResetToken(), email, tokenExpiresAt);
             }
             throw exception;
         }
@@ -158,24 +162,28 @@ public class PasswordResetService {
     private void registerRollbackRestore(
             PasswordResetRequest request,
             String email,
-            Duration remainingTtl
+            Instant tokenExpiresAt
     ) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCompletion(int status) {
                 if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
-                    restoreClaimQuietly(request.passwordResetToken(), email, remainingTtl);
+                    restoreClaimQuietly(request.passwordResetToken(), email, tokenExpiresAt);
                 }
             }
         });
     }
 
-    private void restoreClaimQuietly(String token, String email, Duration remainingTtl) {
+    private void restoreClaimQuietly(String token, String email, Instant tokenExpiresAt) {
+        Duration actualRemainingTtl = Duration.between(Instant.now(), tokenExpiresAt);
+        if (actualRemainingTtl.isZero() || actualRemainingTtl.isNegative()) {
+            return;
+        }
         try {
             passwordResetRepository.restoreResetTokenIfNoNewerToken(
                     token,
                     email,
-                    remainingTtl
+                    actualRemainingTtl
             );
         } catch (RuntimeException restoreException) {
             log.warn("Failed to restore password reset token after rollback", restoreException);

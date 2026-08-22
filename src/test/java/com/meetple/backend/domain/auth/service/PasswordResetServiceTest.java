@@ -5,9 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.doThrow;
 
 import com.meetple.backend.domain.auth.config.EmailVerificationProperties;
 import com.meetple.backend.domain.auth.config.PasswordResetProperties;
@@ -15,7 +16,6 @@ import com.meetple.backend.domain.auth.dto.request.EmailVerificationConfirmReque
 import com.meetple.backend.domain.auth.dto.request.EmailVerificationSendRequest;
 import com.meetple.backend.domain.auth.dto.request.PasswordResetRequest;
 import com.meetple.backend.domain.auth.dto.response.PasswordResetVerificationResponse;
-import com.meetple.backend.domain.auth.mail.EmailVerificationMailSender;
 import com.meetple.backend.domain.auth.repository.PasswordResetRepository;
 import com.meetple.backend.domain.auth.repository.PasswordResetRepository.CodeVerificationResult;
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
@@ -31,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -49,8 +50,6 @@ class PasswordResetServiceTest {
     private MemberRepository memberRepository;
     @Mock
     private PasswordResetRepository passwordResetRepository;
-    @Mock
-    private EmailVerificationMailSender emailVerificationMailSender;
     @Mock
     private EmailVerificationSecretGenerator secretGenerator;
     @Mock
@@ -88,7 +87,6 @@ class PasswordResetServiceTest {
         passwordResetService = new PasswordResetService(
                 memberRepository,
                 passwordResetRepository,
-                emailVerificationMailSender,
                 secretGenerator,
                 hasher,
                 emailVerificationProperties,
@@ -101,7 +99,7 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    void sendVerificationCodeSendsMailForExistingMember() {
+    void sendVerificationCodePublishesAsynchronousMailEventForExistingMember() {
         allowSend();
         given(secretGenerator.generateCode()).willReturn(CODE);
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
@@ -118,15 +116,13 @@ class PasswordResetServiceTest {
                 "127.0.0.1"
         );
 
-        verify(emailVerificationMailSender).sendPasswordResetCode(
-                EMAIL,
-                CODE,
-                emailVerificationProperties.codeTtl()
-        );
+        verify(eventPublisher).publishEvent(new PasswordResetMailRequestedEvent(
+                EMAIL, CODE, CODE_HASH, true
+        ));
     }
 
     @Test
-    void sendVerificationCodeReturnsNormallyWithoutMailForUnknownEmail() {
+    void sendVerificationCodePublishesIndistinguishableEventForUnknownEmail() {
         allowSend();
         given(secretGenerator.generateCode()).willReturn(CODE);
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
@@ -143,12 +139,13 @@ class PasswordResetServiceTest {
                 "127.0.0.1"
         );
 
-        verify(emailVerificationMailSender, never())
-                .sendPasswordResetCode(anyString(), anyString(), any());
+        verify(eventPublisher).publishEvent(new PasswordResetMailRequestedEvent(
+                EMAIL, CODE, CODE_HASH, false
+        ));
     }
 
     @Test
-    void sendVerificationCodeDeletesChallengeWhenMailFails() {
+    void sendVerificationCodeDeletesChallengeWhenMailEventCannotBeQueued() {
         allowSend();
         given(secretGenerator.generateCode()).willReturn(CODE);
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
@@ -159,9 +156,11 @@ class PasswordResetServiceTest {
                 emailVerificationProperties.resendCooldown()
         )).willReturn(true);
         given(memberRepository.existsByEmail(EMAIL)).willReturn(true);
-        doThrow(new IllegalStateException("mail failed"))
-                .when(emailVerificationMailSender)
-                .sendPasswordResetCode(EMAIL, CODE, emailVerificationProperties.codeTtl());
+        PasswordResetMailRequestedEvent event = new PasswordResetMailRequestedEvent(
+                EMAIL, CODE, CODE_HASH, true
+        );
+        doThrow(new IllegalStateException("mail queue full"))
+                .when(eventPublisher).publishEvent(event);
 
         assertThatThrownBy(() -> passwordResetService.sendVerificationCode(
                 new EmailVerificationSendRequest(EMAIL),
@@ -181,7 +180,8 @@ class PasswordResetServiceTest {
                 CODE_HASH,
                 5,
                 RESET_TOKEN,
-                passwordResetProperties.tokenTtl()
+                passwordResetProperties.tokenTtl(),
+                "127.0.0.1"
         )).willReturn(CodeVerificationResult.VERIFIED);
 
         PasswordResetVerificationResponse response = passwordResetService.confirm(
@@ -203,7 +203,8 @@ class PasswordResetServiceTest {
                 CODE_HASH,
                 5,
                 RESET_TOKEN,
-                passwordResetProperties.tokenTtl()
+                passwordResetProperties.tokenTtl(),
+                "127.0.0.1"
         )).willReturn(CodeVerificationResult.INVALID);
 
         assertThatThrownBy(() -> passwordResetService.confirm(
@@ -218,14 +219,18 @@ class PasswordResetServiceTest {
     void resetPasswordChangesPasswordAndInvalidatesAllSessions() {
         Member member = member();
         PasswordResetRequest request = request("new-password123");
-        given(memberRepository.findByEmailForUpdate(EMAIL)).willReturn(Optional.of(member));
         given(passwordResetRepository.claimResetToken(RESET_TOKEN, EMAIL))
                 .willReturn(Duration.ofMinutes(10));
+        given(memberRepository.findByEmailForUpdate(EMAIL)).willReturn(Optional.of(member));
         given(passwordEncoder.encode(request.newPassword())).willReturn("encoded-new-password");
 
         passwordResetService.resetPassword(request);
 
         assertThat(member.getPassword()).isEqualTo("encoded-new-password");
+        InOrder tokenThenMemberLock = inOrder(passwordResetRepository, memberRepository);
+        tokenThenMemberLock.verify(passwordResetRepository)
+                .claimResetToken(RESET_TOKEN, EMAIL);
+        tokenThenMemberLock.verify(memberRepository).findByEmailForUpdate(EMAIL);
         verify(pushDeviceTokenService).removeAllDevices(1L);
         verify(refreshTokenRepository).deleteAllByMemberId(1L);
         ArgumentCaptor<ChatSessionInvalidationEvent> eventCaptor =
@@ -236,9 +241,7 @@ class PasswordResetServiceTest {
 
     @Test
     void resetPasswordRejectsInvalidTokenWithoutChangingPassword() {
-        Member member = member();
         PasswordResetRequest request = request("new-password123");
-        given(memberRepository.findByEmailForUpdate(EMAIL)).willReturn(Optional.of(member));
         given(passwordResetRepository.claimResetToken(RESET_TOKEN, EMAIL))
                 .willReturn(Duration.ZERO);
 
@@ -246,7 +249,7 @@ class PasswordResetServiceTest {
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage(ErrorStatus.PASSWORD_RESET_TOKEN_INVALID.getMessage());
 
-        assertThat(member.getPassword()).isEqualTo("old-encoded-password");
+        verify(memberRepository, never()).findByEmailForUpdate(anyString());
         verify(refreshTokenRepository, never()).deleteAllByMemberId(any());
     }
 
@@ -255,9 +258,9 @@ class PasswordResetServiceTest {
         Member member = member();
         PasswordResetRequest request = request("new-password123");
         Duration remainingTtl = Duration.ofMinutes(10);
-        given(memberRepository.findByEmailForUpdate(EMAIL)).willReturn(Optional.of(member));
         given(passwordResetRepository.claimResetToken(RESET_TOKEN, EMAIL))
                 .willReturn(remainingTtl);
+        given(memberRepository.findByEmailForUpdate(EMAIL)).willReturn(Optional.of(member));
         given(passwordEncoder.encode(request.newPassword())).willReturn("encoded-new-password");
         doThrow(new IllegalStateException("redis failed"))
                 .when(refreshTokenRepository).deleteAllByMemberId(1L);
@@ -265,11 +268,13 @@ class PasswordResetServiceTest {
         assertThatThrownBy(() -> passwordResetService.resetPassword(request))
                 .isInstanceOf(IllegalStateException.class);
 
+        ArgumentCaptor<Duration> restoredTtlCaptor = ArgumentCaptor.forClass(Duration.class);
         verify(passwordResetRepository).restoreResetTokenIfNoNewerToken(
-                RESET_TOKEN,
-                EMAIL,
-                remainingTtl
+                org.mockito.ArgumentMatchers.eq(RESET_TOKEN),
+                org.mockito.ArgumentMatchers.eq(EMAIL),
+                restoredTtlCaptor.capture()
         );
+        assertThat(restoredTtlCaptor.getValue()).isPositive().isLessThanOrEqualTo(remainingTtl);
     }
 
     @Test

@@ -27,7 +27,8 @@ public class PasswordResetRepository {
                 return 0
             end
 
-            redis.call('HSET', KEYS[1], 'codeHash', ARGV[1], 'attempts', '0')
+            redis.call('DEL', KEYS[1])
+            redis.call('HSET', KEYS[1], 'codeHash', ARGV[1])
             redis.call('PEXPIRE', KEYS[1], ARGV[3])
             return 1
             """);
@@ -37,17 +38,16 @@ public class PasswordResetRepository {
                 return 0
             end
 
-            local attempts = tonumber(redis.call('HGET', KEYS[1], 'attempts') or '0')
+            local attemptField = 'attempts:' .. ARGV[7]
+            local attempts = tonumber(redis.call('HGET', KEYS[1], attemptField) or '0')
             local maxAttempts = tonumber(ARGV[2])
             if attempts >= maxAttempts then
-                redis.call('DEL', KEYS[1])
                 return -2
             end
 
             if savedCodeHash ~= ARGV[1] then
-                attempts = redis.call('HINCRBY', KEYS[1], 'attempts', 1)
+                attempts = redis.call('HINCRBY', KEYS[1], attemptField, 1)
                 if attempts >= maxAttempts then
-                    redis.call('DEL', KEYS[1])
                     return -2
                 end
                 return -1
@@ -149,7 +149,8 @@ public class PasswordResetRepository {
             String codeHash,
             int maxAttempts,
             String resetToken,
-            Duration resetTokenTtl
+            Duration resetTokenTtl,
+            String requesterIdentifier
     ) {
         String emailHash = TokenHashUtil.sha256(email);
         String tokenHash = TokenHashUtil.sha256(resetToken);
@@ -165,7 +166,8 @@ public class PasswordResetRepository {
                 emailHash,
                 String.valueOf(resetTokenTtl.toMillis()),
                 tokenHash,
-                TOKEN_KEY_PREFIX
+                TOKEN_KEY_PREFIX,
+                TokenHashUtil.sha256(requesterIdentifier)
         );
         return CodeVerificationResult.from(result);
     }
