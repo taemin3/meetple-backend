@@ -14,14 +14,17 @@ import com.meetple.backend.domain.auth.dto.request.EmailVerificationConfirmReque
 import com.meetple.backend.domain.auth.dto.request.EmailVerificationSendRequest;
 import com.meetple.backend.domain.auth.dto.request.LoginRequest;
 import com.meetple.backend.domain.auth.dto.request.LogoutRequest;
+import com.meetple.backend.domain.auth.dto.request.PasswordResetRequest;
 import com.meetple.backend.domain.auth.dto.request.ReissueRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupLegalDocumentRequest;
 import com.meetple.backend.domain.auth.dto.request.SignupRequest;
 import com.meetple.backend.domain.auth.dto.response.AuthMemberResponse;
 import com.meetple.backend.domain.auth.dto.response.EmailVerificationConfirmResponse;
 import com.meetple.backend.domain.auth.dto.response.LoginResponse;
+import com.meetple.backend.domain.auth.dto.response.PasswordResetVerificationResponse;
 import com.meetple.backend.domain.auth.service.AuthService;
 import com.meetple.backend.domain.auth.service.EmailVerificationService;
+import com.meetple.backend.domain.auth.service.PasswordResetService;
 import com.meetple.backend.domain.legal.entity.LegalDocumentType;
 import com.meetple.backend.global.exception.GlobalExceptionHandler;
 import com.meetple.backend.global.response.SuccessStatus;
@@ -45,14 +48,18 @@ class AuthControllerTest {
     @Mock
     private EmailVerificationService emailVerificationService;
 
+    @Mock
+    private PasswordResetService passwordResetService;
+
     private MockMvc mockMvc;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(
+                mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(
                         authService,
-                        emailVerificationService
+                        emailVerificationService,
+                        passwordResetService
                 ))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -106,6 +113,57 @@ class AuthControllerTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(emailVerificationService);
+    }
+
+    @Test
+    void sendPasswordResetVerificationCodeReturnsGenericOk() throws Exception {
+        EmailVerificationSendRequest request = new EmailVerificationSendRequest(
+                "user@meetple.com"
+        );
+
+        mockMvc.perform(post("/api/v1/auth/password-resets/email-verifications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(passwordResetService).sendVerificationCode(request, "127.0.0.1");
+    }
+
+    @Test
+    void confirmPasswordResetVerificationCodeReturnsResetToken() throws Exception {
+        EmailVerificationConfirmRequest request = new EmailVerificationConfirmRequest(
+                "user@meetple.com",
+                "123456"
+        );
+        given(passwordResetService.confirm(
+                any(EmailVerificationConfirmRequest.class),
+                eq("127.0.0.1")
+        )).willReturn(new PasswordResetVerificationResponse("reset-token", 900));
+
+        mockMvc.perform(post("/api/v1/auth/password-resets/email-verifications/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.passwordResetToken").value("reset-token"))
+                .andExpect(jsonPath("$.data.expiresIn").value(900));
+    }
+
+    @Test
+    void resetPasswordReturnsOk() throws Exception {
+        PasswordResetRequest request = new PasswordResetRequest(
+                "user@meetple.com",
+                "reset-token",
+                "new-password123"
+        );
+
+        mockMvc.perform(post("/api/v1/auth/password-resets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(passwordResetService).resetPassword(request);
     }
 
     @Test

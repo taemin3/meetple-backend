@@ -17,6 +17,7 @@ public enum ErrorStatus {
     LEGAL_DOCUMENTS_REQUIRED(HttpStatus.BAD_REQUEST, "필수 약관 확인 정보가 올바르지 않습니다.", 10005),
     LEGAL_DOCUMENT_VERSION_INVALID(HttpStatus.BAD_REQUEST, "최신 약관을 다시 확인해주세요.", 10006),
     SIGNUP_EMAIL_VERIFICATION_INVALID(HttpStatus.BAD_REQUEST, "이메일 인증이 만료되었거나 올바르지 않습니다.", 10007),
+    PASSWORD_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "비밀번호 재설정 인증이 만료되었거나 올바르지 않습니다.", 10008),
 
     // 401 UNAUTHORIZED
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다.", 10101),
