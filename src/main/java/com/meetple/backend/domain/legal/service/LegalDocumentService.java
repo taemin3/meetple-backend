@@ -75,7 +75,7 @@ public class LegalDocumentService {
     private List<LegalDocument> currentSignupDocuments() {
         Map<LegalDocumentType, LegalDocument> currentByType = new EnumMap<>(LegalDocumentType.class);
         legalDocumentRepository
-                .findAllByEffectiveAtLessThanEqualOrderByEffectiveAtDesc(LocalDateTime.now())
+                .findAllByEffectiveAtLessThanEqualOrderByEffectiveAtDescIdDesc(LocalDateTime.now())
                 .forEach(document -> currentByType.putIfAbsent(document.getType(), document));
 
         if (currentByType.size() != LegalDocumentType.values().length) {

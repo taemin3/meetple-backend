@@ -126,7 +126,7 @@ class LegalDocumentServiceTest {
     }
 
     private void givenCurrentDocuments() {
-        given(legalDocumentRepository.findAllByEffectiveAtLessThanEqualOrderByEffectiveAtDesc(any()))
+        given(legalDocumentRepository.findAllByEffectiveAtLessThanEqualOrderByEffectiveAtDescIdDesc(any()))
                 .willReturn(List.of(serviceTerms, privacyPolicy, ageConfirmation));
     }
 

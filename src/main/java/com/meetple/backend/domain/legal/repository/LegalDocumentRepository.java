@@ -8,7 +8,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface LegalDocumentRepository extends JpaRepository<LegalDocument, Long> {
 
-    List<LegalDocument> findAllByEffectiveAtLessThanEqualOrderByEffectiveAtDesc(LocalDateTime effectiveAt);
+    List<LegalDocument> findAllByEffectiveAtLessThanEqualOrderByEffectiveAtDescIdDesc(
+            LocalDateTime effectiveAt
+    );
 
     boolean existsByTypeAndVersion(LegalDocumentType type, String version);
 }

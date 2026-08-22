@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -73,6 +74,29 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.data.id").value(1))
                 .andExpect(jsonPath("$.data.email").value("user@meetple.com"))
                 .andExpect(jsonPath("$.data.nickname").value("tester"));
+    }
+
+    @Test
+    void signupRejectsNullLegalDocumentItem() throws Exception {
+        String request = """
+                {
+                  "email": "user@meetple.com",
+                  "password": "password123",
+                  "nickname": "tester",
+                  "legalDocuments": [
+                    null,
+                    {"type": "PRIVACY_POLICY", "version": "2026-08-22"},
+                    {"type": "AGE_14_CONFIRMATION", "version": "2026-08-22"}
+                  ]
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(authService);
     }
 
     @Test

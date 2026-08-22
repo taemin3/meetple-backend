@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
@@ -22,6 +23,6 @@ public record SignupRequest(
         String nickname,
 
         @NotEmpty(message = "필수 약관 확인 정보가 필요합니다.")
-        List<@Valid SignupLegalDocumentRequest> legalDocuments
+        List<@NotNull(message = "약관 확인 항목은 비어 있을 수 없습니다.") @Valid SignupLegalDocumentRequest> legalDocuments
 ) {
 }
