@@ -62,7 +62,7 @@ public class EmailDeliveryEventProcessor {
                 emailDeliveryRepository.complete(deliveryId, claimOwner);
                 return;
             }
-            send(delivery, actualRemainingTtl);
+            send(delivery);
             if (!emailDeliveryRepository.complete(deliveryId, claimOwner)) {
                 log.warn("Email delivery claim ownership was lost: {}", deliveryId);
             }
@@ -79,17 +79,15 @@ public class EmailDeliveryEventProcessor {
         emailDeliveryService.discard(parseDeliveryId(payload));
     }
 
-    private void send(PendingEmailDelivery delivery, Duration remainingTtl) {
+    private void send(PendingEmailDelivery delivery) {
         switch (delivery.purpose()) {
             case SIGNUP_VERIFICATION -> mailSender.sendVerificationCode(
                     delivery.recipient(),
-                    delivery.code(),
-                    remainingTtl
+                    delivery.code()
             );
             case PASSWORD_RESET -> mailSender.sendPasswordResetCode(
                     delivery.recipient(),
-                    delivery.code(),
-                    remainingTtl
+                    delivery.code()
             );
         }
     }

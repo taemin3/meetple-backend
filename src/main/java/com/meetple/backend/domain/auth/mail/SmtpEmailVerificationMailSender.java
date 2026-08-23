@@ -18,24 +18,22 @@ public class SmtpEmailVerificationMailSender implements EmailVerificationMailSen
     private final EmailVerificationProperties properties;
 
     @Override
-    public void sendVerificationCode(String recipient, String code, Duration expiresIn) {
+    public void sendVerificationCode(String recipient, String code) {
         send(
                 recipient,
                 "[밋플] 이메일 인증번호 안내",
                 "밋플 회원가입 이메일 인증번호입니다.",
-                code,
-                expiresIn
+                code
         );
     }
 
     @Override
-    public void sendPasswordResetCode(String recipient, String code, Duration expiresIn) {
+    public void sendPasswordResetCode(String recipient, String code) {
         send(
                 recipient,
                 "[밋플] 비밀번호 재설정 인증번호 안내",
                 "밋플 비밀번호 재설정 인증번호입니다.",
-                code,
-                expiresIn
+                code
         );
     }
 
@@ -43,8 +41,7 @@ public class SmtpEmailVerificationMailSender implements EmailVerificationMailSen
             String recipient,
             String subject,
             String introduction,
-            String code,
-            Duration expiresIn
+            String code
     ) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(properties.fromAddress());
@@ -55,9 +52,9 @@ public class SmtpEmailVerificationMailSender implements EmailVerificationMailSen
 
                 인증번호: %s
 
-                인증번호는 %s 동안 유효합니다.
+                인증번호는 발급 후 %s 동안 유효합니다.
                 본인이 요청하지 않았다면 이 메일을 무시해주세요.
-                """.formatted(introduction, code, formatDuration(expiresIn)));
+                """.formatted(introduction, code, formatDuration(properties.codeTtl())));
 
         try {
             javaMailSender.send(message);

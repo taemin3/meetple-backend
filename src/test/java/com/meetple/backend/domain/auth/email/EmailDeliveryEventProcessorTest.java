@@ -75,8 +75,7 @@ class EmailDeliveryEventProcessorTest {
 
         verify(mailSender).sendVerificationCode(
                 "user@meetple.com",
-                "123456",
-                Duration.ofMinutes(2)
+                "123456"
         );
         verifyCompletionUsesClaimOwner(Duration.ofMinutes(3));
     }
@@ -89,7 +88,7 @@ class EmailDeliveryEventProcessorTest {
 
         processor.process(payload());
 
-        verify(mailSender).sendPasswordResetCode("user@meetple.com", "123456", CODE_TTL);
+        verify(mailSender).sendPasswordResetCode("user@meetple.com", "123456");
     }
 
     @Test
@@ -99,8 +98,8 @@ class EmailDeliveryEventProcessorTest {
 
         processor.process(payload());
 
-        verify(mailSender, never()).sendPasswordResetCode(anyString(), anyString(), any());
-        verify(mailSender, never()).sendVerificationCode(anyString(), anyString(), any());
+        verify(mailSender, never()).sendPasswordResetCode(anyString(), anyString());
+        verify(mailSender, never()).sendVerificationCode(anyString(), anyString());
         verify(emailDeliveryRepository).delete(DELIVERY_ID);
     }
 
@@ -118,8 +117,7 @@ class EmailDeliveryEventProcessorTest {
         doThrow(new IllegalStateException("SES unavailable"))
                 .when(mailSender).sendPasswordResetCode(
                         "user@meetple.com",
-                        "123456",
-                        CODE_TTL
+                        "123456"
                 );
 
         assertThatThrownBy(() -> processor.process(payload()))
@@ -143,7 +141,7 @@ class EmailDeliveryEventProcessorTest {
         processor.process(payload());
 
         verify(emailDeliveryRepository, never()).tryClaim(any(), anyString(), any());
-        verify(mailSender, never()).sendPasswordResetCode(anyString(), anyString(), any());
+        verify(mailSender, never()).sendPasswordResetCode(anyString(), anyString());
     }
 
     @Test
@@ -157,7 +155,7 @@ class EmailDeliveryEventProcessorTest {
 
         verify(emailDeliveryRepository).delete(DELIVERY_ID);
         verify(emailDeliveryRepository, never()).tryClaim(any(), anyString(), any());
-        verify(mailSender, never()).sendPasswordResetCode(anyString(), anyString(), any());
+        verify(mailSender, never()).sendPasswordResetCode(anyString(), anyString());
     }
 
     @Test
@@ -178,7 +176,7 @@ class EmailDeliveryEventProcessorTest {
                 org.mockito.ArgumentMatchers.eq(DELIVERY_ID),
                 anyString()
         );
-        verify(mailSender, never()).sendPasswordResetCode(anyString(), anyString(), any());
+        verify(mailSender, never()).sendPasswordResetCode(anyString(), anyString());
     }
 
     @Test
