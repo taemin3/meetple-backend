@@ -74,6 +74,21 @@ public class EmailDeliveryService {
         }
     }
 
+    public Duration findRemainingChallengeTtl(PendingEmailDelivery delivery) {
+        return switch (delivery.purpose()) {
+            case SIGNUP_VERIFICATION -> emailVerificationRepository
+                    .findChallengeRemainingTtlIfMatches(
+                            delivery.recipient(),
+                            delivery.codeHash()
+                    );
+            case PASSWORD_RESET -> passwordResetRepository
+                    .findChallengeRemainingTtlIfMatches(
+                            delivery.recipient(),
+                            delivery.codeHash()
+                    );
+        };
+    }
+
     private OutboxEventRequest toOutboxRequest(UUID deliveryId) {
         String id = deliveryId.toString();
         return new OutboxEventRequest(

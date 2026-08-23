@@ -18,7 +18,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,9 +33,6 @@ class EmailDeliveryRepositoryTest {
     private StringRedisTemplate stringRedisTemplate;
     @Mock
     private HashOperations<String, Object, Object> hashOperations;
-    @Mock
-    private ValueOperations<String, String> valueOperations;
-
     private EmailDeliveryRepository repository;
 
     @BeforeEach
@@ -103,12 +99,43 @@ class EmailDeliveryRepositoryTest {
     }
 
     @Test
-    void claimUsesShortLivedDedicatedKey() {
-        given(stringRedisTemplate.opsForValue()).willReturn(valueOperations);
-        given(valueOperations.setIfAbsent(CLAIM_KEY, "1", Duration.ofSeconds(30)))
-                .willReturn(true);
+    void claimStoresUniqueOwnerForChallengeRemainingTtl() {
+        given(stringRedisTemplate.execute(
+                ArgumentMatchers.<RedisScript<Long>>any(),
+                eq(List.of(CLAIM_KEY)),
+                eq("owner-1"),
+                eq("180000")
+        )).willReturn(1L);
 
-        assertThat(repository.tryClaim(DELIVERY_ID)).isTrue();
+        assertThat(repository.tryClaim(
+                DELIVERY_ID,
+                "owner-1",
+                Duration.ofMinutes(3)
+        )).isTrue();
+    }
+
+    @Test
+    void releaseClaimDeletesOnlyMatchingOwner() {
+        given(stringRedisTemplate.execute(
+                ArgumentMatchers.<RedisScript<Long>>any(),
+                eq(List.of(CLAIM_KEY)),
+                eq("owner-1")
+        )).willReturn(1L, 0L);
+
+        assertThat(repository.releaseClaim(DELIVERY_ID, "owner-1")).isTrue();
+        assertThat(repository.releaseClaim(DELIVERY_ID, "owner-1")).isFalse();
+    }
+
+    @Test
+    void completeDeletesPayloadOnlyForMatchingOwner() {
+        given(stringRedisTemplate.execute(
+                ArgumentMatchers.<RedisScript<Long>>any(),
+                eq(List.of(PAYLOAD_KEY, CLAIM_KEY)),
+                eq("owner-1")
+        )).willReturn(1L, 0L);
+
+        assertThat(repository.complete(DELIVERY_ID, "owner-1")).isTrue();
+        assertThat(repository.complete(DELIVERY_ID, "owner-1")).isFalse();
     }
 
     private PendingEmailDelivery delivery(EmailDeliveryPurpose purpose, boolean deliver) {

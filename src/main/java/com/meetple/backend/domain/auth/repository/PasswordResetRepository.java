@@ -71,6 +71,18 @@ public class PasswordResetRepository {
             redis.call('DEL', KEYS[1], KEYS[2])
             return 1
             """);
+    private static final RedisScript<Long> FIND_CHALLENGE_TTL_IF_MATCHES_SCRIPT = createScript("""
+            local savedCodeHash = redis.call('HGET', KEYS[1], 'codeHash')
+            if not savedCodeHash or savedCodeHash ~= ARGV[1] then
+                return 0
+            end
+
+            local remainingTtl = redis.call('PTTL', KEYS[1])
+            if remainingTtl <= 0 then
+                return 0
+            end
+            return remainingTtl
+            """);
     private static final RedisScript<Long> ACQUIRE_CONFIRM_PERMIT_SCRIPT = createScript("""
             local requesterCount = tonumber(redis.call('GET', KEYS[1]) or '0')
             if requesterCount >= tonumber(ARGV[1]) then
@@ -180,6 +192,18 @@ public class PasswordResetRepository {
                 codeHash
         );
         return Long.valueOf(1L).equals(result);
+    }
+
+    public Duration findChallengeRemainingTtlIfMatches(String email, String codeHash) {
+        Long remainingTtlMillis = stringRedisTemplate.execute(
+                FIND_CHALLENGE_TTL_IF_MATCHES_SCRIPT,
+                List.of(createChallengeKey(TokenHashUtil.sha256(email))),
+                codeHash
+        );
+        if (remainingTtlMillis == null || remainingTtlMillis <= 0) {
+            return Duration.ZERO;
+        }
+        return Duration.ofMillis(remainingTtlMillis);
     }
 
     public boolean acquireSendPermit(

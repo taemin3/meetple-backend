@@ -9,7 +9,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.meetple.backend.domain.auth.config.EmailVerificationProperties;
 import com.meetple.backend.domain.auth.mail.EmailVerificationMailSender;
 import com.meetple.backend.domain.outbox.event.OutboxEventEnvelope;
 import java.time.Duration;
@@ -20,6 +19,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -48,8 +48,7 @@ class EmailDeliveryEventProcessorTest {
                 objectMapper,
                 emailDeliveryRepository,
                 emailDeliveryService,
-                mailSender,
-                properties()
+                mailSender
         );
     }
 
@@ -60,31 +59,43 @@ class EmailDeliveryEventProcessorTest {
                 true
         );
         given(emailDeliveryRepository.find(DELIVERY_ID)).willReturn(Optional.of(delivery));
-        given(emailDeliveryRepository.tryClaim(DELIVERY_ID)).willReturn(true);
+        given(emailDeliveryService.findRemainingChallengeTtl(delivery))
+                .willReturn(Duration.ofMinutes(3), Duration.ofMinutes(2));
+        given(emailDeliveryRepository.tryClaim(
+                org.mockito.ArgumentMatchers.eq(DELIVERY_ID),
+                anyString(),
+                org.mockito.ArgumentMatchers.eq(Duration.ofMinutes(3))
+        )).willReturn(true);
+        given(emailDeliveryRepository.complete(
+                org.mockito.ArgumentMatchers.eq(DELIVERY_ID),
+                anyString()
+        )).willReturn(true);
 
         processor.process(payload());
 
-        verify(mailSender).sendVerificationCode("user@meetple.com", "123456", CODE_TTL);
-        verify(emailDeliveryRepository).delete(DELIVERY_ID);
+        verify(mailSender).sendVerificationCode(
+                "user@meetple.com",
+                "123456",
+                Duration.ofMinutes(2)
+        );
+        verifyCompletionUsesClaimOwner(Duration.ofMinutes(3));
     }
 
     @Test
     void sendsPasswordResetMail() throws Exception {
         PendingEmailDelivery delivery = delivery(EmailDeliveryPurpose.PASSWORD_RESET, true);
         given(emailDeliveryRepository.find(DELIVERY_ID)).willReturn(Optional.of(delivery));
-        given(emailDeliveryRepository.tryClaim(DELIVERY_ID)).willReturn(true);
+        allowDelivery(delivery);
 
         processor.process(payload());
 
         verify(mailSender).sendPasswordResetCode("user@meetple.com", "123456", CODE_TTL);
-        verify(emailDeliveryRepository).delete(DELIVERY_ID);
     }
 
     @Test
     void unknownAccountUsesSameEventButSkipsSmtp() throws Exception {
         PendingEmailDelivery delivery = delivery(EmailDeliveryPurpose.PASSWORD_RESET, false);
         given(emailDeliveryRepository.find(DELIVERY_ID)).willReturn(Optional.of(delivery));
-        given(emailDeliveryRepository.tryClaim(DELIVERY_ID)).willReturn(true);
 
         processor.process(payload());
 
@@ -97,7 +108,13 @@ class EmailDeliveryEventProcessorTest {
     void smtpFailureReleasesClaimForKafkaRetry() throws Exception {
         PendingEmailDelivery delivery = delivery(EmailDeliveryPurpose.PASSWORD_RESET, true);
         given(emailDeliveryRepository.find(DELIVERY_ID)).willReturn(Optional.of(delivery));
-        given(emailDeliveryRepository.tryClaim(DELIVERY_ID)).willReturn(true);
+        given(emailDeliveryService.findRemainingChallengeTtl(delivery))
+                .willReturn(CODE_TTL, CODE_TTL);
+        given(emailDeliveryRepository.tryClaim(
+                org.mockito.ArgumentMatchers.eq(DELIVERY_ID),
+                anyString(),
+                org.mockito.ArgumentMatchers.eq(CODE_TTL)
+        )).willReturn(true);
         doThrow(new IllegalStateException("SES unavailable"))
                 .when(mailSender).sendPasswordResetCode(
                         "user@meetple.com",
@@ -109,7 +126,13 @@ class EmailDeliveryEventProcessorTest {
                 .isInstanceOf(EmailDeliveryProcessingException.class)
                 .hasCauseInstanceOf(IllegalStateException.class);
 
-        verify(emailDeliveryRepository).releaseClaim(DELIVERY_ID);
+        ArgumentCaptor<String> ownerCaptor = ArgumentCaptor.forClass(String.class);
+        verify(emailDeliveryRepository).tryClaim(
+                org.mockito.ArgumentMatchers.eq(DELIVERY_ID),
+                ownerCaptor.capture(),
+                org.mockito.ArgumentMatchers.eq(CODE_TTL)
+        );
+        verify(emailDeliveryRepository).releaseClaim(DELIVERY_ID, ownerCaptor.getValue());
         verify(emailDeliveryRepository, never()).delete(DELIVERY_ID);
     }
 
@@ -119,16 +142,55 @@ class EmailDeliveryEventProcessorTest {
 
         processor.process(payload());
 
-        verify(emailDeliveryRepository, never()).tryClaim(DELIVERY_ID);
+        verify(emailDeliveryRepository, never()).tryClaim(any(), anyString(), any());
+        verify(mailSender, never()).sendPasswordResetCode(anyString(), anyString(), any());
+    }
+
+    @Test
+    void staleChallengeIsDiscardedBeforeSending() throws Exception {
+        PendingEmailDelivery delivery = delivery(EmailDeliveryPurpose.PASSWORD_RESET, true);
+        given(emailDeliveryRepository.find(DELIVERY_ID)).willReturn(Optional.of(delivery));
+        given(emailDeliveryService.findRemainingChallengeTtl(delivery))
+                .willReturn(Duration.ZERO);
+
+        processor.process(payload());
+
+        verify(emailDeliveryRepository).delete(DELIVERY_ID);
+        verify(emailDeliveryRepository, never()).tryClaim(any(), anyString(), any());
+        verify(mailSender, never()).sendPasswordResetCode(anyString(), anyString(), any());
+    }
+
+    @Test
+    void challengeReplacedAfterClaimIsDiscardedBeforeSending() throws Exception {
+        PendingEmailDelivery delivery = delivery(EmailDeliveryPurpose.PASSWORD_RESET, true);
+        given(emailDeliveryRepository.find(DELIVERY_ID)).willReturn(Optional.of(delivery));
+        given(emailDeliveryService.findRemainingChallengeTtl(delivery))
+                .willReturn(CODE_TTL, Duration.ZERO);
+        given(emailDeliveryRepository.tryClaim(
+                org.mockito.ArgumentMatchers.eq(DELIVERY_ID),
+                anyString(),
+                org.mockito.ArgumentMatchers.eq(CODE_TTL)
+        )).willReturn(true);
+
+        processor.process(payload());
+
+        verify(emailDeliveryRepository).complete(
+                org.mockito.ArgumentMatchers.eq(DELIVERY_ID),
+                anyString()
+        );
         verify(mailSender, never()).sendPasswordResetCode(anyString(), anyString(), any());
     }
 
     @Test
     void concurrentClaimIsRetried() throws Exception {
-        given(emailDeliveryRepository.find(DELIVERY_ID)).willReturn(Optional.of(
-                delivery(EmailDeliveryPurpose.PASSWORD_RESET, true)
-        ));
-        given(emailDeliveryRepository.tryClaim(DELIVERY_ID)).willReturn(false);
+        PendingEmailDelivery delivery = delivery(EmailDeliveryPurpose.PASSWORD_RESET, true);
+        given(emailDeliveryRepository.find(DELIVERY_ID)).willReturn(Optional.of(delivery));
+        given(emailDeliveryService.findRemainingChallengeTtl(delivery)).willReturn(CODE_TTL);
+        given(emailDeliveryRepository.tryClaim(
+                org.mockito.ArgumentMatchers.eq(DELIVERY_ID),
+                anyString(),
+                org.mockito.ArgumentMatchers.eq(CODE_TTL)
+        )).willReturn(false);
 
         assertThatThrownBy(() -> processor.process(payload()))
                 .isInstanceOf(EmailDeliveryProcessingException.class)
@@ -195,21 +257,27 @@ class EmailDeliveryEventProcessorTest {
         );
     }
 
-    private EmailVerificationProperties properties() {
-        return new EmailVerificationProperties(
-                CODE_TTL,
-                Duration.ofMinutes(1),
-                Duration.ofMinutes(15),
-                5,
-                Duration.ofMinutes(1),
-                5,
-                Duration.ofMinutes(1),
-                100,
-                Duration.ofMinutes(1),
-                10,
-                "test-email-verification-secret-1234567890",
-                "noreply@meetple.test"
-        );
+    private void allowDelivery(PendingEmailDelivery delivery) {
+        given(emailDeliveryService.findRemainingChallengeTtl(delivery))
+                .willReturn(CODE_TTL, CODE_TTL);
+        given(emailDeliveryRepository.tryClaim(
+                org.mockito.ArgumentMatchers.eq(DELIVERY_ID),
+                anyString(),
+                org.mockito.ArgumentMatchers.eq(CODE_TTL)
+        )).willReturn(true);
+        given(emailDeliveryRepository.complete(
+                org.mockito.ArgumentMatchers.eq(DELIVERY_ID),
+                anyString()
+        )).willReturn(true);
     }
 
+    private void verifyCompletionUsesClaimOwner(Duration claimTtl) {
+        ArgumentCaptor<String> ownerCaptor = ArgumentCaptor.forClass(String.class);
+        verify(emailDeliveryRepository).tryClaim(
+                org.mockito.ArgumentMatchers.eq(DELIVERY_ID),
+                ownerCaptor.capture(),
+                org.mockito.ArgumentMatchers.eq(claimTtl)
+        );
+        verify(emailDeliveryRepository).complete(DELIVERY_ID, ownerCaptor.getValue());
+    }
 }

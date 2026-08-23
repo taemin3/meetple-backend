@@ -135,6 +135,31 @@ class EmailDeliveryServiceTest {
         verify(emailDeliveryRepository).delete(deliveryId);
     }
 
+    @Test
+    void remainingChallengeTtlUsesPurposeSpecificRepository() {
+        PendingEmailDelivery signup = delivery(
+                UUID.randomUUID(),
+                EmailDeliveryPurpose.SIGNUP_VERIFICATION
+        );
+        PendingEmailDelivery passwordReset = delivery(
+                UUID.randomUUID(),
+                EmailDeliveryPurpose.PASSWORD_RESET
+        );
+        given(emailVerificationRepository.findChallengeRemainingTtlIfMatches(
+                "user@meetple.com",
+                "code-hash"
+        )).willReturn(Duration.ofMinutes(4));
+        given(passwordResetRepository.findChallengeRemainingTtlIfMatches(
+                "user@meetple.com",
+                "code-hash"
+        )).willReturn(Duration.ofMinutes(3));
+
+        assertThat(service.findRemainingChallengeTtl(signup))
+                .isEqualTo(Duration.ofMinutes(4));
+        assertThat(service.findRemainingChallengeTtl(passwordReset))
+                .isEqualTo(Duration.ofMinutes(3));
+    }
+
     private PendingEmailDelivery delivery(UUID id, EmailDeliveryPurpose purpose) {
         return new PendingEmailDelivery(
                 id,

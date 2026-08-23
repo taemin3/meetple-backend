@@ -112,6 +112,27 @@ class PasswordResetRepositoryTest {
     }
 
     @Test
+    void findsRemainingTtlOnlyForCurrentPasswordResetChallenge() {
+        String emailHash = TokenHashUtil.sha256("user@meetple.com");
+        List<String> keys = List.of("password-reset:challenge:" + emailHash);
+        given(stringRedisTemplate.execute(
+                ArgumentMatchers.<RedisScript<Long>>any(),
+                eq(keys),
+                eq("code-hash")
+        )).willReturn(120000L, 0L);
+        PasswordResetRepository repository = new PasswordResetRepository(stringRedisTemplate);
+
+        assertThat(repository.findChallengeRemainingTtlIfMatches(
+                "user@meetple.com",
+                "code-hash"
+        )).isEqualTo(Duration.ofMinutes(2));
+        assertThat(repository.findChallengeRemainingTtlIfMatches(
+                "user@meetple.com",
+                "code-hash"
+        )).isZero();
+    }
+
+    @Test
     void restoreResetTokenDoesNotExposeRawEmailOrTokenInKeys() {
         String emailHash = TokenHashUtil.sha256("user@meetple.com");
         String tokenHash = TokenHashUtil.sha256("reset-token");

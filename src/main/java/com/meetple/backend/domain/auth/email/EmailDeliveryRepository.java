@@ -17,7 +17,6 @@ public class EmailDeliveryRepository {
 
     private static final String DELIVERY_KEY_PREFIX = "email-delivery:payload:";
     private static final String CLAIM_KEY_PREFIX = "email-delivery:claim:";
-    private static final Duration CLAIM_TTL = Duration.ofSeconds(30);
     private static final RedisScript<Long> SAVE_SCRIPT = createScript("""
             redis.call('HSET', KEYS[1],
                 'purpose', ARGV[1],
@@ -26,6 +25,29 @@ public class EmailDeliveryRepository {
                 'codeHash', ARGV[4],
                 'deliver', ARGV[5])
             redis.call('PEXPIRE', KEYS[1], ARGV[6])
+            return 1
+            """);
+    private static final RedisScript<Long> ACQUIRE_CLAIM_SCRIPT = createScript("""
+            local claimed = redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2], 'NX')
+            if not claimed then
+                return 0
+            end
+            return 1
+            """);
+    private static final RedisScript<Long> RELEASE_CLAIM_SCRIPT = createScript("""
+            local savedOwner = redis.call('GET', KEYS[1])
+            if not savedOwner or savedOwner ~= ARGV[1] then
+                return 0
+            end
+            redis.call('DEL', KEYS[1])
+            return 1
+            """);
+    private static final RedisScript<Long> COMPLETE_SCRIPT = createScript("""
+            local savedOwner = redis.call('GET', KEYS[2])
+            if not savedOwner or savedOwner ~= ARGV[1] then
+                return 0
+            end
+            redis.call('DEL', KEYS[1], KEYS[2])
             return 1
             """);
 
@@ -71,17 +93,35 @@ public class EmailDeliveryRepository {
         }
     }
 
-    public boolean tryClaim(UUID deliveryId) {
-        Boolean claimed = stringRedisTemplate.opsForValue().setIfAbsent(
-                createClaimKey(deliveryId),
-                "1",
-                CLAIM_TTL
+    public boolean tryClaim(UUID deliveryId, String owner, Duration ttl) {
+        if (ttl.isZero() || ttl.isNegative()) {
+            return false;
+        }
+        Long result = stringRedisTemplate.execute(
+                ACQUIRE_CLAIM_SCRIPT,
+                List.of(createClaimKey(deliveryId)),
+                owner,
+                Long.toString(ttl.toMillis())
         );
-        return Boolean.TRUE.equals(claimed);
+        return Long.valueOf(1L).equals(result);
     }
 
-    public void releaseClaim(UUID deliveryId) {
-        stringRedisTemplate.delete(createClaimKey(deliveryId));
+    public boolean releaseClaim(UUID deliveryId, String owner) {
+        Long result = stringRedisTemplate.execute(
+                RELEASE_CLAIM_SCRIPT,
+                List.of(createClaimKey(deliveryId)),
+                owner
+        );
+        return Long.valueOf(1L).equals(result);
+    }
+
+    public boolean complete(UUID deliveryId, String owner) {
+        Long result = stringRedisTemplate.execute(
+                COMPLETE_SCRIPT,
+                List.of(createDeliveryKey(deliveryId), createClaimKey(deliveryId)),
+                owner
+        );
+        return Long.valueOf(1L).equals(result);
     }
 
     public void delete(UUID deliveryId) {

@@ -55,14 +55,27 @@ public class SmtpEmailVerificationMailSender implements EmailVerificationMailSen
 
                 인증번호: %s
 
-                인증번호는 %d분 동안 유효합니다.
+                인증번호는 %s 동안 유효합니다.
                 본인이 요청하지 않았다면 이 메일을 무시해주세요.
-                """.formatted(introduction, code, expiresIn.toMinutes()));
+                """.formatted(introduction, code, formatDuration(expiresIn)));
 
         try {
             javaMailSender.send(message);
         } catch (MailException e) {
             throw new BaseException(ErrorStatus.EXTERNAL_API_ERROR, "인증 메일 발송에 실패했습니다.");
         }
+    }
+
+    private String formatDuration(Duration duration) {
+        long totalSeconds = Math.max(1, duration.toSeconds());
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+        if (minutes == 0) {
+            return seconds + "초";
+        }
+        if (seconds == 0) {
+            return minutes + "분";
+        }
+        return minutes + "분 " + seconds + "초";
     }
 }

@@ -98,4 +98,19 @@ class SmtpEmailVerificationMailSenderTest {
         assertThat(message.getSubject()).contains("비밀번호 재설정");
         assertThat(message.getText()).contains("비밀번호 재설정", "654321", "5분");
     }
+
+    @Test
+    void emailShowsActualRemainingChallengeTime() {
+        mailSender.sendVerificationCode(
+                "user@meetple.com",
+                "123456",
+                Duration.ofSeconds(150)
+        );
+
+        ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(
+                SimpleMailMessage.class
+        );
+        verify(javaMailSender).send(captor.capture());
+        assertThat(captor.getValue().getText()).contains("2분 30초 동안 유효");
+    }
 }

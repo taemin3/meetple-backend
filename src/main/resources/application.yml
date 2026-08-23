@@ -60,7 +60,7 @@ jwt:
 auth:
   email-delivery:
     kafka:
-      consumer-enabled: ${EMAIL_DELIVERY_KAFKA_CONSUMER_ENABLED:false}
+      consumer-enabled: ${EMAIL_DELIVERY_KAFKA_CONSUMER_ENABLED:true}
       retry:
         initial-delay-ms: ${EMAIL_DELIVERY_KAFKA_RETRY_INITIAL_DELAY_MS:5000}
         multiplier: ${EMAIL_DELIVERY_KAFKA_RETRY_MULTIPLIER:6.0}

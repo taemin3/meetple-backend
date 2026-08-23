@@ -3,18 +3,20 @@ package com.meetple.backend.domain.auth.email;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.meetple.backend.domain.auth.config.EmailVerificationProperties;
 import com.meetple.backend.domain.auth.mail.EmailVerificationMailSender;
 import com.meetple.backend.domain.outbox.event.OutboxEventEnvelope;
+import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 @ConditionalOnProperty(
         prefix = "auth.email-delivery.kafka",
         name = "consumer-enabled",
@@ -26,7 +28,6 @@ public class EmailDeliveryEventProcessor {
     private final EmailDeliveryRepository emailDeliveryRepository;
     private final EmailDeliveryService emailDeliveryService;
     private final EmailVerificationMailSender mailSender;
-    private final EmailVerificationProperties properties;
 
     public void process(String payload) {
         UUID deliveryId = parseDeliveryId(payload);
@@ -34,20 +35,39 @@ public class EmailDeliveryEventProcessor {
         if (optionalDelivery.isEmpty()) {
             return;
         }
-        if (!emailDeliveryRepository.tryClaim(deliveryId)) {
+
+        PendingEmailDelivery delivery = optionalDelivery.get();
+        if (!delivery.deliver()) {
+            emailDeliveryRepository.delete(deliveryId);
+            return;
+        }
+
+        Duration remainingTtl = emailDeliveryService.findRemainingChallengeTtl(delivery);
+        if (remainingTtl.isZero() || remainingTtl.isNegative()) {
+            emailDeliveryRepository.delete(deliveryId);
+            return;
+        }
+
+        String claimOwner = UUID.randomUUID().toString();
+        if (!emailDeliveryRepository.tryClaim(deliveryId, claimOwner, remainingTtl)) {
             throw new EmailDeliveryProcessingException(
                     "Email delivery is already being processed: " + deliveryId
             );
         }
 
-        PendingEmailDelivery delivery = optionalDelivery.get();
         try {
-            if (delivery.deliver()) {
-                send(delivery);
+            Duration actualRemainingTtl = emailDeliveryService
+                    .findRemainingChallengeTtl(delivery);
+            if (actualRemainingTtl.isZero() || actualRemainingTtl.isNegative()) {
+                emailDeliveryRepository.complete(deliveryId, claimOwner);
+                return;
             }
-            emailDeliveryRepository.delete(deliveryId);
+            send(delivery, actualRemainingTtl);
+            if (!emailDeliveryRepository.complete(deliveryId, claimOwner)) {
+                log.warn("Email delivery claim ownership was lost: {}", deliveryId);
+            }
         } catch (RuntimeException exception) {
-            emailDeliveryRepository.releaseClaim(deliveryId);
+            emailDeliveryRepository.releaseClaim(deliveryId, claimOwner);
             throw new EmailDeliveryProcessingException(
                     "Email delivery failed: " + deliveryId,
                     exception
@@ -59,17 +79,17 @@ public class EmailDeliveryEventProcessor {
         emailDeliveryService.discard(parseDeliveryId(payload));
     }
 
-    private void send(PendingEmailDelivery delivery) {
+    private void send(PendingEmailDelivery delivery, Duration remainingTtl) {
         switch (delivery.purpose()) {
             case SIGNUP_VERIFICATION -> mailSender.sendVerificationCode(
                     delivery.recipient(),
                     delivery.code(),
-                    properties.codeTtl()
+                    remainingTtl
             );
             case PASSWORD_RESET -> mailSender.sendPasswordResetCode(
                     delivery.recipient(),
                     delivery.code(),
-                    properties.codeTtl()
+                    remainingTtl
             );
         }
     }
