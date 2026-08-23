@@ -130,6 +130,29 @@ class EmailVerificationRepositoryTest {
     }
 
     @Test
+    void findsRemainingTtlOnlyForCurrentChallengeHash() {
+        String emailHash = TokenHashUtil.sha256("user@meetple.com");
+        List<String> keys = List.of("email-verification:challenge:" + emailHash);
+        given(stringRedisTemplate.execute(
+                ArgumentMatchers.<RedisScript<Long>>any(),
+                eq(keys),
+                eq("code-hash")
+        )).willReturn(180000L, 0L);
+        EmailVerificationRepository repository = new EmailVerificationRepository(
+                stringRedisTemplate
+        );
+
+        assertThat(repository.findChallengeRemainingTtlIfMatches(
+                "user@meetple.com",
+                "code-hash"
+        )).isEqualTo(Duration.ofMinutes(3));
+        assertThat(repository.findChallengeRemainingTtlIfMatches(
+                "user@meetple.com",
+                "code-hash"
+        )).isZero();
+    }
+
+    @Test
     void acquireSendPermitUsesHashedRequesterAndGlobalKeys() {
         String requesterHash = TokenHashUtil.sha256("127.0.0.1");
         List<String> keys = List.of(

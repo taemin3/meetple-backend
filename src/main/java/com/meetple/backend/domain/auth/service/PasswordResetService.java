@@ -2,6 +2,8 @@ package com.meetple.backend.domain.auth.service;
 
 import com.meetple.backend.domain.auth.config.EmailVerificationProperties;
 import com.meetple.backend.domain.auth.config.PasswordResetProperties;
+import com.meetple.backend.domain.auth.email.EmailDeliveryPurpose;
+import com.meetple.backend.domain.auth.email.EmailDeliveryService;
 import com.meetple.backend.domain.auth.dto.request.EmailVerificationConfirmRequest;
 import com.meetple.backend.domain.auth.dto.request.EmailVerificationSendRequest;
 import com.meetple.backend.domain.auth.dto.request.PasswordResetRequest;
@@ -38,6 +40,7 @@ public class PasswordResetService {
 
     private final MemberRepository memberRepository;
     private final PasswordResetRepository passwordResetRepository;
+    private final EmailDeliveryService emailDeliveryService;
     private final EmailVerificationSecretGenerator secretGenerator;
     private final EmailVerificationHasher hasher;
     private final EmailVerificationProperties emailVerificationProperties;
@@ -47,6 +50,7 @@ public class PasswordResetService {
     private final PushDeviceTokenService pushDeviceTokenService;
     private final ApplicationEventPublisher eventPublisher;
 
+    @Transactional
     public void sendVerificationCode(
             EmailVerificationSendRequest request,
             String requesterIdentifier
@@ -74,18 +78,14 @@ public class PasswordResetService {
             throw new BaseException(ErrorStatus.EMAIL_VERIFICATION_SEND_TOO_SOON);
         }
 
-        PasswordResetMailRequestedEvent mailEvent = new PasswordResetMailRequestedEvent(
+        emailDeliveryService.schedule(
+                EmailDeliveryPurpose.PASSWORD_RESET,
                 email,
                 code,
                 codeHash,
-                memberRepository.existsByEmail(email)
+                memberRepository.existsByEmail(email),
+                emailVerificationProperties.codeTtl()
         );
-        try {
-            eventPublisher.publishEvent(mailEvent);
-        } catch (RuntimeException exception) {
-            passwordResetRepository.deleteChallengeIfMatches(email, codeHash);
-            throw exception;
-        }
     }
 
     public PasswordResetVerificationResponse confirm(

@@ -24,6 +24,11 @@ push:
   fcm:
     enabled: false
 
+auth:
+  email-delivery:
+    kafka:
+      consumer-enabled: false
+
 jwt:
   secret: test-jwt-secret-key-for-meetple-backend-1234567890
   access-token-expiration-seconds: 3600

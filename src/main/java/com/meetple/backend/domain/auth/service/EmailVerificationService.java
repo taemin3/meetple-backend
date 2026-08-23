@@ -4,7 +4,8 @@ import com.meetple.backend.domain.auth.config.EmailVerificationProperties;
 import com.meetple.backend.domain.auth.dto.request.EmailVerificationConfirmRequest;
 import com.meetple.backend.domain.auth.dto.request.EmailVerificationSendRequest;
 import com.meetple.backend.domain.auth.dto.response.EmailVerificationConfirmResponse;
-import com.meetple.backend.domain.auth.mail.EmailVerificationMailSender;
+import com.meetple.backend.domain.auth.email.EmailDeliveryPurpose;
+import com.meetple.backend.domain.auth.email.EmailDeliveryService;
 import com.meetple.backend.domain.auth.repository.EmailVerificationRepository;
 import com.meetple.backend.domain.auth.repository.EmailVerificationRepository.CodeVerificationResult;
 import com.meetple.backend.domain.member.repository.MemberRepository;
@@ -14,6 +15,7 @@ import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.response.ErrorStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -21,11 +23,12 @@ public class EmailVerificationService {
 
     private final MemberRepository memberRepository;
     private final EmailVerificationRepository emailVerificationRepository;
-    private final EmailVerificationMailSender emailVerificationMailSender;
+    private final EmailDeliveryService emailDeliveryService;
     private final EmailVerificationSecretGenerator secretGenerator;
     private final EmailVerificationHasher hasher;
     private final EmailVerificationProperties properties;
 
+    @Transactional
     public void sendVerificationCode(
             EmailVerificationSendRequest request,
             String requesterIdentifier
@@ -56,12 +59,14 @@ public class EmailVerificationService {
             throw new BaseException(ErrorStatus.EMAIL_VERIFICATION_SEND_TOO_SOON);
         }
 
-        try {
-            emailVerificationMailSender.sendVerificationCode(email, code, properties.codeTtl());
-        } catch (RuntimeException e) {
-            emailVerificationRepository.deleteChallengeIfMatches(email, codeHash);
-            throw e;
-        }
+        emailDeliveryService.schedule(
+                EmailDeliveryPurpose.SIGNUP_VERIFICATION,
+                email,
+                code,
+                codeHash,
+                true,
+                properties.codeTtl()
+        );
     }
 
     public EmailVerificationConfirmResponse confirm(

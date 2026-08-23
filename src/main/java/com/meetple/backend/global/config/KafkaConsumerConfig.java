@@ -11,7 +11,9 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 @Configuration(proxyBeanMethods = false)
 @EnableKafkaRetryTopic
 @ConditionalOnExpression(
-        "${push.kafka.consumer-enabled:false} || ${image.deletion.kafka.consumer-enabled:false}"
+        "${push.kafka.consumer-enabled:false}"
+                + " || ${image.deletion.kafka.consumer-enabled:false}"
+                + " || ${auth.email-delivery.kafka.consumer-enabled:false}"
 )
 public class KafkaConsumerConfig {
 

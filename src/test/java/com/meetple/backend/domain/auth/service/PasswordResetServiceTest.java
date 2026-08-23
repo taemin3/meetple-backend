@@ -12,6 +12,8 @@ import static org.mockito.Mockito.doThrow;
 
 import com.meetple.backend.domain.auth.config.EmailVerificationProperties;
 import com.meetple.backend.domain.auth.config.PasswordResetProperties;
+import com.meetple.backend.domain.auth.email.EmailDeliveryPurpose;
+import com.meetple.backend.domain.auth.email.EmailDeliveryService;
 import com.meetple.backend.domain.auth.dto.request.EmailVerificationConfirmRequest;
 import com.meetple.backend.domain.auth.dto.request.EmailVerificationSendRequest;
 import com.meetple.backend.domain.auth.dto.request.PasswordResetRequest;
@@ -51,6 +53,8 @@ class PasswordResetServiceTest {
     @Mock
     private PasswordResetRepository passwordResetRepository;
     @Mock
+    private EmailDeliveryService emailDeliveryService;
+    @Mock
     private EmailVerificationSecretGenerator secretGenerator;
     @Mock
     private EmailVerificationHasher hasher;
@@ -87,6 +91,7 @@ class PasswordResetServiceTest {
         passwordResetService = new PasswordResetService(
                 memberRepository,
                 passwordResetRepository,
+                emailDeliveryService,
                 secretGenerator,
                 hasher,
                 emailVerificationProperties,
@@ -99,7 +104,7 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    void sendVerificationCodePublishesAsynchronousMailEventForExistingMember() {
+    void sendVerificationCodeSchedulesKafkaMailForExistingMember() {
         allowSend();
         given(secretGenerator.generateCode()).willReturn(CODE);
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
@@ -116,13 +121,18 @@ class PasswordResetServiceTest {
                 "127.0.0.1"
         );
 
-        verify(eventPublisher).publishEvent(new PasswordResetMailRequestedEvent(
-                EMAIL, CODE, CODE_HASH, true
-        ));
+        verify(emailDeliveryService).schedule(
+                EmailDeliveryPurpose.PASSWORD_RESET,
+                EMAIL,
+                CODE,
+                CODE_HASH,
+                true,
+                emailVerificationProperties.codeTtl()
+        );
     }
 
     @Test
-    void sendVerificationCodePublishesIndistinguishableEventForUnknownEmail() {
+    void sendVerificationCodeSchedulesIndistinguishableKafkaMailForUnknownEmail() {
         allowSend();
         given(secretGenerator.generateCode()).willReturn(CODE);
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
@@ -139,13 +149,18 @@ class PasswordResetServiceTest {
                 "127.0.0.1"
         );
 
-        verify(eventPublisher).publishEvent(new PasswordResetMailRequestedEvent(
-                EMAIL, CODE, CODE_HASH, false
-        ));
+        verify(emailDeliveryService).schedule(
+                EmailDeliveryPurpose.PASSWORD_RESET,
+                EMAIL,
+                CODE,
+                CODE_HASH,
+                false,
+                emailVerificationProperties.codeTtl()
+        );
     }
 
     @Test
-    void sendVerificationCodeDeletesChallengeWhenMailEventCannotBeQueued() {
+    void sendVerificationCodePropagatesKafkaSchedulingFailure() {
         allowSend();
         given(secretGenerator.generateCode()).willReturn(CODE);
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
@@ -156,18 +171,29 @@ class PasswordResetServiceTest {
                 emailVerificationProperties.resendCooldown()
         )).willReturn(true);
         given(memberRepository.existsByEmail(EMAIL)).willReturn(true);
-        PasswordResetMailRequestedEvent event = new PasswordResetMailRequestedEvent(
-                EMAIL, CODE, CODE_HASH, true
-        );
         doThrow(new IllegalStateException("mail queue full"))
-                .when(eventPublisher).publishEvent(event);
+                .when(emailDeliveryService).schedule(
+                        EmailDeliveryPurpose.PASSWORD_RESET,
+                        EMAIL,
+                        CODE,
+                        CODE_HASH,
+                        true,
+                        emailVerificationProperties.codeTtl()
+                );
 
         assertThatThrownBy(() -> passwordResetService.sendVerificationCode(
                 new EmailVerificationSendRequest(EMAIL),
                 "127.0.0.1"
         )).isInstanceOf(IllegalStateException.class);
 
-        verify(passwordResetRepository).deleteChallengeIfMatches(EMAIL, CODE_HASH);
+        verify(emailDeliveryService).schedule(
+                EmailDeliveryPurpose.PASSWORD_RESET,
+                EMAIL,
+                CODE,
+                CODE_HASH,
+                true,
+                emailVerificationProperties.codeTtl()
+        );
     }
 
     @Test

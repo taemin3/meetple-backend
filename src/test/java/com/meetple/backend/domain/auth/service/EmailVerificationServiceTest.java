@@ -3,6 +3,7 @@ package com.meetple.backend.domain.auth.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
@@ -13,7 +14,8 @@ import com.meetple.backend.domain.auth.config.EmailVerificationProperties;
 import com.meetple.backend.domain.auth.dto.request.EmailVerificationConfirmRequest;
 import com.meetple.backend.domain.auth.dto.request.EmailVerificationSendRequest;
 import com.meetple.backend.domain.auth.dto.response.EmailVerificationConfirmResponse;
-import com.meetple.backend.domain.auth.mail.EmailVerificationMailSender;
+import com.meetple.backend.domain.auth.email.EmailDeliveryPurpose;
+import com.meetple.backend.domain.auth.email.EmailDeliveryService;
 import com.meetple.backend.domain.auth.repository.EmailVerificationRepository;
 import com.meetple.backend.domain.auth.repository.EmailVerificationRepository.CodeVerificationResult;
 import com.meetple.backend.domain.member.repository.MemberRepository;
@@ -43,7 +45,7 @@ class EmailVerificationServiceTest {
     private EmailVerificationRepository emailVerificationRepository;
 
     @Mock
-    private EmailVerificationMailSender emailVerificationMailSender;
+    private EmailDeliveryService emailDeliveryService;
 
     @Mock
     private EmailVerificationSecretGenerator secretGenerator;
@@ -73,7 +75,7 @@ class EmailVerificationServiceTest {
         emailVerificationService = new EmailVerificationService(
                 memberRepository,
                 emailVerificationRepository,
-                emailVerificationMailSender,
+                emailDeliveryService,
                 secretGenerator,
                 hasher,
                 properties
@@ -81,7 +83,7 @@ class EmailVerificationServiceTest {
     }
 
     @Test
-    void sendVerificationCodeStoresChallengeAndSendsNormalizedEmail() {
+    void sendVerificationCodeStoresChallengeAndSchedulesNormalizedEmail() {
         given(memberRepository.existsByEmail(EMAIL)).willReturn(false);
         allowSend();
         given(secretGenerator.generateCode()).willReturn(CODE);
@@ -98,9 +100,12 @@ class EmailVerificationServiceTest {
                 "127.0.0.1"
         );
 
-        verify(emailVerificationMailSender).sendVerificationCode(
+        verify(emailDeliveryService).schedule(
+                EmailDeliveryPurpose.SIGNUP_VERIFICATION,
                 EMAIL,
                 CODE,
+                CODE_HASH,
+                true,
                 properties.codeTtl()
         );
     }
@@ -143,11 +148,11 @@ class EmailVerificationServiceTest {
                 .isInstanceOf(BaseException.class)
                 .hasMessage(ErrorStatus.EMAIL_VERIFICATION_SEND_TOO_SOON.getMessage());
 
-        verify(emailVerificationMailSender, never()).sendVerificationCode(any(), any(), any());
+        verify(emailDeliveryService, never()).schedule(any(), any(), any(), any(), anyBoolean(), any());
     }
 
     @Test
-    void sendVerificationCodeDeletesChallengeWhenMailDeliveryFails() {
+    void sendVerificationCodePropagatesSchedulingFailure() {
         allowSend();
         given(secretGenerator.generateCode()).willReturn(CODE);
         given(hasher.hashCode(EMAIL, CODE)).willReturn(CODE_HASH);
@@ -158,15 +163,29 @@ class EmailVerificationServiceTest {
                 properties.resendCooldown()
         )).willReturn(true);
         doThrow(new BaseException(ErrorStatus.EXTERNAL_API_ERROR))
-                .when(emailVerificationMailSender)
-                .sendVerificationCode(EMAIL, CODE, properties.codeTtl());
+                .when(emailDeliveryService)
+                .schedule(
+                        EmailDeliveryPurpose.SIGNUP_VERIFICATION,
+                        EMAIL,
+                        CODE,
+                        CODE_HASH,
+                        true,
+                        properties.codeTtl()
+                );
 
         assertThatThrownBy(() -> emailVerificationService.sendVerificationCode(
                 new EmailVerificationSendRequest(EMAIL),
                 "127.0.0.1"
         )).isInstanceOf(BaseException.class);
 
-        verify(emailVerificationRepository).deleteChallengeIfMatches(EMAIL, CODE_HASH);
+        verify(emailDeliveryService).schedule(
+                EmailDeliveryPurpose.SIGNUP_VERIFICATION,
+                EMAIL,
+                CODE,
+                CODE_HASH,
+                true,
+                properties.codeTtl()
+        );
     }
 
     @Test
@@ -186,7 +205,7 @@ class EmailVerificationServiceTest {
                 .isInstanceOf(BaseException.class)
                 .hasMessage(ErrorStatus.EMAIL_VERIFICATION_RATE_LIMITED.getMessage());
 
-        verify(emailVerificationMailSender, never()).sendVerificationCode(any(), any(), any());
+        verify(emailDeliveryService, never()).schedule(any(), any(), any(), any(), anyBoolean(), any());
     }
 
     @Test

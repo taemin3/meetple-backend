@@ -52,8 +52,7 @@ class SmtpEmailVerificationMailSenderTest {
     void sendVerificationCodeBuildsSignupEmail() {
         mailSender.sendVerificationCode(
                 "user@meetple.com",
-                "123456",
-                Duration.ofMinutes(5)
+                "123456"
         );
 
         ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(
@@ -63,7 +62,7 @@ class SmtpEmailVerificationMailSenderTest {
         SimpleMailMessage message = captor.getValue();
         assertThat(message.getFrom()).isEqualTo("noreply@meetple.test");
         assertThat(message.getTo()).containsExactly("user@meetple.com");
-        assertThat(message.getText()).contains("123456", "5분");
+        assertThat(message.getText()).contains("123456", "발급 후 5분 동안 유효");
     }
 
     @Test
@@ -73,8 +72,7 @@ class SmtpEmailVerificationMailSenderTest {
 
         assertThatThrownBy(() -> mailSender.sendVerificationCode(
                 "user@meetple.com",
-                "123456",
-                Duration.ofMinutes(5)
+                "123456"
         ))
                 .isInstanceOf(BaseException.class)
                 .hasMessage("인증 메일 발송에 실패했습니다.")
@@ -86,8 +84,7 @@ class SmtpEmailVerificationMailSenderTest {
     void sendPasswordResetCodeBuildsPasswordResetEmail() {
         mailSender.sendPasswordResetCode(
                 "user@meetple.com",
-                "654321",
-                Duration.ofMinutes(5)
+                "654321"
         );
 
         ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(
@@ -96,6 +93,23 @@ class SmtpEmailVerificationMailSenderTest {
         verify(javaMailSender).send(captor.capture());
         SimpleMailMessage message = captor.getValue();
         assertThat(message.getSubject()).contains("비밀번호 재설정");
-        assertThat(message.getText()).contains("비밀번호 재설정", "654321", "5분");
+        assertThat(message.getText())
+                .contains("비밀번호 재설정", "654321", "발급 후 5분 동안 유효");
+    }
+
+    @Test
+    void emailShowsConfiguredValidityPeriodInsteadOfRemainingTime() {
+        mailSender.sendVerificationCode(
+                "user@meetple.com",
+                "123456"
+        );
+
+        ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(
+                SimpleMailMessage.class
+        );
+        verify(javaMailSender).send(captor.capture());
+        assertThat(captor.getValue().getText())
+                .contains("발급 후 5분 동안 유효")
+                .doesNotContain("2분 30초");
     }
 }
