@@ -32,6 +32,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -310,6 +312,21 @@ class PasswordResetServiceTest {
         assertThatThrownBy(() -> passwordResetService.resetPassword(request))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("비밀번호는 UTF-8 기준 72바이트 이하여야 합니다.");
+
+        verify(memberRepository, never()).findByEmailForUpdate(anyString());
+        verify(passwordResetRepository, never()).claimResetToken(anyString(), anyString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"abcdefgh", "12345678"})
+    void resetPasswordRejectsPasswordWithoutLetterOrDigitBeforeClaimingToken(
+            String password
+    ) {
+        PasswordResetRequest request = request(password);
+
+        assertThatThrownBy(() -> passwordResetService.resetPassword(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("비밀번호는 영문과 숫자를 포함해야 합니다.");
 
         verify(memberRepository, never()).findByEmailForUpdate(anyString());
         verify(passwordResetRepository, never()).claimResetToken(anyString(), anyString());

@@ -21,6 +21,7 @@ import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -37,6 +38,9 @@ public class PasswordResetService {
 
     private static final int BCRYPT_MAX_PASSWORD_BYTES = 72;
     private static final String PASSWORD_TOO_LONG_MESSAGE = "비밀번호는 UTF-8 기준 72바이트 이하여야 합니다.";
+    private static final String PASSWORD_COMPOSITION_MESSAGE = "비밀번호는 영문과 숫자를 포함해야 합니다.";
+    private static final Pattern PASSWORD_LETTER_PATTERN = Pattern.compile("[A-Za-z]");
+    private static final Pattern PASSWORD_DIGIT_PATTERN = Pattern.compile("\\d");
 
     private final MemberRepository memberRepository;
     private final PasswordResetRepository passwordResetRepository;
@@ -121,7 +125,7 @@ public class PasswordResetService {
 
     @Transactional
     public void resetPassword(PasswordResetRequest request) {
-        validatePasswordByteLength(request.newPassword());
+        validateNewPassword(request.newPassword());
         String email = EmailAddressNormalizer.normalize(request.email());
         Instant tokenClaimStartedAt = Instant.now();
         Duration remainingTtl = passwordResetRepository.claimResetToken(
@@ -210,6 +214,14 @@ public class PasswordResetService {
     private void validatePasswordByteLength(String password) {
         if (password.getBytes(StandardCharsets.UTF_8).length > BCRYPT_MAX_PASSWORD_BYTES) {
             throw new BadRequestException(PASSWORD_TOO_LONG_MESSAGE);
+        }
+    }
+
+    private void validateNewPassword(String password) {
+        validatePasswordByteLength(password);
+        if (!PASSWORD_LETTER_PATTERN.matcher(password).find()
+                || !PASSWORD_DIGIT_PATTERN.matcher(password).find()) {
+            throw new BadRequestException(PASSWORD_COMPOSITION_MESSAGE);
         }
     }
 }

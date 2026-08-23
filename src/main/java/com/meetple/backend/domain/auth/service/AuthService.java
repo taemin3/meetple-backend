@@ -25,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.ApplicationEventPublisher;
@@ -43,6 +44,9 @@ public class AuthService {
     private static final String BEARER_PREFIX = "Bearer ";
     private static final int BCRYPT_MAX_PASSWORD_BYTES = 72;
     private static final String PASSWORD_TOO_LONG_MESSAGE = "비밀번호는 UTF-8 기준 72바이트 이하여야 합니다.";
+    private static final String PASSWORD_COMPOSITION_MESSAGE = "비밀번호는 영문과 숫자를 포함해야 합니다.";
+    private static final Pattern PASSWORD_LETTER_PATTERN = Pattern.compile("[A-Za-z]");
+    private static final Pattern PASSWORD_DIGIT_PATTERN = Pattern.compile("\\d");
 
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
@@ -56,7 +60,7 @@ public class AuthService {
 
     @Transactional
     public AuthMemberResponse signup(SignupRequest request) {
-        validatePasswordByteLength(request.password());
+        validateNewPassword(request.password());
         String email = EmailAddressNormalizer.normalize(request.email());
         List<LegalDocument> legalDocuments = legalDocumentService.resolveCurrentSignupDocuments(
                 request.legalDocuments()
@@ -170,6 +174,14 @@ public class AuthService {
     private void validatePasswordByteLength(String password) {
         if (password.getBytes(StandardCharsets.UTF_8).length > BCRYPT_MAX_PASSWORD_BYTES) {
             throw new BadRequestException(PASSWORD_TOO_LONG_MESSAGE);
+        }
+    }
+
+    private void validateNewPassword(String password) {
+        validatePasswordByteLength(password);
+        if (!PASSWORD_LETTER_PATTERN.matcher(password).find()
+                || !PASSWORD_DIGIT_PATTERN.matcher(password).find()) {
+            throw new BadRequestException(PASSWORD_COMPOSITION_MESSAGE);
         }
     }
 

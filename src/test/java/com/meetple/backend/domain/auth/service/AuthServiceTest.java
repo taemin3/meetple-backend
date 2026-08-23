@@ -37,6 +37,8 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
@@ -157,6 +159,18 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.signup(request))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("비밀번호는 UTF-8 기준 72바이트 이하여야 합니다.");
+
+        verify(memberRepository, never()).existsByEmail(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"abcdefgh", "12345678"})
+    void signupRejectsPasswordWithoutLetterOrDigit(String password) {
+        SignupRequest request = validSignupRequest(password);
+
+        assertThatThrownBy(() -> authService.signup(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("비밀번호는 영문과 숫자를 포함해야 합니다.");
 
         verify(memberRepository, never()).existsByEmail(any());
     }
