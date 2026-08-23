@@ -9,7 +9,8 @@ public enum OutboxEventTopic {
 
     PUSH_NOTIFICATION("meetple.push.notification.v1"),
     PUSH_CHAT("meetple.push.chat.v1"),
-    IMAGE_DELETION("meetple.image.delete.v1");
+    IMAGE_DELETION("meetple.image.delete.v1"),
+    EMAIL_DELIVERY("meetple.email.delivery.v1");
 
     private final String value;
 }

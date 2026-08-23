@@ -95,6 +95,14 @@ services:
           --topic meetple.image.delete.v1 \
           --partitions "$${KAFKA_PUSH_TOPIC_PARTITIONS}" \
           --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:29092 \
+          --create \
+          --if-not-exists \
+          --topic meetple.email.delivery.v1 \
+          --partitions "$${KAFKA_PUSH_TOPIC_PARTITIONS}" \
+          --replication-factor 1 \
+          --config retention.ms=86400000
         for topic in \
           meetple.push.notification.v1.retry-0 \
           meetple.push.notification.v1.retry-1 \
@@ -110,7 +118,11 @@ services:
           meetple.image.delete.v1.retry-1 \
           meetple.image.delete.v1.retry-2 \
           meetple.image.delete.v1.retry-3 \
-          meetple.image.delete.v1.dlq
+          meetple.image.delete.v1.dlq \
+          meetple.email.delivery.v1.retry-0 \
+          meetple.email.delivery.v1.retry-1 \
+          meetple.email.delivery.v1.retry-2 \
+          meetple.email.delivery.v1.dlq
         do
           /opt/kafka/bin/kafka-topics.sh \
             --bootstrap-server kafka:29092 \
@@ -119,6 +131,16 @@ services:
             --topic "$${topic}" \
             --partitions "$${KAFKA_PUSH_TOPIC_PARTITIONS}" \
             --replication-factor 1
+          case "$${topic}" in
+            meetple.email.delivery.v1.*)
+              /opt/kafka/bin/kafka-configs.sh \
+                --bootstrap-server kafka:29092 \
+                --entity-type topics \
+                --entity-name "$${topic}" \
+                --alter \
+                --add-config retention.ms=86400000
+              ;;
+          esac
         done
     restart: "no"
 
