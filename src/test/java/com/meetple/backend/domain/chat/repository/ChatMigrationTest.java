@@ -25,6 +25,9 @@ class ChatMigrationTest {
                         id bigint primary key,
                         meeting_date timestamp not null,
                         end_date timestamp null,
+                        host_id bigint,
+                        category_id bigint,
+                        status varchar(30),
                         thumbnail_image_url varchar(2048)
                     )
                     """);
@@ -69,7 +72,7 @@ class ChatMigrationTest {
 
         var result = flyway.migrate();
 
-        assertThat(result.migrationsExecuted).isEqualTo(11);
+        assertThat(result.migrationsExecuted).isEqualTo(13);
         try (var connection = DriverManager.getConnection(url, "sa", "")) {
             assertThat(tableExists(connection, "CHAT_MESSAGES")).isTrue();
             assertThat(tableExists(connection, "CHAT_READ_STATES")).isTrue();

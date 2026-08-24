@@ -2,6 +2,7 @@ HELP.md
 .env
 .env.*
 !.env.example
+!.env.prod.example
 .gradle
 build/
 !gradle/wrapper/gradle-wrapper.jar

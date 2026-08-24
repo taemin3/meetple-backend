@@ -1,0 +1,262 @@
+name: meetple-prod
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      TZ: Asia/Seoul
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  kafka:
+    image: apache/kafka:4.3.1
+    restart: unless-stopped
+    environment:
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:?KAFKA_CLUSTER_ID is required}
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:29092,CONTROLLER://:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_NUM_PARTITIONS: ${KAFKA_TOPIC_PARTITIONS:-3}
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
+    networks:
+      - internal
+
+  kafka-init:
+    image: apache/kafka:4.3.1
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_TOPIC_PARTITIONS: ${KAFKA_TOPIC_PARTITIONS:-3}
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - |
+        create_topic() {
+          /opt/kafka/bin/kafka-topics.sh \
+            --bootstrap-server kafka:29092 \
+            --create \
+            --if-not-exists \
+            --topic "$$1" \
+            --partitions "$${KAFKA_TOPIC_PARTITIONS}" \
+            --replication-factor 1
+        }
+
+        create_topic meetple.push.notification.v1
+        create_topic meetple.push.chat.v1
+        create_topic meetple.image.delete.v1
+        create_topic meetple.email.delivery.v1
+
+        for topic in \
+          meetple.push.notification.v1.retry-0 \
+          meetple.push.notification.v1.retry-1 \
+          meetple.push.notification.v1.retry-2 \
+          meetple.push.notification.v1.retry-3 \
+          meetple.push.notification.v1.dlq \
+          meetple.push.chat.v1.retry-0 \
+          meetple.push.chat.v1.retry-1 \
+          meetple.push.chat.v1.retry-2 \
+          meetple.push.chat.v1.retry-3 \
+          meetple.push.chat.v1.dlq \
+          meetple.image.delete.v1.retry-0 \
+          meetple.image.delete.v1.retry-1 \
+          meetple.image.delete.v1.retry-2 \
+          meetple.image.delete.v1.retry-3 \
+          meetple.image.delete.v1.dlq \
+          meetple.email.delivery.v1.retry-0 \
+          meetple.email.delivery.v1.retry-1 \
+          meetple.email.delivery.v1.retry-2 \
+          meetple.email.delivery.v1.dlq
+        do
+          create_topic "$${topic}"
+        done
+
+        for topic in \
+          meetple.email.delivery.v1 \
+          meetple.email.delivery.v1.retry-0 \
+          meetple.email.delivery.v1.retry-1 \
+          meetple.email.delivery.v1.retry-2 \
+          meetple.email.delivery.v1.dlq
+        do
+          /opt/kafka/bin/kafka-configs.sh \
+            --bootstrap-server kafka:29092 \
+            --entity-type topics \
+            --entity-name "$${topic}" \
+            --alter \
+            --add-config retention.ms=86400000
+        done
+    networks:
+      - internal
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${BACKEND_IMAGE:-meetple-backend:latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:?POSTGRES_USER is required}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_ACCESS_TOKEN_EXPIRATION_SECONDS: ${JWT_ACCESS_TOKEN_EXPIRATION_SECONDS:-3600}
+      JWT_REFRESH_TOKEN_EXPIRATION_SECONDS: ${JWT_REFRESH_TOKEN_EXPIRATION_SECONDS:-1209600}
+      EMAIL_VERIFICATION_HMAC_SECRET: ${EMAIL_VERIFICATION_HMAC_SECRET:?EMAIL_VERIFICATION_HMAC_SECRET is required}
+      EMAIL_VERIFICATION_CODE_TTL: ${EMAIL_VERIFICATION_CODE_TTL:-5m}
+      EMAIL_VERIFICATION_RESEND_COOLDOWN: ${EMAIL_VERIFICATION_RESEND_COOLDOWN:-1m}
+      EMAIL_VERIFICATION_SIGNUP_TOKEN_TTL: ${EMAIL_VERIFICATION_SIGNUP_TOKEN_TTL:-15m}
+      EMAIL_VERIFICATION_MAX_ATTEMPTS: ${EMAIL_VERIFICATION_MAX_ATTEMPTS:-5}
+      PASSWORD_RESET_TOKEN_TTL: ${PASSWORD_RESET_TOKEN_TTL:-15m}
+      MAIL_HOST: ${MAIL_HOST:?MAIL_HOST is required}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:?MAIL_USERNAME is required}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:?MAIL_PASSWORD is required}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
+      MAIL_STARTTLS_ENABLED: ${MAIL_STARTTLS_ENABLED:-true}
+      MAIL_STARTTLS_REQUIRED: ${MAIL_STARTTLS_REQUIRED:-true}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:?EMAIL_FROM_ADDRESS is required}
+      NAVER_LOCATION_BASE_URL: ${NAVER_LOCATION_BASE_URL:-https://openapi.naver.com}
+      NAVER_LOCATION_CLIENT_ID: ${NAVER_LOCATION_CLIENT_ID:?NAVER_LOCATION_CLIENT_ID is required}
+      NAVER_LOCATION_CLIENT_SECRET: ${NAVER_LOCATION_CLIENT_SECRET:?NAVER_LOCATION_CLIENT_SECRET is required}
+      NAVER_MAPS_BASE_URL: ${NAVER_MAPS_BASE_URL:-https://maps.apigw.ntruss.com}
+      NAVER_MAPS_CLIENT_ID: ${NAVER_MAPS_CLIENT_ID:?NAVER_MAPS_CLIENT_ID is required}
+      NAVER_MAPS_CLIENT_SECRET: ${NAVER_MAPS_CLIENT_SECRET:?NAVER_MAPS_CLIENT_SECRET is required}
+      IMAGE_STORAGE_BUCKET: ${IMAGE_STORAGE_BUCKET:?IMAGE_STORAGE_BUCKET is required}
+      IMAGE_STORAGE_REGION: ${IMAGE_STORAGE_REGION:-ap-northeast-2}
+      IMAGE_STORAGE_ENDPOINT: ${IMAGE_STORAGE_ENDPOINT:-}
+      IMAGE_STORAGE_PUBLIC_BASE_URL: ${IMAGE_STORAGE_PUBLIC_BASE_URL:-}
+      IMAGE_STORAGE_ACCESS_KEY: ${IMAGE_STORAGE_ACCESS_KEY:-}
+      IMAGE_STORAGE_SECRET_KEY: ${IMAGE_STORAGE_SECRET_KEY:-}
+      IMAGE_STORAGE_KEY_PREFIX: ${IMAGE_STORAGE_KEY_PREFIX:-images}
+      IMAGE_STORAGE_UPLOAD_URL_EXPIRATION: ${IMAGE_STORAGE_UPLOAD_URL_EXPIRATION:-5m}
+      IMAGE_STORAGE_MAX_SIZE_BYTES: ${IMAGE_STORAGE_MAX_SIZE_BYTES:-5242880}
+      IMAGE_STORAGE_PATH_STYLE_ACCESS_ENABLED: ${IMAGE_STORAGE_PATH_STYLE_ACCESS_ENABLED:-false}
+      EMAIL_DELIVERY_KAFKA_CONSUMER_ENABLED: ${EMAIL_DELIVERY_KAFKA_CONSUMER_ENABLED:-true}
+      IMAGE_DELETION_KAFKA_CONSUMER_ENABLED: ${IMAGE_DELETION_KAFKA_CONSUMER_ENABLED:-true}
+      PUSH_KAFKA_CONSUMER_ENABLED: ${PUSH_KAFKA_CONSUMER_ENABLED:-false}
+      PUSH_FCM_ENABLED: ${PUSH_FCM_ENABLED:-false}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}
+      TZ: Asia/Seoul
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+    networks:
+      - edge
+      - internal
+
+  nginx:
+    build:
+      context: ./deploy/nginx
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot-webroot:/var/www/certbot:ro
+      - letsencrypt:/etc/letsencrypt:ro
+    networks:
+      - edge
+      - internal
+
+  certbot:
+    image: certbot/certbot:v5.7.0
+    profiles: ["certificate"]
+    volumes:
+      - certbot-webroot:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
+    command:
+      - certonly
+      - --webroot
+      - --webroot-path=/var/www/certbot
+      - --email=${CERTBOT_EMAIL:?CERTBOT_EMAIL is required}
+      - --agree-tos
+      - --no-eff-email
+      - --domain=${API_DOMAIN:?API_DOMAIN is required}
+    networks:
+      - edge
+
+volumes:
+  postgres-data:
+  redis-data:
+  kafka-data:
+  certbot-webroot:
+  letsencrypt:
+
+networks:
+  edge:
+  internal:
+    internal: true

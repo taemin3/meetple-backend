@@ -1,6 +1,7 @@
 package com.meetple.backend.domain.image.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.meetple.backend.domain.image.config.ImageStorageProperties;
 import java.time.Duration;
@@ -35,6 +36,31 @@ class S3ImageStorageClientTest {
 
         assertHeader(upload.headers(), "Content-Type", "image/png");
         assertHeader(upload.headers(), "Content-Length", "123");
+    }
+
+    @Test
+    void createPresignedUploadRejectsPartialStaticCredentials() {
+        S3ImageStorageClient client = new S3ImageStorageClient(new ImageStorageProperties(
+                "meetple-images",
+                "ap-northeast-2",
+                "",
+                "",
+                "test-access-key",
+                "",
+                "images",
+                Duration.ofMinutes(5),
+                5 * 1024 * 1024L,
+                false,
+                List.of("image/jpeg")
+        ));
+
+        assertThatThrownBy(() -> client.createPresignedUpload(new ImageUploadObject(
+                "images/profile/1/test.png",
+                "image/png",
+                123L,
+                Duration.ofMinutes(5)
+        )))
+                .hasMessageContaining("이미지 저장소 설정이 누락되었습니다.");
     }
 
     private void assertHeader(Map<String, String> headers, String name, String value) {
