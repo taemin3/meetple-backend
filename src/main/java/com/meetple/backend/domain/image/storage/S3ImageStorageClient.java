@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Configuration;
@@ -93,9 +95,7 @@ public class S3ImageStorageClient implements ImageStorageClient {
     private S3Presigner createPresigner() {
         S3Presigner.Builder builder = S3Presigner.builder()
                 .region(Region.of(properties.region()))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())
-                ))
+                .credentialsProvider(createCredentialsProvider())
                 .serviceConfiguration(S3Configuration.builder()
                         .pathStyleAccessEnabled(properties.pathStyleAccessEnabled())
                         .build());
@@ -110,9 +110,7 @@ public class S3ImageStorageClient implements ImageStorageClient {
     private S3Client createClient() {
         S3ClientBuilder builder = S3Client.builder()
                 .region(Region.of(properties.region()))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())
-                ))
+                .credentialsProvider(createCredentialsProvider())
                 .serviceConfiguration(S3Configuration.builder()
                         .pathStyleAccessEnabled(properties.pathStyleAccessEnabled())
                         .build());
@@ -127,10 +125,23 @@ public class S3ImageStorageClient implements ImageStorageClient {
     private void validateConfiguration() {
         if (!StringUtils.hasText(properties.bucket())
                 || !StringUtils.hasText(properties.region())
-                || !StringUtils.hasText(properties.accessKey())
-                || !StringUtils.hasText(properties.secretKey())) {
+                || hasOnlyOneStaticCredential()) {
             throw new BaseException(ErrorStatus.EXTERNAL_API_ERROR, "이미지 저장소 설정이 누락되었습니다.");
         }
+    }
+
+    AwsCredentialsProvider createCredentialsProvider() {
+        if (StringUtils.hasText(properties.accessKey())) {
+            return StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())
+            );
+        }
+        return DefaultCredentialsProvider.create();
+    }
+
+    private boolean hasOnlyOneStaticCredential() {
+        return StringUtils.hasText(properties.accessKey())
+                != StringUtils.hasText(properties.secretKey());
     }
 
     private String joinUrl(String baseUrl, String... paths) {

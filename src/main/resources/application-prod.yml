@@ -1,7 +1,10 @@
 server:
   forward-headers-strategy: native
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
@@ -16,12 +19,15 @@ spring:
         format_sql: false
   flyway:
     enabled: true
-    baseline-on-migrate: true
-    baseline-version: 0
+    baseline-on-migrate: false
+    clean-disabled: true
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST}
       port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD}
+      connect-timeout: ${SPRING_DATA_REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:2s}
   mail:
     host: ${MAIL_HOST}
     port: ${MAIL_PORT:587}
@@ -47,3 +53,9 @@ naver:
     maps-base-url: ${NAVER_MAPS_BASE_URL:https://maps.apigw.ntruss.com}
     maps-client-id: ${NAVER_MAPS_CLIENT_ID}
     maps-client-secret: ${NAVER_MAPS_CLIENT_SECRET}
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

@@ -1,0 +1,11 @@
+.git
+.github
+.gradle
+.idea
+build
+docs
+*.iml
+.env
+.env.*
+**/*firebase-adminsdk*.json
+**/service-account*.json
