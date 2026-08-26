@@ -108,6 +108,7 @@ data
 - 실패: 도메인 예외에서 `ErrorStatus`를 사용하고 `GlobalExceptionHandler`가 응답을 만든다.
 - 새 예외 코드는 `ErrorStatus`에 먼저 추가한다.
 - validation 실패는 `ErrorStatus.VALIDATION_ERROR`로 내려간다.
+- `/livez`, `/readyz`, `/actuator/health/liveness`, `/actuator/health/readiness`는 ECS·로드 밸런서 등 인프라 프로브 전용 경로이므로 `ApiResponse` 적용 대상에서 제외하고, Actuator 표준 응답과 HTTP 상태 코드를 유지한다.
 
 ## ERD/도메인 규칙
 

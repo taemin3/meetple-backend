@@ -74,6 +74,29 @@ class SecurityConfigTest {
     }
 
     @Test
+    void livenessEndpointAllowsAnonymousRequest() throws Exception {
+        mockMvc.perform(get("/livez"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
+    void livenessEndpointWithInvalidTokenAllowsAnonymousRequest() throws Exception {
+        mockMvc.perform(get("/actuator/health/liveness")
+                        .header("Authorization", "Bearer invalid-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
+    void healthComponentEndpointIsNotPublic() throws Exception {
+        mockMvc.perform(get("/actuator/health/db"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.UNAUTHORIZED.getCode()));
+    }
+
+    @Test
     void protectedEndpointWithoutTokenReturnsUnauthorizedApiResponse() throws Exception {
         mockMvc.perform(get("/api/v1/users/me"))
                 .andExpect(status().isUnauthorized())
