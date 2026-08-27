@@ -308,18 +308,28 @@ resource "aws_ecs_task_definition" "event_runtime" {
       }
     },
     {
-      name              = "connector-init"
+      name              = "connector-manager"
       image             = var.debezium_connect_image
-      essential         = false
+      essential         = true
       cpu               = 64
       memoryReservation = 64
       memory            = 128
       entryPoint        = ["/bin/bash", "-ec"]
       command = [<<-SCRIPT
-        curl --fail --silent --show-error --request PUT \
-          --header 'Content-Type: application/json' \
-          --data "$CONNECTOR_CONFIG" \
-          http://localhost:8083/connectors/meetple-outbox-connector/config
+        while true; do
+          status="$(curl --silent --show-error http://localhost:8083/connectors/meetple-outbox-connector/status || true)"
+          running_count="$(printf '%s' "$status" | grep -Eo '"state"[[:space:]]*:[[:space:]]*"RUNNING"' | wc -l | tr -d ' ')"
+
+          if [ "$running_count" -lt 2 ]; then
+            echo "Debezium connector is not fully running; applying the connector configuration"
+            curl --silent --show-error --request PUT \
+              --header 'Content-Type: application/json' \
+              --data "$CONNECTOR_CONFIG" \
+              http://localhost:8083/connectors/meetple-outbox-connector/config || true
+          fi
+
+          sleep 30
+        done
       SCRIPT
       ]
       environment = [{

@@ -16,6 +16,7 @@ Meetple 백엔드의 AWS 배포를 위한 Terraform 기반 인프라입니다. �
 - 단일 ECS task의 Redis, Kafka, Kafka Connect/Debezium 런타임
 - Kafka application/retry/DLQ topic 초기화와 Outbox connector 자동 등록
 - Cloud Map 기반 private DNS와 event runtime 전용 보안 그룹
+- RDS secret 회전 시 ECS task를 교체하는 EventBridge + Systems Manager Automation
 - CloudWatch Logs 그룹과 최소 IAM/보안 그룹
 
 제외 대상:
@@ -47,7 +48,7 @@ event-runtime ECS task (awsvpc, public inbound 없음)
    |-- Kafka (single KRaft broker)
    |-- Kafka topic initializer
    |-- Kafka Connect/Debezium
-   `-- Outbox connector initializer
+   `-- Outbox connector manager
         `-- logical replication --> RDS PostgreSQL
 
 ECS cluster
@@ -56,15 +57,16 @@ ECS cluster
 
 NAT Gateway의 고정 비용을 피하기 위해 ECS EC2는 퍼블릭 서브넷에 배치됩니다. 후속 Spring Boot task는 `bridge` network mode와 동적 host port를 사용해 인스턴스의 인터넷 경로를 공유합니다. event runtime은 task ENI에 public IP를 할당하지 않고 Cloud Map private DNS로만 노출합니다. EC2에는 퍼블릭 IP가 생기지만 SSH 포트는 열지 않으며, inbound는 ALB와 내부 서비스에 필요한 포트만 보안 그룹 간 참조로 허용합니다.
 
-Redis, Kafka, Kafka Connect를 하나의 ECS task로 묶은 것은 기본 1대 EC2에서 ENI 수와 메모리를 아끼기 위한 선택입니다. 컨테이너 health check와 `Kafka -> topic init -> Kafka Connect -> connector init` 시작 순서는 ECS가 관리합니다. Kafka와 Redis의 Docker volume은 같은 EC2에서 task가 재시작될 때는 유지되지만, EC2 교체·장애·종료 시 함께 사라집니다. Kafka broker도 1대이므로 이 구성은 저비용 staging 절충안이며 고가용성 production 구성은 아닙니다. 복구가 필요한 production에서는 Amazon MSK/다중 broker Kafka와 ElastiCache 또는 별도 영속화 전략을 사용해야 합니다.
+Redis, Kafka, Kafka Connect를 하나의 ECS task로 묶은 것은 기본 1대 EC2에서 ENI 수와 메모리를 아끼기 위한 선택입니다. 컨테이너 health check와 `Kafka -> topic init -> Kafka Connect -> connector manager` 시작 순서는 ECS가 관리합니다. Kafka와 Redis의 Docker volume은 같은 EC2에서 task가 재시작될 때는 유지되지만, EC2 교체·장애·종료 시 함께 사라집니다. Kafka broker도 1대이므로 이 구성은 저비용 staging 절충안이며 고가용성 production 구성은 아닙니다. 복구가 필요한 production에서는 Amazon MSK/다중 broker Kafka와 ElastiCache 또는 별도 영속화 전략을 사용해야 합니다.
 
 ## CDC 동작과 운영 주의점
 
 - RDS custom parameter group이 `rds.logical_replication=1`과 replication slot/WAL 상한을 설정합니다. 기존 RDS에 처음 연결할 때는 parameter group 변경 후 재부팅이 필요할 수 있습니다.
 - Debezium은 `public.outbox_events`만 읽고 Outbox Event Router로 행의 `topic` 값에 해당하는 Kafka topic으로 전달합니다.
-- connector 등록은 ECS task 시작 때 idempotent `PUT` 요청으로 수행합니다. Kafka Connect의 internal topic과 connector 상태가 사라져도 다시 등록됩니다.
+- connector manager는 connector와 source task가 모두 `RUNNING`이 될 때까지 30초마다 idempotent `PUT` 요청을 다시 수행합니다. RDS parameter가 `pending-reboot`인 상태에서 먼저 시작되더라도 RDS 재부팅 후 자동 복구됩니다.
 - `max_slot_wal_keep_size` 기본값은 slot 하나당 2048 MiB입니다. Debezium 장애가 길어져 이 한도를 넘으면 slot이 무효화될 수 있으므로 RDS `FreeStorageSpace`, replication slot lag, connector 상태를 함께 모니터링해야 합니다.
-- 현재 Debezium은 기능 연결을 위해 RDS 관리형 master secret을 ECS execution role로 주입받습니다. 외부 공개는 되지 않지만 권한 범위가 넓으므로 production 전에는 전용 replication 계정과 별도 secret을 만드는 DB bootstrap 단계가 필요합니다.
+- 현재 Debezium은 기능 연결을 위해 RDS 관리형 master secret을 ECS execution role로 주입받습니다. `AWSCURRENT`가 바뀌면 EventBridge가 Systems Manager Automation을 실행해 ECS service에 새 배포를 강제하고, 새 task가 최신 secret을 주입받습니다.
+- master 계정은 권한 범위가 넓으므로 production 전에는 전용 replication 계정과 별도 secret을 만드는 DB bootstrap 단계가 여전히 필요합니다.
 
 ## 사전 준비
 
@@ -108,6 +110,7 @@ terraform plan -out=meetple-staging.tfplan
 - Launch Template 버전이 변경되면 ASG instance refresh가 새 EC2를 먼저 준비한 뒤 기존 인스턴스를 교체합니다.
 - bridge task가 EC2 instance profile을 가져가지 못하도록 IMDSv2 응답 hop limit을 `1`로 제한합니다. 애플리케이션의 AWS 권한은 후속 task role로만 부여합니다.
 - RDS parameter group의 `Apply type`과 `Pending reboot` 상태를 확인하고, 계획된 시간에 재부팅한 뒤 `SHOW rds.logical_replication;` 결과가 `on`인지 확인합니다.
-- event runtime이 안정화되면 ECS task 로그에서 topic initializer와 connector initializer의 성공 종료를 확인하고 Kafka Connect connector 상태가 `RUNNING`인지 확인합니다.
+- event runtime이 안정화되면 ECS task 로그에서 topic initializer의 성공 종료와 connector manager의 상태를 확인하고 Kafka Connect connector와 source task가 모두 `RUNNING`인지 확인합니다.
+- RDS secret을 수동 회전해 EventBridge rule, Systems Manager Automation, ECS 새 deployment가 순서대로 실행되는지 staging에서 한 번 검증합니다.
 
 실제 AWS 리소스 생성은 plan을 검토한 뒤 별도 승인 단계에서만 수행합니다.

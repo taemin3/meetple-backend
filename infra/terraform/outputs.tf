@@ -88,3 +88,13 @@ output "event_runtime_log_group_name" {
   description = "CloudWatch log group for Redis, Kafka, Kafka Connect, and bootstrap containers."
   value       = aws_cloudwatch_log_group.event_runtime.name
 }
+
+output "event_runtime_redeploy_automation_name" {
+  description = "Systems Manager Automation runbook that forces a fresh ECS task after secret rotation."
+  value       = aws_ssm_document.event_runtime_redeploy.name
+}
+
+output "rds_secret_rotation_event_rule_name" {
+  description = "EventBridge rule that starts the event runtime redeployment workflow."
+  value       = aws_cloudwatch_event_rule.rds_master_secret_rotated.name
+}
