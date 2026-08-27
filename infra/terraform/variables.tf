@@ -60,7 +60,7 @@ variable "enable_alb_deletion_protection" {
 variable "ecs_instance_type" {
   description = "EC2 instance type used by the ECS capacity provider."
   type        = string
-  default     = "t3.small"
+  default     = "t3.large"
 }
 
 variable "ecs_ami_ssm_parameter" {
@@ -72,11 +72,76 @@ variable "ecs_ami_ssm_parameter" {
 variable "ecs_root_volume_size" {
   description = "Encrypted gp3 root volume size for each ECS container instance in GiB."
   type        = number
-  default     = 30
+  default     = 50
 
   validation {
     condition     = var.ecs_root_volume_size >= 30
     error_message = "ecs_root_volume_size must be at least 30 GiB."
+  }
+}
+
+variable "kafka_image" {
+  description = "Kafka container image used by the single-node event runtime."
+  type        = string
+  default     = "apache/kafka:4.3.1"
+}
+
+variable "debezium_connect_image" {
+  description = "Debezium Kafka Connect container image."
+  type        = string
+  default     = "quay.io/debezium/connect:3.6.0.Final"
+}
+
+variable "redis_image" {
+  description = "Redis container image used by the event runtime."
+  type        = string
+  default     = "redis:7-alpine"
+}
+
+variable "kafka_cluster_id" {
+  description = "Stable KRaft cluster ID for the single Kafka broker."
+  type        = string
+  default     = "4L6g3nShT-eMCtK--X86sw"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_-]{22}$", var.kafka_cluster_id))
+    error_message = "kafka_cluster_id must be a 22-character base64url KRaft cluster ID."
+  }
+}
+
+variable "kafka_topic_partitions" {
+  description = "Partition count for Meetple application, retry, and DLQ topics."
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.kafka_topic_partitions >= 1 && floor(var.kafka_topic_partitions) == var.kafka_topic_partitions
+    error_message = "kafka_topic_partitions must be a positive integer."
+  }
+}
+
+variable "rds_replication_slots" {
+  description = "Maximum PostgreSQL replication slots and WAL senders available to CDC."
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.rds_replication_slots >= 1 && floor(var.rds_replication_slots) == var.rds_replication_slots
+    error_message = "rds_replication_slots must be a positive integer."
+  }
+}
+
+variable "rds_max_slot_wal_keep_size_mb" {
+  description = "Maximum WAL retained by each replication slot in MiB before PostgreSQL invalidates it."
+  type        = number
+  default     = 2048
+
+  validation {
+    condition = (
+      var.rds_max_slot_wal_keep_size_mb >= 1024 &&
+      floor(var.rds_max_slot_wal_keep_size_mb) == var.rds_max_slot_wal_keep_size_mb
+    )
+    error_message = "rds_max_slot_wal_keep_size_mb must be an integer of at least 1024 MiB."
   }
 }
 
@@ -108,6 +173,11 @@ variable "postgres_engine_version" {
   description = "PostgreSQL major version. AWS selects a supported minor version."
   type        = string
   default     = "16"
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.postgres_engine_version))
+    error_message = "postgres_engine_version must be a PostgreSQL major version such as 16."
+  }
 }
 
 variable "db_name" {
