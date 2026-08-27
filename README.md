@@ -48,3 +48,7 @@ cd backend
 cd backend
 ./gradlew test
 ```
+
+## AWS 배포 인프라
+
+ECS EC2 Capacity Provider와 RDS 기반 Terraform 구성은 [`infra/terraform`](infra/terraform/README.md)에 있습니다. 현재 구성은 인프라 기반까지만 포함하며 ECS 애플리케이션 서비스와 실제 AWS 적용은 후속 단계입니다.
