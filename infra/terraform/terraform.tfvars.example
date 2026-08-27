@@ -1,5 +1,4 @@
-aws_region  = "ap-northeast-2"
-environment = "staging"
+aws_region = "ap-northeast-2"
 
 # ACM certificate must exist in the same region as the ALB.
 # When null, the foundation exposes HTTP only until HTTPS is configured.

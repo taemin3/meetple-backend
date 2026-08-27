@@ -10,19 +10,15 @@ variable "project_name" {
   default     = "meetple"
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{1,20}$", var.project_name))
-    error_message = "project_name must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens."
-  }
-}
-
-variable "environment" {
-  description = "Deployment environment name."
-  type        = string
-  default     = "staging"
-
-  validation {
-    condition     = contains(["staging", "production"], var.environment)
-    error_message = "environment must be staging or production."
+    condition = (
+      length(var.project_name) >= 2 &&
+      length(var.project_name) <= 17 &&
+      can(regex("^[a-z][a-z0-9-]*[a-z0-9]$", var.project_name)) &&
+      !strcontains(var.project_name, "--") &&
+      var.project_name != "internal" &&
+      !startswith(var.project_name, "internal-")
+    )
+    error_message = "project_name must be 2-17 lowercase letters, numbers, or single hyphens; it cannot end with a hyphen or start with internal-."
   }
 }
 

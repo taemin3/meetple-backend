@@ -65,20 +65,27 @@ Copy-Item terraform.tfvars.example terraform.tfvars
 
 terraform fmt -check -recursive
 terraform init -backend-config=backend.hcl
+# 기존 staging workspace를 선택하고, 없으면 새로 생성
+terraform workspace select staging
+if ($LASTEXITCODE -ne 0) { terraform workspace new staging }
 terraform validate
 terraform plan -out=meetple-staging.tfplan
 ```
 
-`backend.hcl`, `terraform.tfvars`, state, plan 파일은 Git에서 제외됩니다. 비밀번호나 API key를 tfvars에 넣지 않습니다.
+`staging`과 `production`은 Terraform workspace가 리소스 이름과 state 경로를 동시에 결정합니다. `default` workspace에서는 plan이 실패합니다. S3 state는 각각 `meetple/staging/terraform.tfstate`, `meetple/production/terraform.tfstate`에 저장되므로 tfvars만 바꿔 다른 환경의 state를 덮어쓸 수 없습니다.
+
+`backend.hcl`, `terraform.tfvars`, state, plan 파일은 Git에서 제외됩니다. 비밀번호나 API key를 tfvars에 넣지 않습니다. production 작업 전에는 `terraform workspace select production`으로 workspace를 명시적으로 전환하고 `terraform workspace show`로 다시 확인합니다.
 
 ## 적용 전 필수 확인
 
 - `terraform plan`의 리소스 수와 월 비용을 확인합니다.
 - staging이라도 ALB, EC2, EBS, RDS, RDS backup, public IPv4 비용이 발생합니다.
 - `certificate_arn = null`이면 HTTP listener가 target group으로 직접 전달합니다. 실제 외부 서비스 전에는 ACM 인증서를 연결해야 합니다.
-- `environment = "production"`은 HTTPS/ALB 삭제 보호와 `db_multi_az = true`, `db_deletion_protection = true`, `db_skip_final_snapshot = false`를 강제합니다.
+- `production` workspace는 HTTPS/ALB 삭제 보호와 `db_multi_az = true`, `db_deletion_protection = true`, `db_skip_final_snapshot = false`를 강제합니다.
 - `db_skip_final_snapshot = false`이면 충돌하지 않는 `db_final_snapshot_identifier`를 지정합니다.
 - 기본 `t3.small`은 인프라 형태를 잡기 위한 값입니다. Spring Boot와 Redis/Kafka를 어떻게 배치할지 결정한 뒤 메모리를 다시 산정합니다.
+- Launch Template 버전이 변경되면 ASG instance refresh가 새 EC2를 먼저 준비한 뒤 기존 인스턴스를 교체합니다.
+- bridge task가 EC2 instance profile을 가져가지 못하도록 IMDSv2 응답 hop limit을 `1`로 제한합니다. 애플리케이션의 AWS 권한은 후속 task role로만 부여합니다.
 - RDS logical replication은 아직 활성화하지 않습니다. Kafka Connect/Debezium을 배치하는 후속 단계에서 WAL 보존과 replication slot 운영 기준까지 함께 적용합니다.
 
 실제 AWS 리소스 생성은 plan을 검토한 뒤 별도 승인 단계에서만 수행합니다.

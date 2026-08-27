@@ -1,5 +1,6 @@
 bucket       = "replace-with-terraform-state-bucket"
-key          = "meetple/staging/terraform.tfstate"
+key          = "terraform.tfstate"
 region       = "ap-northeast-2"
 encrypt      = true
 use_lockfile = true
+workspace_key_prefix = "meetple"

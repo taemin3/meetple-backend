@@ -6,6 +6,13 @@ resource "aws_vpc" "this" {
   tags = {
     Name = "${local.name_prefix}-vpc"
   }
+
+  lifecycle {
+    precondition {
+      condition     = contains(["staging", "production"], local.environment)
+      error_message = "Select the staging or production Terraform workspace before planning. The default workspace is not supported."
+    }
+  }
 }
 resource "aws_internet_gateway" "this" {
   vpc_id = aws_vpc.this.id

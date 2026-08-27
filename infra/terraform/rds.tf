@@ -48,7 +48,7 @@ resource "aws_db_instance" "postgres" {
 
     precondition {
       condition = (
-        var.environment != "production" ||
+        local.environment != "production" ||
         (var.db_multi_az && var.db_deletion_protection && !var.db_skip_final_snapshot)
       )
       error_message = "production requires Multi-AZ, deletion protection, and a final snapshot."

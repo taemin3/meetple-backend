@@ -1,3 +1,8 @@
+output "environment" {
+  description = "Environment selected by the active Terraform workspace."
+  value       = local.environment
+}
+
 output "vpc_id" {
   description = "VPC ID."
   value       = aws_vpc.this.id

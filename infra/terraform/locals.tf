@@ -1,5 +1,6 @@
 locals {
-  name_prefix        = "${var.project_name}-${var.environment}"
+  environment        = terraform.workspace
+  name_prefix        = "${var.project_name}-${local.environment}"
   availability_zones = slice(data.aws_availability_zones.available.names, 0, 2)
 
   public_subnets = {
@@ -15,7 +16,7 @@ locals {
   common_tags = merge(
     {
       Project     = var.project_name
-      Environment = var.environment
+      Environment = local.environment
       ManagedBy   = "Terraform"
     },
     var.additional_tags

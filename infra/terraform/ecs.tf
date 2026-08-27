@@ -59,7 +59,7 @@ resource "aws_launch_template" "ecs" {
     cat <<'ECS_CONFIG' >> /etc/ecs/ecs.config
     ECS_CLUSTER=${aws_ecs_cluster.this.name}
     ECS_ENABLE_TASK_IAM_ROLE=true
-    ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=true
+    ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=false
     ECS_LOGLEVEL=info
     ECS_CONFIG
   USER_DATA
@@ -68,7 +68,7 @@ resource "aws_launch_template" "ecs" {
   metadata_options {
     http_endpoint               = "enabled"
     http_protocol_ipv6          = "disabled"
-    http_put_response_hop_limit = 2
+    http_put_response_hop_limit = 1
     http_tokens                 = "required"
     instance_metadata_tags      = "disabled"
   }
@@ -124,7 +124,20 @@ resource "aws_autoscaling_group" "ecs" {
 
   launch_template {
     id      = aws_launch_template.ecs.id
-    version = "$Latest"
+    version = aws_launch_template.ecs.latest_version
+  }
+
+  instance_refresh {
+    strategy = "Rolling"
+
+    preferences {
+      auto_rollback                = true
+      instance_warmup              = 300
+      max_healthy_percentage       = 200
+      min_healthy_percentage       = 100
+      scale_in_protected_instances = "Refresh"
+      skip_matching                = true
+    }
   }
 
   dynamic "tag" {

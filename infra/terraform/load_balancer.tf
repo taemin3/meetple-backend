@@ -14,7 +14,7 @@ resource "aws_lb" "app" {
   lifecycle {
     precondition {
       condition = (
-        var.environment != "production" ||
+        local.environment != "production" ||
         (var.certificate_arn != null && var.enable_alb_deletion_protection)
       )
       error_message = "production requires certificate_arn and enable_alb_deletion_protection=true."
