@@ -1,84 +1,89 @@
-# AWS ECS EC2 + RDS 기반 인프라
+# AWS ECS EC2 + RDS 애플리케이션 배포
 
-Meetple 백엔드의 AWS 배포를 위한 Terraform 기반 인프라입니다. 기본값은 비용을 낮춘 `staging` 환경을 대상으로 하며, 이 디렉터리만 적용해도 Spring Boot 애플리케이션이 배포되지는 않습니다.
+Meetple 백엔드와 `Outbox -> Debezium -> Kafka -> Consumer` 파이프라인을 AWS에 배포하는 Terraform 구성입니다. 기본값은 비용을 낮춘 `staging` 환경이며, 실제 AWS 변경은 `terraform plan` 검토 후 별도 `apply`로 수행합니다.
 
-## 이번 단계의 범위
+## 생성 대상
 
-생성 대상:
+- 2개 가용 영역의 VPC, public subnet 2개, 외부 경로가 없는 DB subnet 2개
+- ALB와 `/readyz` target group
+- ECS EC2 cluster, Auto Scaling Group, Capacity Provider
+- Spring Boot ECS task/service와 ECR repository
+- PostgreSQL 16 RDS와 RDS 관리형 master secret
+- 단일 ECS task의 Redis, Kafka, Kafka Connect/Debezium, connector manager
+- application/retry/DLQ Kafka topic과 Outbox connector 자동 등록
+- 비공개 S3 image bucket과 CloudFront Origin Access Control
+- Cloud Map private DNS, IAM, security group, CloudWatch Logs
+- Secrets Manager의 현재 버전 변경 시 ECS task를 교체하는 EventBridge + Systems Manager Automation
 
-- 2개 가용 영역의 VPC
-- ALB와 ECS EC2용 퍼블릭 서브넷 2개
-- 외부 경로가 없는 RDS용 DB 서브넷 2개
-- Application Load Balancer와 `/readyz` 대상 그룹
-- ECS 클러스터, EC2 Auto Scaling Group, Capacity Provider
-- 백엔드 이미지용 ECR 저장소
-- logical replication을 활성화한 PostgreSQL 16 RDS와 RDS 관리형 master secret
-- 단일 ECS task의 Redis, Kafka, Kafka Connect/Debezium 런타임
-- Kafka application/retry/DLQ topic 초기화와 Outbox connector 자동 등록
-- Cloud Map 기반 private DNS와 event runtime 전용 보안 그룹
-- RDS secret 회전 시 ECS task를 교체하는 EventBridge + Systems Manager Automation
-- CloudWatch Logs 그룹과 최소 IAM/보안 그룹
+Terraform이 만들지 않는 항목:
 
-제외 대상:
-
-- Spring Boot ECS task definition 및 service
-- Spring Boot의 Kafka consumer와 FCM credential 주입
-- 애플리케이션 secret과 S3 이미지 버킷 권한
-- ECR 이미지 push 및 GitHub Actions 배포
-- Route 53 레코드와 ACM 인증서 발급
+- 애플리케이션/Firebase secret 값
+- ECR image build와 push
+- Route 53 record와 ACM certificate 발급
+- GitHub Actions 배포
 - 실제 `terraform apply`
-
-Spring Boot ECS service가 아직 없으므로 이 단계의 ALB는 정상 애플리케이션 target이 등록되기 전까지 `503`을 반환합니다. Kafka와 Debezium은 실행되지만, 실제 FCM·이미지 삭제·이메일 consumer는 다음 애플리케이션 배포 단계에서 활성화합니다.
 
 ## 배치 구조
 
 ```text
-Internet
-   |
-   v
-ALB (public subnet x 2)
-   |
-   v
-ECS application task (후속 단계, bridge mode + dynamic host port)
-   |-- Redis/Kafka --> event-runtime.<environment>.internal
-   `-- RDS PostgreSQL (database subnet x 2, public access 차단)
+Flutter/Web
+    |
+    v
+ALB (public subnet x 2, /readyz)
+    |
+    v
+Spring Boot ECS service (EC2 bridge mode, dynamic host port)
+    |-- JDBC ----------------------> RDS PostgreSQL (private DB subnet)
+    |-- Redis/Kafka ---------------> event-runtime.<environment>.internal
+    |-- presigned PUT/Delete ------> private S3 image bucket
+    |-- image read URL ------------> CloudFront -> S3 (OAC)
+    `-- FCM/Naver/SMTP ------------> Internet
 
 event-runtime ECS task (awsvpc, public inbound 없음)
-   |-- Redis
-   |-- Kafka (single KRaft broker)
-   |-- Kafka topic initializer
-   |-- Kafka Connect/Debezium
-   `-- Outbox connector manager
-        `-- logical replication --> RDS PostgreSQL
-
-ECS cluster
-   `- EC2 Auto Scaling Group (기본 1대, SSM 접속, SSH 미개방)
+    |-- Redis
+    |-- Kafka (single KRaft broker)
+    |-- topic initializer
+    |-- Kafka Connect/Debezium
+    `-- connector manager ----------> RDS logical replication
 ```
 
-NAT Gateway의 고정 비용을 피하기 위해 ECS EC2는 퍼블릭 서브넷에 배치됩니다. 후속 Spring Boot task는 `bridge` network mode와 동적 host port를 사용해 인스턴스의 인터넷 경로를 공유합니다. event runtime은 task ENI에 public IP를 할당하지 않고 Cloud Map private DNS로만 노출합니다. EC2에는 퍼블릭 IP가 생기지만 SSH 포트는 열지 않으며, inbound는 ALB와 내부 서비스에 필요한 포트만 보안 그룹 간 참조로 허용합니다.
+NAT Gateway 고정 비용을 피하기 위해 ECS EC2는 public subnet에 배치됩니다. EC2에는 public IPv4가 생기지만 SSH는 열지 않고 SSM으로만 접근합니다. Spring Boot는 `bridge` mode와 동적 host port를 사용하며 외부 inbound는 ALB security group에서만 허용합니다. Redis와 Kafka는 Cloud Map private DNS와 security-group 참조로만 접근합니다.
 
-Redis, Kafka, Kafka Connect를 하나의 ECS task로 묶은 것은 기본 1대 EC2에서 ENI 수와 메모리를 아끼기 위한 선택입니다. 컨테이너 health check와 `Kafka -> topic init -> Kafka Connect -> connector manager` 시작 순서는 ECS가 관리합니다. Kafka와 Redis의 Docker volume은 같은 EC2에서 task가 재시작될 때는 유지되지만, EC2 교체·장애·종료 시 함께 사라집니다. Kafka broker도 1대이므로 이 구성은 저비용 staging 절충안이며 고가용성 production 구성은 아닙니다. 복구가 필요한 production에서는 Amazon MSK/다중 broker Kafka와 ElastiCache 또는 별도 영속화 전략을 사용해야 합니다.
+기본 `t3.large` 한 대에 Spring Boot, Kafka, Kafka Connect, Redis를 함께 두는 구성이라 저비용 staging 절충안입니다. Kafka/Redis volume은 같은 EC2에서 task가 재시작될 때는 남지만 EC2 교체나 장애 시 유실될 수 있습니다. 단일 broker이고 Spring Boot 한 task 배포 시 잠깐 중단될 수 있으므로 고가용성 production 구성은 아닙니다.
 
-## CDC 동작과 운영 주의점
+## secret 준비
 
-- RDS custom parameter group이 `rds.logical_replication=1`과 replication slot/WAL 상한을 설정합니다. 기존 RDS에 처음 연결할 때는 parameter group 변경 후 재부팅이 필요할 수 있습니다.
-- Debezium은 `public.outbox_events`만 읽고 Outbox Event Router로 행의 `topic` 값에 해당하는 Kafka topic으로 전달합니다.
-- connector manager는 connector와 source task가 모두 `RUNNING`이 될 때까지 30초마다 idempotent `PUT` 요청을 다시 수행합니다. RDS parameter가 `pending-reboot`인 상태에서 먼저 시작되더라도 RDS 재부팅 후 자동 복구됩니다.
-- `max_slot_wal_keep_size` 기본값은 slot 하나당 2048 MiB입니다. Debezium 장애가 길어져 이 한도를 넘으면 slot이 무효화될 수 있으므로 RDS `FreeStorageSpace`, replication slot lag, connector 상태를 함께 모니터링해야 합니다.
-- 현재 Debezium은 기능 연결을 위해 RDS 관리형 master secret을 ECS execution role로 주입받습니다. `AWSCURRENT`가 바뀌면 EventBridge가 Systems Manager Automation을 실행해 ECS service에 새 배포를 강제하고, 새 task가 최신 secret을 주입받습니다.
-- master 계정은 권한 범위가 넓으므로 production 전에는 전용 replication 계정과 별도 secret을 만드는 DB bootstrap 단계가 여전히 필요합니다.
+Terraform에는 secret 값이 아니라 기존 Secrets Manager ARN 두 개만 전달합니다. `terraform.tfvars`나 Terraform state에 비밀번호와 API key를 넣지 않습니다.
 
-## 사전 준비
+`backend_application_secret_arn`은 다음 key를 가진 JSON secret이어야 합니다.
 
-1. Terraform `1.10` 이상을 설치합니다.
-2. AWS 자격증명을 준비합니다.
-3. Terraform state용 S3 버킷을 별도로 만들고 버전 관리와 퍼블릭 액세스 차단을 활성화합니다.
-4. HTTPS를 바로 사용할 경우 `ap-northeast-2`의 ACM 인증서 ARN을 준비합니다.
-5. AWS Billing에서 Budget 알림을 먼저 설정합니다.
+```json
+{
+  "JWT_SECRET": "replace-with-at-least-32-random-bytes",
+  "MAIL_HOST": "smtp.example.com",
+  "MAIL_USERNAME": "replace-me",
+  "MAIL_PASSWORD": "replace-me",
+  "EMAIL_FROM_ADDRESS": "noreply@example.com",
+  "NAVER_LOCATION_CLIENT_ID": "replace-me",
+  "NAVER_LOCATION_CLIENT_SECRET": "replace-me",
+  "NAVER_MAPS_CLIENT_ID": "replace-me",
+  "NAVER_MAPS_CLIENT_SECRET": "replace-me"
+}
+```
 
-Terraform은 state 버킷 자체를 생성하지 않습니다. 같은 구성에서 자신이 사용하는 backend를 만들 수 없기 때문입니다.
+`firebase_credentials_secret_arn`은 key로 감싼 JSON이 아니라 Firebase service-account JSON 문서 전체를 secret value로 저장합니다. ECS는 이를 `FIREBASE_CREDENTIALS_JSON`으로 주입하고 애플리케이션은 파일을 만들지 않고 메모리에서 읽습니다. 로컬의 기존 `GOOGLE_APPLICATION_CREDENTIALS` 파일 방식도 그대로 사용할 수 있습니다.
 
-## 초기화와 검증
+RDS username/password는 RDS 관리형 master secret의 `username`, `password` key를 주입합니다. 현재 Debezium과 Spring Boot가 master 계정을 공유하므로 production 전에는 application/replication 전용 DB 계정과 별도 secret을 만드는 bootstrap 단계가 필요합니다.
+
+## 초기화와 정적 검증
+
+필수 준비:
+
+1. Terraform 1.10 이상과 AWS CLI를 설치합니다.
+2. Terraform state용 S3 bucket을 별도로 만들고 versioning과 public access block을 켭니다.
+3. 위의 application/Firebase secret을 Secrets Manager에 만들고 ARN을 준비합니다.
+4. HTTPS를 사용하면 `ap-northeast-2` ACM certificate ARN을 준비합니다.
+5. AWS Budget 알림을 먼저 설정합니다.
 
 ```powershell
 cd infra/terraform
@@ -87,30 +92,78 @@ Copy-Item terraform.tfvars.example terraform.tfvars
 
 terraform fmt -check -recursive
 terraform init -backend-config=backend.hcl
-# 기존 staging workspace를 선택하고, 없으면 새로 생성
 terraform workspace select staging
 if ($LASTEXITCODE -ne 0) { terraform workspace new staging }
 terraform validate
 terraform plan -out=meetple-staging.tfplan
 ```
 
-`staging`과 `production`은 Terraform workspace가 리소스 이름과 state 경로를 동시에 결정합니다. `default` workspace에서는 plan이 실패합니다. S3 state는 각각 `meetple/staging/terraform.tfstate`, `meetple/production/terraform.tfstate`에 저장되므로 tfvars만 바꿔 다른 환경의 state를 덮어쓸 수 없습니다.
+`staging`과 `production` workspace가 리소스 이름과 state 경로를 결정합니다. `default` workspace에서는 plan이 실패합니다. `backend.hcl`, `terraform.tfvars`, state, plan 파일은 Git에서 제외됩니다.
 
-`backend.hcl`, `terraform.tfvars`, state, plan 파일은 Git에서 제외됩니다. 비밀번호나 API key를 tfvars에 넣지 않습니다. production 작업 전에는 `terraform workspace select production`으로 workspace를 명시적으로 전환하고 `terraform workspace show`로 다시 확인합니다.
+## 최초 배포 순서
 
-## 적용 전 필수 확인
+ECR repository와 사용할 image가 동시에 처음 생기므로 두 단계로 적용합니다.
 
-- `terraform plan`의 리소스 수와 월 비용을 확인합니다.
-- staging이라도 ALB, EC2, EBS, RDS, RDS backup, public IPv4 비용이 발생합니다.
-- `certificate_arn = null`이면 HTTP listener가 target group으로 직접 전달합니다. 실제 외부 서비스 전에는 ACM 인증서를 연결해야 합니다.
-- `production` workspace는 HTTPS/ALB 삭제 보호와 `db_multi_az = true`, `db_deletion_protection = true`, `db_skip_final_snapshot = false`를 강제합니다.
-- `db_skip_final_snapshot = false`이면 충돌하지 않는 `db_final_snapshot_identifier`를 지정합니다.
-- 기본 `t3.large`(2 vCPU, 8 GiB)는 단일 Kafka broker, Kafka Connect, Redis와 후속 Spring Boot task를 한 EC2에 올리기 위한 staging 시작값입니다. CloudWatch 메모리와 CPU를 확인한 뒤 조정합니다.
-- Kafka와 Redis 데이터는 EC2 로컬 Docker volume에 저장됩니다. Launch Template 변경에 따른 instance refresh나 EC2 장애 전에 데이터 유실 가능성을 확인합니다.
-- Launch Template 버전이 변경되면 ASG instance refresh가 새 EC2를 먼저 준비한 뒤 기존 인스턴스를 교체합니다.
-- bridge task가 EC2 instance profile을 가져가지 못하도록 IMDSv2 응답 hop limit을 `1`로 제한합니다. 애플리케이션의 AWS 권한은 후속 task role로만 부여합니다.
-- RDS parameter group의 `Apply type`과 `Pending reboot` 상태를 확인하고, 계획된 시간에 재부팅한 뒤 `SHOW rds.logical_replication;` 결과가 `on`인지 확인합니다.
-- event runtime이 안정화되면 ECS task 로그에서 topic initializer의 성공 종료와 connector manager의 상태를 확인하고 Kafka Connect connector와 source task가 모두 `RUNNING`인지 확인합니다.
-- RDS secret을 수동 회전해 EventBridge rule, Systems Manager Automation, ECS 새 deployment가 순서대로 실행되는지 staging에서 한 번 검증합니다.
+1. `terraform.tfvars`에 실제 secret ARN을 넣고 `backend_image_tag="bootstrap"`, `backend_desired_count=0`으로 plan/apply합니다.
+2. 생성된 ECR에 현재 commit SHA tag로 image를 push합니다.
+3. `backend_image_tag`를 push한 tag로 바꾸고 `backend_desired_count=1`로 올려 다시 plan/apply합니다.
 
-실제 AWS 리소스 생성은 plan을 검토한 뒤 별도 승인 단계에서만 수행합니다.
+```powershell
+$Region = "ap-northeast-2"
+$Repository = terraform output -raw ecr_repository_url
+$ImageTag = git rev-parse --short=12 HEAD
+$Registry = $Repository.Split('/')[0]
+
+aws ecr get-login-password --region $Region | docker login --username AWS --password-stdin $Registry
+docker build -t "meetple-backend:$ImageTag" ../..
+docker tag "meetple-backend:$ImageTag" "${Repository}:$ImageTag"
+docker push "${Repository}:$ImageTag"
+```
+
+두 번째 apply가 끝나면 다음을 확인합니다.
+
+```powershell
+$Alb = terraform output -raw alb_dns_name
+curl.exe "http://$Alb/livez"
+curl.exe "http://$Alb/readyz"
+```
+
+HTTPS certificate를 연결했다면 `https://`로 확인합니다. `/livez`는 프로세스 생존 여부, `/readyz`는 DB와 Redis까지 요청을 받을 준비가 됐는지를 확인합니다. ECS container health check는 `/livez`, ALB target health check는 `/readyz`를 사용합니다.
+
+## consumer와 CDC 동작
+
+Spring Boot task는 다음 consumer를 명시적으로 켭니다.
+
+- FCM push consumer: `PUSH_KAFKA_CONSUMER_ENABLED=true`, `PUSH_FCM_ENABLED=true`
+- email delivery consumer: `EMAIL_DELIVERY_KAFKA_CONSUMER_ENABLED=true`
+- S3 image deletion consumer: `IMAGE_DELETION_KAFKA_CONSUMER_ENABLED=true`
+
+staging 기본 listener concurrency는 각 consumer당 `1`입니다. 같은 task 안의 listener 수가 늘어나는 구조라 메모리와 Kafka partition 사용량을 확인한 뒤 최대 `3`까지 조정합니다.
+
+RDS parameter group은 logical replication과 replication slot/WAL 상한을 설정합니다. RDS가 먼저 생기고 Flyway가 `outbox_events`를 만들기 전에는 connector가 실패할 수 있지만 connector manager가 30초마다 idempotent `PUT`으로 복구를 시도합니다. connector와 source task가 모두 `RUNNING`인지 ECS log와 Kafka Connect 상태로 확인합니다.
+
+RDS master secret의 `AWSCURRENT`가 바뀌면 event runtime과 backend service를 각각 강제 재배포합니다. application 또는 Firebase secret의 현재 버전이 바뀌면 backend만 재배포합니다. staging에서 secret을 한 번 회전해 EventBridge -> Systems Manager Automation -> ECS deployment 순서를 검증해야 합니다.
+
+## 이미지 저장소
+
+S3 bucket은 public access를 모두 차단하고 CloudFront OAC만 `GetObject`를 허용합니다. Spring Boot task role은 해당 bucket의 object에만 `PutObject`, `GetObject`, `DeleteObject` 권한을 가집니다. 정적 access key는 사용하지 않습니다.
+
+Flutter/Android/iOS의 presigned upload에는 CORS가 필요하지 않습니다. 웹 클라이언트를 추가할 때만 다음처럼 신뢰할 origin을 설정합니다.
+
+```hcl
+image_upload_allowed_origins = ["https://app.example.com"]
+```
+
+`image_bucket_force_destroy=false`가 기본이므로 object가 남아 있으면 destroy가 실패합니다. 폐기 가능한 staging data일 때만 `true`로 바꿉니다.
+
+## 적용 전 운영 확인
+
+- staging이라도 ALB, EC2, EBS, RDS, RDS backup, public IPv4, CloudFront 요청/전송 비용이 발생합니다.
+- `certificate_arn=null`이면 HTTP만 노출됩니다. 실제 사용자 트래픽 전에는 ACM과 HTTPS를 연결합니다.
+- `production` workspace는 HTTPS/ALB 삭제 보호와 RDS Multi-AZ/삭제 보호/final snapshot을 강제합니다.
+- 기본 ALB idle timeout은 WebSocket 연결을 위해 3600초입니다.
+- 기본 한 대 배포는 새 task를 먼저 띄울 메모리 여유를 보장하지 않아 `minimumHealthyPercent=0`입니다. 무중단이 필요하면 EC2/task를 2개 이상으로 늘리고 비용과 배치 상태를 검증합니다.
+- RDS `Pending reboot`를 확인하고 재부팅 뒤 `SHOW rds.logical_replication;` 결과가 `on`인지 확인합니다.
+- Kafka/Redis local Docker volume은 EC2 교체 전에 유실 가능성을 확인합니다.
+- CloudWatch에서 ECS CPU/memory, RDS `FreeStorageSpace`, replication slot lag, ALB unhealthy target, consumer retry/DLQ를 모니터링합니다.
+- 실제 AWS 리소스 생성과 secret 생성/회전은 plan 검토 후 별도 승인 단계에서 수행합니다.

@@ -64,6 +64,7 @@ push:
   fcm:
     enabled: ${PUSH_FCM_ENABLED:false}
     credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}
+    credentials-json: ${FIREBASE_CREDENTIALS_JSON:}
 
 springdoc:
   swagger-ui:
