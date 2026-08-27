@@ -95,3 +95,60 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_app" {
   to_port                      = 5432
   ip_protocol                  = "tcp"
 }
+
+resource "aws_security_group" "event_runtime" {
+  name_prefix = "${local.name_prefix}-event-runtime-"
+  description = "Private Redis, Kafka, and Debezium event runtime traffic"
+  vpc_id      = aws_vpc.this.id
+
+  tags = {
+    Name = "${local.name_prefix}-event-runtime"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_vpc_security_group_egress_rule" "event_runtime_all" {
+  security_group_id = aws_security_group.event_runtime.id
+  description       = "RDS, DNS, and AWS service access for the event runtime"
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "event_runtime_kafka_from_app" {
+  security_group_id            = aws_security_group.event_runtime.id
+  description                  = "Kafka from bridge-mode ECS application tasks"
+  referenced_security_group_id = aws_security_group.ecs_instances.id
+  from_port                    = 9092
+  to_port                      = 9092
+  ip_protocol                  = "tcp"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "event_runtime_redis_from_app" {
+  security_group_id            = aws_security_group.event_runtime.id
+  description                  = "Redis from bridge-mode ECS application tasks"
+  referenced_security_group_id = aws_security_group.ecs_instances.id
+  from_port                    = 6379
+  to_port                      = 6379
+  ip_protocol                  = "tcp"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "event_runtime_kafka_self" {
+  security_group_id            = aws_security_group.event_runtime.id
+  description                  = "Kafka advertised listener inside the event runtime task"
+  referenced_security_group_id = aws_security_group.event_runtime.id
+  from_port                    = 9092
+  to_port                      = 9092
+  ip_protocol                  = "tcp"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "rds_from_event_runtime" {
+  security_group_id            = aws_security_group.rds.id
+  description                  = "PostgreSQL logical replication from Debezium"
+  referenced_security_group_id = aws_security_group.event_runtime.id
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+}

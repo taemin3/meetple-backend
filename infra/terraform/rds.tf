@@ -1,3 +1,41 @@
+resource "aws_db_parameter_group" "postgres_cdc" {
+  name_prefix = "${local.name_prefix}-postgres-cdc-"
+  family      = "postgres${var.postgres_engine_version}"
+  description = "Meetple PostgreSQL logical replication settings"
+
+  parameter {
+    name         = "rds.logical_replication"
+    value        = "1"
+    apply_method = "pending-reboot"
+  }
+
+  parameter {
+    name         = "max_replication_slots"
+    value        = tostring(var.rds_replication_slots)
+    apply_method = "pending-reboot"
+  }
+
+  parameter {
+    name         = "max_wal_senders"
+    value        = tostring(var.rds_replication_slots)
+    apply_method = "pending-reboot"
+  }
+
+  parameter {
+    name         = "max_slot_wal_keep_size"
+    value        = tostring(var.rds_max_slot_wal_keep_size_mb)
+    apply_method = "pending-reboot"
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-postgres-cdc"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 resource "aws_db_instance" "postgres" {
   identifier = "${local.name_prefix}-postgres"
 
@@ -17,6 +55,7 @@ resource "aws_db_instance" "postgres" {
   storage_encrypted     = true
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
+  parameter_group_name   = aws_db_parameter_group.postgres_cdc.name
   vpc_security_group_ids = [aws_security_group.rds.id]
   publicly_accessible    = false
   multi_az               = var.db_multi_az

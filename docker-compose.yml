@@ -171,6 +171,7 @@ services:
       CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
       REST_HOST_NAME: 0.0.0.0
+      POSTGRES_HOST: postgres
       POSTGRES_DB: ${POSTGRES_DB:-meetple}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
