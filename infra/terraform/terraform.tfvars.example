@@ -9,6 +9,8 @@ certificate_arn = null
 # firebase_credentials_secret_arn must point to the raw Firebase service-account JSON.
 backend_application_secret_arn = "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:meetple-staging-application-xxxxxx"
 firebase_credentials_secret_arn = "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:meetple-staging-firebase-xxxxxx"
+# Add key ARNs only when either secret uses a customer-managed KMS key.
+backend_secret_kms_key_arns = []
 
 # Cost-conscious staging defaults. Review these before production.
 ecs_instance_type    = "t3.large"

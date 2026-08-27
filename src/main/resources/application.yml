@@ -121,6 +121,7 @@ image:
     region: ${IMAGE_STORAGE_REGION:ap-northeast-2}
     endpoint: ${IMAGE_STORAGE_ENDPOINT:}
     public-base-url: ${IMAGE_STORAGE_PUBLIC_BASE_URL:}
+    cloud-front-distribution-id: ${IMAGE_STORAGE_CLOUDFRONT_DISTRIBUTION_ID:}
     access-key: ${IMAGE_STORAGE_ACCESS_KEY:}
     secret-key: ${IMAGE_STORAGE_SECRET_KEY:}
     key-prefix: ${IMAGE_STORAGE_KEY_PREFIX:images}

@@ -162,6 +162,19 @@ variable "firebase_credentials_secret_arn" {
   }
 }
 
+variable "backend_secret_kms_key_arns" {
+  description = "Customer-managed KMS key ARNs used by the application or Firebase secrets. Leave empty for the AWS managed Secrets Manager key."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for arn in var.backend_secret_kms_key_arns : can(regex("^arn:aws[a-z-]*:kms:[^:]+:[0-9]{12}:key/", arn))
+    ])
+    error_message = "backend_secret_kms_key_arns must contain only customer-managed KMS key ARNs."
+  }
+}
+
 variable "kafka_consumer_concurrency" {
   description = "Kafka listener concurrency for each Spring Boot consumer container. One limits staging memory use."
   type        = number

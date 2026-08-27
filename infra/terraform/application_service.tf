@@ -58,6 +58,23 @@ data "aws_iam_policy_document" "backend_execution_secrets" {
       data.aws_secretsmanager_secret.firebase_credentials.arn,
     ]
   }
+
+  dynamic "statement" {
+    for_each = length(var.backend_secret_kms_key_arns) == 0 ? [] : [1]
+
+    content {
+      sid       = "DecryptCustomerManagedSecrets"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt"]
+      resources = var.backend_secret_kms_key_arns
+
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ViaService"
+        values   = ["secretsmanager.${var.aws_region}.${data.aws_partition.current.dns_suffix}"]
+      }
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "backend_execution_secrets" {
@@ -88,6 +105,13 @@ data "aws_iam_policy_document" "backend_images" {
       "s3:PutObject",
     ]
     resources = ["${aws_s3_bucket.images.arn}/*"]
+  }
+
+  statement {
+    sid       = "InvalidateDeletedImages"
+    effect    = "Allow"
+    actions   = ["cloudfront:CreateInvalidation"]
+    resources = [aws_cloudfront_distribution.images.arn]
   }
 }
 
@@ -131,6 +155,7 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "IMAGE_STORAGE_BUCKET", value = aws_s3_bucket.images.id },
       { name = "IMAGE_STORAGE_REGION", value = var.aws_region },
       { name = "IMAGE_STORAGE_PUBLIC_BASE_URL", value = "https://${aws_cloudfront_distribution.images.domain_name}" },
+      { name = "IMAGE_STORAGE_CLOUDFRONT_DISTRIBUTION_ID", value = aws_cloudfront_distribution.images.id },
       { name = "MAIL_PORT", value = "587" },
       { name = "MAIL_SMTP_AUTH", value = "true" },
       { name = "MAIL_STARTTLS_ENABLED", value = "true" },
@@ -181,8 +206,8 @@ resource "aws_ecs_service" "backend" {
   task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = var.backend_desired_count
 
-  deployment_maximum_percent         = var.backend_desired_count > 1 ? 200 : 100
-  deployment_minimum_healthy_percent = var.backend_desired_count > 1 ? 50 : 0
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
   health_check_grace_period_seconds  = 120
 
   capacity_provider_strategy {

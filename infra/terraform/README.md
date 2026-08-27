@@ -49,7 +49,7 @@ event-runtime ECS task (awsvpc, public inbound 없음)
 
 NAT Gateway 고정 비용을 피하기 위해 ECS EC2는 public subnet에 배치됩니다. EC2에는 public IPv4가 생기지만 SSH는 열지 않고 SSM으로만 접근합니다. Spring Boot는 `bridge` mode와 동적 host port를 사용하며 외부 inbound는 ALB security group에서만 허용합니다. Redis와 Kafka는 Cloud Map private DNS와 security-group 참조로만 접근합니다.
 
-기본 `t3.large` 한 대에 Spring Boot, Kafka, Kafka Connect, Redis를 함께 두는 구성이라 저비용 staging 절충안입니다. Kafka/Redis volume은 같은 EC2에서 task가 재시작될 때는 남지만 EC2 교체나 장애 시 유실될 수 있습니다. 단일 broker이고 Spring Boot 한 task 배포 시 잠깐 중단될 수 있으므로 고가용성 production 구성은 아닙니다.
+기본 `t3.large` 한 대에 Spring Boot, Kafka, Kafka Connect, Redis를 함께 두는 구성이라 저비용 staging 절충안입니다. Kafka/Redis volume은 같은 EC2에서 task가 재시작될 때는 남지만 EC2 교체나 장애 시 유실될 수 있습니다. Kafka가 단일 broker이므로 고가용성 production 구성은 아닙니다.
 
 ## secret 준비
 
@@ -72,6 +72,8 @@ Terraform에는 secret 값이 아니라 기존 Secrets Manager ARN 두 개만 �
 ```
 
 `firebase_credentials_secret_arn`은 key로 감싼 JSON이 아니라 Firebase service-account JSON 문서 전체를 secret value로 저장합니다. ECS는 이를 `FIREBASE_CREDENTIALS_JSON`으로 주입하고 애플리케이션은 파일을 만들지 않고 메모리에서 읽습니다. 로컬의 기존 `GOOGLE_APPLICATION_CREDENTIALS` 파일 방식도 그대로 사용할 수 있습니다.
+
+두 secret이 기본 `aws/secretsmanager` key가 아닌 고객 관리형 KMS key를 사용한다면 해당 key ARN을 `backend_secret_kms_key_arns`에 추가합니다. execution role에는 지정한 key의 `kms:Decrypt`만, 그리고 Secrets Manager를 경유하는 호출만 허용됩니다. KMS key policy도 이 execution role의 사용을 허용해야 합니다.
 
 RDS username/password는 RDS 관리형 master secret의 `username`, `password` key를 주입합니다. 현재 Debezium과 Spring Boot가 master 계정을 공유하므로 production 전에는 application/replication 전용 DB 계정과 별도 secret을 만드는 bootstrap 단계가 필요합니다.
 
@@ -146,7 +148,7 @@ RDS master secret의 `AWSCURRENT`가 바뀌면 event runtime과 backend service�
 
 ## 이미지 저장소
 
-S3 bucket은 public access를 모두 차단하고 CloudFront OAC만 `GetObject`를 허용합니다. Spring Boot task role은 해당 bucket의 object에만 `PutObject`, `GetObject`, `DeleteObject` 권한을 가집니다. 정적 access key는 사용하지 않습니다.
+S3 bucket은 public access를 모두 차단하고 CloudFront OAC만 `GetObject`를 허용합니다. Spring Boot task role은 해당 bucket의 object에만 `PutObject`, `GetObject`, `DeleteObject` 권한을 가지며, 삭제 consumer는 S3 삭제 성공 후 같은 경로를 CloudFront에서도 무효화합니다. Kafka retry가 같은 삭제를 재처리해도 동일한 caller reference를 사용해 중복 invalidation을 만들지 않습니다. 정적 access key는 사용하지 않습니다.
 
 Flutter/Android/iOS의 presigned upload에는 CORS가 필요하지 않습니다. 웹 클라이언트를 추가할 때만 다음처럼 신뢰할 origin을 설정합니다.
 
@@ -162,7 +164,7 @@ image_upload_allowed_origins = ["https://app.example.com"]
 - `certificate_arn=null`이면 HTTP만 노출됩니다. 실제 사용자 트래픽 전에는 ACM과 HTTPS를 연결합니다.
 - `production` workspace는 HTTPS/ALB 삭제 보호와 RDS Multi-AZ/삭제 보호/final snapshot을 강제합니다.
 - 기본 ALB idle timeout은 WebSocket 연결을 위해 3600초입니다.
-- 기본 한 대 배포는 새 task를 먼저 띄울 메모리 여유를 보장하지 않아 `minimumHealthyPercent=0`입니다. 무중단이 필요하면 EC2/task를 2개 이상으로 늘리고 비용과 배치 상태를 검증합니다.
+- backend rolling deployment는 `minimumHealthyPercent=100`, `maximumPercent=200`으로 기존 정상 task를 유지한 채 교체 task를 먼저 시작합니다. 한 EC2에 자원이 부족하면 Capacity Provider가 `ecs_max_size` 범위에서 두 번째 EC2를 일시적으로 추가할 수 있으므로 배포 시간의 EC2/public IPv4 비용과 배치 상태를 확인합니다.
 - RDS `Pending reboot`를 확인하고 재부팅 뒤 `SHOW rds.logical_replication;` 결과가 `on`인지 확인합니다.
 - Kafka/Redis local Docker volume은 EC2 교체 전에 유실 가능성을 확인합니다.
 - CloudWatch에서 ECS CPU/memory, RDS `FreeStorageSpace`, replication slot lag, ALB unhealthy target, consumer retry/DLQ를 모니터링합니다.

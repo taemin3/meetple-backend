@@ -4,8 +4,10 @@ import com.meetple.backend.domain.image.config.ImageStorageProperties;
 import com.meetple.backend.global.exception.BaseException;
 import com.meetple.backend.global.response.ErrorStatus;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -14,6 +16,9 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.cloudfront.CloudFrontClient;
+import software.amazon.awssdk.services.cloudfront.model.CreateInvalidationRequest;
+import software.amazon.awssdk.services.cloudfront.model.InvalidationBatch;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
@@ -80,6 +85,7 @@ public class S3ImageStorageClient implements ImageStorageClient {
         try (S3Client client = createClient()) {
             client.deleteObject(request);
         }
+        invalidateCachedObject(objectKey);
     }
 
     private Map<String, String> extractHeaders(PresignedPutObjectRequest presignedRequest) {
@@ -120,6 +126,31 @@ public class S3ImageStorageClient implements ImageStorageClient {
         }
 
         return builder.build();
+    }
+
+    private void invalidateCachedObject(String objectKey) {
+        if (!StringUtils.hasText(properties.cloudFrontDistributionId())) {
+            return;
+        }
+        try (CloudFrontClient client = CloudFrontClient.builder()
+                .region(Region.AWS_GLOBAL)
+                .credentialsProvider(createCredentialsProvider())
+                .build()) {
+            client.createInvalidation(createInvalidationRequest(objectKey));
+        }
+    }
+
+    CreateInvalidationRequest createInvalidationRequest(String objectKey) {
+        String callerReference = "image-delete-" + UUID.nameUUIDFromBytes(
+                objectKey.getBytes(StandardCharsets.UTF_8)
+        );
+        return CreateInvalidationRequest.builder()
+                .distributionId(properties.cloudFrontDistributionId())
+                .invalidationBatch(InvalidationBatch.builder()
+                        .callerReference(callerReference)
+                        .paths(paths -> paths.quantity(1).items("/" + objectKey))
+                        .build())
+                .build();
     }
 
     private void validateConfiguration() {

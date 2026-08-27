@@ -54,6 +54,20 @@ class S3ImageStorageClientTest {
         assertPartialStaticCredentialsRejected("", "test-secret-key");
     }
 
+    @Test
+    void createsIdempotentCloudFrontInvalidationForDeletedObject() {
+        S3ImageStorageClient client = createClient("test-access-key", "test-secret-key");
+        String objectKey = "images/profile/1/test.png";
+
+        var firstRequest = client.createInvalidationRequest(objectKey);
+        var retryRequest = client.createInvalidationRequest(objectKey);
+
+        assertThat(firstRequest.distributionId()).isEqualTo("test-distribution");
+        assertThat(firstRequest.invalidationBatch().paths().items()).containsExactly("/" + objectKey);
+        assertThat(firstRequest.invalidationBatch().callerReference())
+                .isEqualTo(retryRequest.invalidationBatch().callerReference());
+    }
+
     private void assertPartialStaticCredentialsRejected(String accessKey, String secretKey) {
         S3ImageStorageClient client = createClient(accessKey, secretKey);
 
@@ -72,6 +86,7 @@ class S3ImageStorageClientTest {
                 "ap-northeast-2",
                 "",
                 "https://cdn.meetple.com",
+                "test-distribution",
                 accessKey,
                 secretKey,
                 "images",
