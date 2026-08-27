@@ -51,8 +51,17 @@ resource "aws_lb_listener" "http" {
   protocol          = "HTTP"
 
   default_action {
-    type             = var.certificate_arn == null ? "forward" : "redirect"
-    target_group_arn = var.certificate_arn == null ? aws_lb_target_group.app.arn : null
+    type = var.certificate_arn == null ? "forward" : "redirect"
+
+    dynamic "forward" {
+      for_each = var.certificate_arn == null ? [1] : []
+
+      content {
+        target_group {
+          arn = aws_lb_target_group.app.arn
+        }
+      }
+    }
 
     dynamic "redirect" {
       for_each = var.certificate_arn == null ? [] : [1]
