@@ -11,6 +11,7 @@ public record ImageStorageProperties(
         String region,
         String endpoint,
         String publicBaseUrl,
+        String cloudFrontDistributionId,
         String accessKey,
         String secretKey,
         String keyPrefix,

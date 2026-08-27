@@ -57,6 +57,21 @@ variable "enable_alb_deletion_protection" {
   default     = false
 }
 
+variable "alb_idle_timeout_seconds" {
+  description = "ALB connection idle timeout. A longer timeout keeps WebSocket chat connections alive."
+  type        = number
+  default     = 3600
+
+  validation {
+    condition = (
+      var.alb_idle_timeout_seconds >= 60 &&
+      var.alb_idle_timeout_seconds <= 4000 &&
+      floor(var.alb_idle_timeout_seconds) == var.alb_idle_timeout_seconds
+    )
+    error_message = "alb_idle_timeout_seconds must be an integer between 60 and 4000."
+  }
+}
+
 variable "ecs_instance_type" {
   description = "EC2 instance type used by the ECS capacity provider."
   type        = string
@@ -96,6 +111,95 @@ variable "redis_image" {
   description = "Redis container image used by the event runtime."
   type        = string
   default     = "redis:7-alpine"
+}
+
+variable "backend_image_tag" {
+  description = "Immutable ECR image tag for the Spring Boot task. Use a Git commit SHA, not latest."
+  type        = string
+  default     = "bootstrap"
+
+  validation {
+    condition = (
+      var.backend_image_tag != "latest" &&
+      can(regex("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$", var.backend_image_tag))
+    )
+    error_message = "backend_image_tag must be a valid immutable Docker tag and cannot be latest."
+  }
+}
+
+variable "backend_desired_count" {
+  description = "Desired Spring Boot task count. Keep 0 for the bootstrap apply, then set 1 after pushing the image."
+  type        = number
+  default     = 0
+
+  validation {
+    condition = (
+      var.backend_desired_count >= 0 &&
+      var.backend_desired_count <= 2 &&
+      floor(var.backend_desired_count) == var.backend_desired_count
+    )
+    error_message = "backend_desired_count must be an integer between 0 and 2."
+  }
+}
+
+variable "backend_application_secret_arn" {
+  description = "Existing Secrets Manager ARN containing the Spring Boot application secret JSON keys documented in README.md."
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:aws[a-z-]*:secretsmanager:", var.backend_application_secret_arn))
+    error_message = "backend_application_secret_arn must be a Secrets Manager ARN."
+  }
+}
+
+variable "firebase_credentials_secret_arn" {
+  description = "Existing Secrets Manager ARN whose value is the complete Firebase service-account JSON document."
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:aws[a-z-]*:secretsmanager:", var.firebase_credentials_secret_arn))
+    error_message = "firebase_credentials_secret_arn must be a Secrets Manager ARN."
+  }
+}
+
+variable "backend_secret_kms_key_arns" {
+  description = "Customer-managed KMS key ARNs used by the application or Firebase secrets. Leave empty for the AWS managed Secrets Manager key."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for arn in var.backend_secret_kms_key_arns : can(regex("^arn:aws[a-z-]*:kms:[^:]+:[0-9]{12}:key/", arn))
+    ])
+    error_message = "backend_secret_kms_key_arns must contain only customer-managed KMS key ARNs."
+  }
+}
+
+variable "kafka_consumer_concurrency" {
+  description = "Kafka listener concurrency for each Spring Boot consumer container. One limits staging memory use."
+  type        = number
+  default     = 1
+
+  validation {
+    condition = (
+      var.kafka_consumer_concurrency >= 1 &&
+      var.kafka_consumer_concurrency <= 3 &&
+      floor(var.kafka_consumer_concurrency) == var.kafka_consumer_concurrency
+    )
+    error_message = "kafka_consumer_concurrency must be an integer between 1 and 3."
+  }
+}
+
+variable "image_bucket_force_destroy" {
+  description = "Allow Terraform to delete non-empty image buckets. Keep false unless disposable staging data is intended."
+  type        = bool
+  default     = false
+}
+
+variable "image_upload_allowed_origins" {
+  description = "Optional browser origins allowed to upload directly with S3 presigned URLs. Native mobile apps do not require CORS."
+  type        = set(string)
+  default     = []
 }
 
 variable "kafka_cluster_id" {

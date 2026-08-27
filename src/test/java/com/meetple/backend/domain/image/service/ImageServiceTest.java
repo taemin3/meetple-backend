@@ -26,6 +26,7 @@ class ImageServiceTest {
             "ap-northeast-2",
             "",
             "https://cdn.meetple.com",
+            "",
             "access-key",
             "secret-key",
             "images",

@@ -19,7 +19,7 @@ output "database_subnet_ids" {
 }
 
 output "alb_dns_name" {
-  description = "Public ALB DNS name. It returns 503 until an ECS service registers healthy targets."
+  description = "Public ALB DNS name. It returns 503 while backend_desired_count is zero or no target is healthy."
   value       = aws_lb.app.dns_name
 }
 
@@ -44,8 +44,28 @@ output "ecs_capacity_provider_name" {
 }
 
 output "backend_log_group_name" {
-  description = "CloudWatch log group reserved for the future backend ECS task."
+  description = "CloudWatch log group for the Spring Boot ECS task."
   value       = aws_cloudwatch_log_group.backend.name
+}
+
+output "backend_service_name" {
+  description = "ECS service running the Spring Boot application and Kafka consumers."
+  value       = aws_ecs_service.backend.name
+}
+
+output "backend_task_definition_arn" {
+  description = "Spring Boot ECS task definition ARN."
+  value       = aws_ecs_task_definition.backend.arn
+}
+
+output "image_bucket_name" {
+  description = "Private S3 bucket used for uploaded image objects."
+  value       = aws_s3_bucket.images.id
+}
+
+output "image_public_base_url" {
+  description = "CloudFront base URL returned for uploaded images."
+  value       = "https://${aws_cloudfront_distribution.images.domain_name}"
 }
 
 output "ecr_repository_url" {
@@ -95,6 +115,11 @@ output "event_runtime_redeploy_automation_name" {
 }
 
 output "rds_secret_rotation_event_rule_name" {
-  description = "EventBridge rule that starts the event runtime redeployment workflow."
+  description = "EventBridge rule that redeploys RDS secret consumers."
   value       = aws_cloudwatch_event_rule.rds_master_secret_rotated.name
+}
+
+output "backend_secret_rotation_event_rule_name" {
+  description = "EventBridge rule that redeploys the backend after an application or Firebase secret changes."
+  value       = aws_cloudwatch_event_rule.backend_secrets_rotated.name
 }

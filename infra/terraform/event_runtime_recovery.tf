@@ -8,6 +8,7 @@ data "aws_secretsmanager_secret" "rds_master" {
 
 locals {
   event_runtime_service_arn             = "arn:${data.aws_partition.current.partition}:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/${aws_ecs_cluster.this.name}/${aws_ecs_service.event_runtime.name}"
+  backend_service_arn                   = "arn:${data.aws_partition.current.partition}:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/${aws_ecs_cluster.this.name}/${aws_ecs_service.backend.name}"
   event_runtime_redeploy_automation_arn = "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:automation-definition/${aws_ssm_document.event_runtime_redeploy.name}"
 }
 
@@ -30,9 +31,12 @@ resource "aws_iam_role" "event_runtime_redeploy_automation" {
 
 data "aws_iam_policy_document" "event_runtime_redeploy_automation" {
   statement {
-    effect    = "Allow"
-    actions   = ["ecs:UpdateService"]
-    resources = [local.event_runtime_service_arn]
+    effect  = "Allow"
+    actions = ["ecs:UpdateService"]
+    resources = [
+      local.event_runtime_service_arn,
+      local.backend_service_arn,
+    ]
   }
 }
 
@@ -49,7 +53,7 @@ resource "aws_ssm_document" "event_runtime_redeploy" {
 
   content = jsonencode({
     schemaVersion = "0.3"
-    description   = "Force an ECS event runtime deployment after the RDS secret rotates"
+    description   = "Force an ECS service deployment so a new task reads the current secret value"
     assumeRole    = "{{ AutomationAssumeRole }}"
     parameters = {
       AutomationAssumeRole = {
@@ -132,13 +136,30 @@ resource "aws_iam_role_policy" "event_runtime_redeploy_event" {
 
 resource "aws_cloudwatch_event_rule" "rds_master_secret_rotated" {
   name        = "${local.name_prefix}-rds-secret-rotated"
-  description = "Redeploy the event runtime when the RDS master secret AWSCURRENT version changes"
+  description = "Redeploy RDS secret consumers when the master secret AWSCURRENT version changes"
 
   event_pattern = jsonencode({
     source      = ["aws.secretsmanager"]
     detail-type = ["Secret Label Updated"]
     detail = {
       name         = [data.aws_secretsmanager_secret.rds_master.name]
+      labelUpdated = ["AWSCURRENT"]
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_rule" "backend_secrets_rotated" {
+  name        = "${local.name_prefix}-backend-secret-rotated"
+  description = "Redeploy the backend when an application secret AWSCURRENT version changes"
+
+  event_pattern = jsonencode({
+    source      = ["aws.secretsmanager"]
+    detail-type = ["Secret Label Updated"]
+    detail = {
+      name = [
+        data.aws_secretsmanager_secret.backend_application.name,
+        data.aws_secretsmanager_secret.firebase_credentials.name,
+      ]
       labelUpdated = ["AWSCURRENT"]
     }
   })
@@ -154,6 +175,52 @@ resource "aws_cloudwatch_event_target" "event_runtime_redeploy" {
     AutomationAssumeRole = [aws_iam_role.event_runtime_redeploy_automation.arn]
     ClusterName          = [aws_ecs_cluster.this.name]
     ServiceName          = [aws_ecs_service.event_runtime.name]
+  })
+
+  retry_policy {
+    maximum_event_age_in_seconds = 3600
+    maximum_retry_attempts       = 3
+  }
+
+  depends_on = [
+    aws_iam_role_policy.event_runtime_redeploy_automation,
+    aws_iam_role_policy.event_runtime_redeploy_event,
+  ]
+}
+
+resource "aws_cloudwatch_event_target" "backend_redeploy_on_rds_secret" {
+  rule      = aws_cloudwatch_event_rule.rds_master_secret_rotated.name
+  target_id = "RedeployBackend"
+  arn       = local.event_runtime_redeploy_automation_arn
+  role_arn  = aws_iam_role.event_runtime_redeploy_event.arn
+
+  input = jsonencode({
+    AutomationAssumeRole = [aws_iam_role.event_runtime_redeploy_automation.arn]
+    ClusterName          = [aws_ecs_cluster.this.name]
+    ServiceName          = [aws_ecs_service.backend.name]
+  })
+
+  retry_policy {
+    maximum_event_age_in_seconds = 3600
+    maximum_retry_attempts       = 3
+  }
+
+  depends_on = [
+    aws_iam_role_policy.event_runtime_redeploy_automation,
+    aws_iam_role_policy.event_runtime_redeploy_event,
+  ]
+}
+
+resource "aws_cloudwatch_event_target" "backend_redeploy_on_application_secret" {
+  rule      = aws_cloudwatch_event_rule.backend_secrets_rotated.name
+  target_id = "RedeployBackend"
+  arn       = local.event_runtime_redeploy_automation_arn
+  role_arn  = aws_iam_role.event_runtime_redeploy_event.arn
+
+  input = jsonencode({
+    AutomationAssumeRole = [aws_iam_role.event_runtime_redeploy_automation.arn]
+    ClusterName          = [aws_ecs_cluster.this.name]
+    ServiceName          = [aws_ecs_service.backend.name]
   })
 
   retry_policy {

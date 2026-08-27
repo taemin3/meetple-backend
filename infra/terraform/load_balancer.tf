@@ -6,6 +6,7 @@ resource "aws_lb" "app" {
   subnets                    = [for subnet in aws_subnet.public : subnet.id]
   drop_invalid_header_fields = true
   enable_deletion_protection = var.enable_alb_deletion_protection
+  idle_timeout               = var.alb_idle_timeout_seconds
 
   tags = {
     Name = "${local.name_prefix}-alb"

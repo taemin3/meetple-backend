@@ -13,7 +13,8 @@ RUN ./gradlew bootJar --no-daemon
 
 FROM eclipse-temurin:21-jre-alpine
 
-RUN addgroup -S meetple \
+RUN apk add --no-cache curl \
+    && addgroup -S meetple \
     && adduser -S -G meetple meetple
 
 WORKDIR /app

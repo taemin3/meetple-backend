@@ -4,8 +4,10 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.messaging.FirebaseMessaging;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -32,7 +34,14 @@ public class FirebaseAdminConfig {
         return FirebaseMessaging.getInstance(pushFirebaseApp);
     }
 
-    private GoogleCredentials loadCredentials(PushFcmProperties properties) throws IOException {
+    GoogleCredentials loadCredentials(PushFcmProperties properties) throws IOException {
+        if (StringUtils.hasText(properties.credentialsJson())) {
+            try (InputStream credentials = new ByteArrayInputStream(
+                    properties.credentialsJson().getBytes(StandardCharsets.UTF_8)
+            )) {
+                return GoogleCredentials.fromStream(credentials);
+            }
+        }
         if (!StringUtils.hasText(properties.credentialsPath())) {
             return GoogleCredentials.getApplicationDefault();
         }
