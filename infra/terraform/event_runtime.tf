@@ -100,7 +100,9 @@ resource "aws_service_discovery_service" "event_runtime" {
     }
   }
 
-  health_check_custom_config {}
+  health_check_custom_config {
+    failure_threshold = 1
+  }
 }
 
 resource "aws_ecs_task_definition" "event_runtime" {
@@ -159,10 +161,10 @@ resource "aws_ecs_task_definition" "event_runtime" {
         { name = "CLUSTER_ID", value = var.kafka_cluster_id },
         { name = "KAFKA_NODE_ID", value = "1" },
         { name = "KAFKA_PROCESS_ROLES", value = "broker,controller" },
-        { name = "KAFKA_LISTENERS", value = "PLAINTEXT://:9092,CONTROLLER://:9093" },
-        { name = "KAFKA_ADVERTISED_LISTENERS", value = "PLAINTEXT://${local.event_runtime_dns_name}:9092" },
-        { name = "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP", value = "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT" },
-        { name = "KAFKA_INTER_BROKER_LISTENER_NAME", value = "PLAINTEXT" },
+        { name = "KAFKA_LISTENERS", value = "INTERNAL://:19092,EXTERNAL://:9092,CONTROLLER://:9093" },
+        { name = "KAFKA_ADVERTISED_LISTENERS", value = "INTERNAL://localhost:19092,EXTERNAL://${local.event_runtime_dns_name}:9092" },
+        { name = "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP", value = "CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT" },
+        { name = "KAFKA_INTER_BROKER_LISTENER_NAME", value = "INTERNAL" },
         { name = "KAFKA_CONTROLLER_LISTENER_NAMES", value = "CONTROLLER" },
         { name = "KAFKA_CONTROLLER_QUORUM_VOTERS", value = "1@localhost:9093" },
         { name = "KAFKA_LOG_DIRS", value = "/var/lib/kafka/data" },
@@ -183,7 +185,7 @@ resource "aws_ecs_task_definition" "event_runtime" {
         readOnly      = false
       }]
       healthCheck = {
-        command     = ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+        command     = ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list >/dev/null 2>&1"]
         interval    = 15
         timeout     = 10
         retries     = 10
@@ -204,10 +206,10 @@ resource "aws_ecs_task_definition" "event_runtime" {
       entryPoint        = ["/bin/bash", "-ec"]
       command = [<<-SCRIPT
         for topic in $KAFKA_TOPICS; do
-          /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic "$topic" --partitions "$KAFKA_TOPIC_PARTITIONS" --replication-factor 1
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --create --if-not-exists --topic "$topic" --partitions "$KAFKA_TOPIC_PARTITIONS" --replication-factor 1
         done
         for topic in $KAFKA_EMAIL_TOPICS; do
-          /opt/kafka/bin/kafka-configs.sh --bootstrap-server localhost:9092 --entity-type topics --entity-name "$topic" --alter --add-config retention.ms=86400000
+          /opt/kafka/bin/kafka-configs.sh --bootstrap-server localhost:19092 --entity-type topics --entity-name "$topic" --alter --add-config retention.ms=86400000
         done
       SCRIPT
       ]
@@ -270,7 +272,8 @@ resource "aws_ecs_task_definition" "event_runtime" {
         protocol      = "tcp"
       }]
       environment = [
-        { name = "BOOTSTRAP_SERVERS", value = "${local.event_runtime_dns_name}:9092" },
+        { name = "KAFKA_HEAP_OPTS", value = "-Xms256M -Xmx1024M" },
+        { name = "BOOTSTRAP_SERVERS", value = "localhost:19092" },
         { name = "GROUP_ID", value = "meetple-debezium-connect" },
         { name = "CONFIG_STORAGE_TOPIC", value = "meetple.connect.configs" },
         { name = "OFFSET_STORAGE_TOPIC", value = "meetple.connect.offsets" },
@@ -299,7 +302,7 @@ resource "aws_ecs_task_definition" "event_runtime" {
         command     = ["CMD-SHELL", "curl --fail --silent http://localhost:8083/connectors >/dev/null"]
         interval    = 15
         timeout     = 5
-        retries     = 12
+        retries     = 10
         startPeriod = 30
       }
       logConfiguration = {
@@ -316,16 +319,29 @@ resource "aws_ecs_task_definition" "event_runtime" {
       memory            = 128
       entryPoint        = ["/bin/bash", "-ec"]
       command = [<<-SCRIPT
+        apply_connector_config() {
+          curl --silent --show-error --request PUT \
+            --header 'Content-Type: application/json' \
+            --data "$CONNECTOR_CONFIG" \
+            http://localhost:8083/connectors/meetple-outbox-connector/config || true
+        }
+
+        apply_connector_config
+
         while true; do
           status="$(curl --silent --show-error http://localhost:8083/connectors/meetple-outbox-connector/status || true)"
           running_count="$(printf '%s' "$status" | grep -Eo '"state"[[:space:]]*:[[:space:]]*"RUNNING"' | wc -l | tr -d ' ')"
+          failed_count="$(printf '%s' "$status" | grep -Eo '"state"[[:space:]]*:[[:space:]]*"FAILED"' | wc -l | tr -d ' ')"
 
-          if [ "$running_count" -lt 2 ]; then
-            echo "Debezium connector is not fully running; applying the connector configuration"
-            curl --silent --show-error --request PUT \
-              --header 'Content-Type: application/json' \
-              --data "$CONNECTOR_CONFIG" \
-              http://localhost:8083/connectors/meetple-outbox-connector/config || true
+          if printf '%s' "$status" | grep -Eq '"error_code"[[:space:]]*:[[:space:]]*404'; then
+            echo "Debezium connector is missing; applying the connector configuration"
+            apply_connector_config
+          elif [ "$failed_count" -gt 0 ]; then
+            echo "Debezium connector has failed tasks; requesting a failed-task restart"
+            curl --silent --show-error --request POST \
+              'http://localhost:8083/connectors/meetple-outbox-connector/restart?includeTasks=true&onlyFailed=true' || true
+          elif [ "$running_count" -lt 2 ]; then
+            echo "Debezium connector is still starting"
           fi
 
           sleep 30
