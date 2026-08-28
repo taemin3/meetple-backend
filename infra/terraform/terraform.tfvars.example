@@ -51,3 +51,8 @@ additional_tags = {
 github_actions_deploy_enabled       = false
 github_actions_repository           = "taemin3/meetple-backend"
 github_actions_oidc_provider_arn    = null
+
+# CloudWatch alarms remain visible when actions are disabled, but SNS email notifications stop.
+# After apply, confirm the subscription from the email sent by AWS SNS.
+monitoring_notification_email     = null
+monitoring_alarm_actions_enabled = true

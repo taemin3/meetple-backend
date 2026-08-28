@@ -381,3 +381,24 @@ variable "github_actions_oidc_provider_arn" {
     error_message = "github_actions_oidc_provider_arn must be null or the GitHub Actions OIDC provider ARN."
   }
 }
+
+variable "monitoring_notification_email" {
+  description = "Optional email address subscribed to staging monitoring alerts. AWS sends a confirmation email after apply."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = (
+      var.monitoring_notification_email == null ||
+      can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.monitoring_notification_email))
+    )
+    error_message = "monitoring_notification_email must be null or a valid email address."
+  }
+}
+
+variable "monitoring_alarm_actions_enabled" {
+  description = "Send SNS ALARM and OK notifications. Set false before intentionally stopping staging resources."
+  type        = bool
+  default     = true
+}

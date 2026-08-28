@@ -216,3 +216,31 @@ image_upload_allowed_origins = ["https://app.example.com"]
 - Kafka/Redis local Docker volume은 EC2 교체 전에 유실 가능성을 확인합니다.
 - CloudWatch에서 ECS CPU/memory, RDS `FreeStorageSpace`, replication slot lag, ALB unhealthy target, consumer retry/DLQ를 모니터링합니다.
 - 실제 AWS 리소스 생성과 secret 생성/회전은 plan 검토 후 별도 승인 단계에서 수행합니다.
+
+## CloudWatch 모니터링
+
+`monitoring.tf`는 별도 모니터링 서버 없이 기존 ECS Container Insights와 CloudWatch Logs를 사용해 다음 항목을 구성합니다.
+
+- `meetple-<environment>-operations` Dashboard
+- ECS backend/event-runtime의 CPU, memory, 실행 task 수
+- ECS Auto Scaling Group의 실행 중 EC2 instance 수
+- ALB unhealthy target, target HTTP 5xx, p95 응답 시간
+- RDS CPU, connection, freeable memory, free storage
+- Backend `ERROR`, Kafka consumer `moved to DLQ`, Debezium connector failed-task 로그 지표와 알람
+- ALARM과 복구(OK)를 전달하는 SNS topic
+
+이메일 알림이 필요하면 로컬 `terraform.tfvars`에 주소를 추가합니다. 주소는 Git에 커밋하지 않습니다.
+
+```hcl
+monitoring_notification_email = "replace-with-alert-email@example.com"
+```
+
+`terraform apply` 후 AWS SNS가 보낸 `Subscription Confirmation` 메일에서 구독을 승인해야 알림이 전달됩니다.
+
+비용 절감을 위해 staging 서버를 의도적으로 중지하기 전에는 알람 리소스를 삭제하지 않고 action만 비활성화합니다.
+
+```hcl
+monitoring_alarm_actions_enabled = false
+```
+
+이 상태로 `terraform apply`하면 Dashboard와 알람 이력은 유지되지만 SNS의 ALARM/OK 메일은 전송하지 않습니다. 서버를 다시 실행할 때 값을 `true`로 되돌려 적용합니다.

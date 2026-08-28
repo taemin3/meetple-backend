@@ -121,6 +121,11 @@ resource "aws_autoscaling_group" "ecs" {
   health_check_type         = "EC2"
   protect_from_scale_in     = true
   vpc_zone_identifier       = [for subnet in aws_subnet.public : subnet.id]
+  metrics_granularity       = "1Minute"
+  enabled_metrics = [
+    "GroupDesiredCapacity",
+    "GroupInServiceInstances",
+  ]
 
   launch_template {
     id      = aws_launch_template.ecs.id
