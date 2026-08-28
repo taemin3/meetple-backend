@@ -249,6 +249,21 @@ variable "rds_max_slot_wal_keep_size_mb" {
   }
 }
 
+variable "rds_replication_slot_lag_alarm_threshold_mb" {
+  description = "CloudWatch warning threshold for the oldest PostgreSQL replication slot lag in MiB. Increase only after the matching max_slot_wal_keep_size change is active following an RDS reboot."
+  type        = number
+  default     = 1536
+
+  validation {
+    condition = (
+      var.rds_replication_slot_lag_alarm_threshold_mb >= 1 &&
+      floor(var.rds_replication_slot_lag_alarm_threshold_mb) == var.rds_replication_slot_lag_alarm_threshold_mb &&
+      var.rds_replication_slot_lag_alarm_threshold_mb < var.rds_max_slot_wal_keep_size_mb
+    )
+    error_message = "rds_replication_slot_lag_alarm_threshold_mb must be a positive integer below rds_max_slot_wal_keep_size_mb."
+  }
+}
+
 variable "ecs_min_size" {
   description = "Minimum number of ECS container instances."
   type        = number

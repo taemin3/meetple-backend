@@ -226,6 +226,8 @@ image_upload_allowed_origins = ["https://app.example.com"]
 - ECS Auto Scaling Group의 실행 중 EC2 instance 수
 - ALB unhealthy target, target HTTP 5xx, p95 응답 시간
 - RDS CPU, connection, freeable memory, free storage
+- PostgreSQL oldest replication slot lag, transaction log disk usage
+- 별도로 설정한 안전 기준에 도달한 replication slot 사전 경고
 - Backend `ERROR`, Kafka consumer `moved to DLQ`, Debezium connector failed-task 로그 지표와 알람
 - ALARM과 복구(OK)를 전달하는 SNS topic
 
@@ -244,3 +246,5 @@ monitoring_alarm_actions_enabled = false
 ```
 
 이 상태로 `terraform apply`하면 Dashboard와 알람 이력은 유지되지만 SNS의 ALARM/OK 메일은 전송하지 않습니다. 서버를 다시 실행할 때 값을 `true`로 되돌려 적용합니다.
+
+replication slot 지연 경고 기준은 `rds_replication_slot_lag_alarm_threshold_mb`로 별도 관리합니다. 기본 2,048 MiB 제한에서는 1,536 MiB입니다. `max_slot_wal_keep_size` 변경은 `pending-reboot`이므로 제한을 높이더라도 RDS 재부팅과 `SHOW max_slot_wal_keep_size;` 확인 전에는 알람 기준을 높이지 않습니다. `OldestReplicationSlotLag`가 1분 간격으로 두 번 연속 기준을 넘으면 SNS로 ALARM을 보내며, `TransactionLogsDiskUsage`는 같은 Dashboard에서 원인 판단용으로 확인합니다. 알람이 발생하면 ECS만 반복 재시작하지 말고 [Debezium replication slot 복구 절차](../../docs/operations/debezium-replication-slot-recovery.md)에 따라 slot 상태와 Outbox 재처리 범위를 먼저 확인합니다.
