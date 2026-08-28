@@ -128,3 +128,13 @@ output "github_actions_deploy_role_arn" {
   description = "IAM role ARN to configure as the staging GitHub Environment variable AWS_DEPLOY_ROLE_ARN."
   value       = var.github_actions_deploy_enabled ? aws_iam_role.github_actions_deploy[0].arn : null
 }
+
+output "monitoring_dashboard_name" {
+  description = "CloudWatch dashboard containing the staging infrastructure and log signals."
+  value       = aws_cloudwatch_dashboard.staging.dashboard_name
+}
+
+output "monitoring_sns_topic_arn" {
+  description = "SNS topic used by CloudWatch alarms."
+  value       = aws_sns_topic.monitoring.arn
+}
