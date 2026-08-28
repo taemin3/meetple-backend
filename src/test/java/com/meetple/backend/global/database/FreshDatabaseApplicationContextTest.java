@@ -51,6 +51,7 @@ class FreshDatabaseApplicationContextTest {
         registry.add("spring.mail.host", () -> "localhost");
         registry.add("spring.mail.username", () -> "test-mail-user");
         registry.add("spring.mail.password", () -> "test-mail-password");
+        registry.add("auth.email-verification.hmac-secret", () -> "test-email-verification-secret-1234567890");
         registry.add("auth.email-verification.from-address", () -> "noreply@meetple.test");
         registry.add("naver.location.search-client-id", () -> "test-search-client");
         registry.add("naver.location.search-client-secret", () -> "test-search-secret");
