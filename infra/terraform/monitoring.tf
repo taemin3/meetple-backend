@@ -1,6 +1,8 @@
 locals {
-  monitoring_metric_namespace = "${title(var.project_name)}/${title(local.environment)}/Logs"
-  monitoring_alarm_actions    = [aws_sns_topic.monitoring.arn]
+  monitoring_metric_namespace                    = "${title(var.project_name)}/${title(local.environment)}/Logs"
+  monitoring_alarm_actions                       = [aws_sns_topic.monitoring.arn]
+  rds_replication_slot_lag_alarm_threshold_mib   = floor(var.rds_max_slot_wal_keep_size_mb * 0.75)
+  rds_replication_slot_lag_alarm_threshold_bytes = local.rds_replication_slot_lag_alarm_threshold_mib * 1024 * 1024
 
   monitoring_infrastructure_alarms = {
     backend_running_tasks = {
@@ -154,6 +156,21 @@ locals {
       comparison_operator = "GreaterThanOrEqualToThreshold"
       threshold           = 80
       period              = 300
+      evaluation_periods  = 2
+      datapoints_to_alarm = 2
+      treat_missing_data  = "notBreaching"
+      dimensions = {
+        DBInstanceIdentifier = aws_db_instance.postgres.identifier
+      }
+    }
+    rds_replication_slot_lag_high = {
+      description         = "RDS oldest replication slot lag reached 75 percent (${local.rds_replication_slot_lag_alarm_threshold_mib} MiB) of max_slot_wal_keep_size. Debezium must catch up before the slot becomes lost."
+      namespace           = "AWS/RDS"
+      metric_name         = "OldestReplicationSlotLag"
+      statistic           = "Maximum"
+      comparison_operator = "GreaterThanOrEqualToThreshold"
+      threshold           = local.rds_replication_slot_lag_alarm_threshold_bytes
+      period              = 60
       evaluation_periods  = 2
       datapoints_to_alarm = 2
       treat_missing_data  = "notBreaching"
@@ -374,7 +391,33 @@ resource "aws_cloudwatch_dashboard" "staging" {
         type   = "metric"
         x      = 0
         y      = 12
-        width  = 24
+        width  = 12
+        height = 6
+        properties = {
+          title  = "RDS replication slot WAL"
+          view   = "timeSeries"
+          region = var.aws_region
+          period = 300
+          stat   = "Maximum"
+          yAxis  = { left = { min = 0 } }
+          annotations = {
+            horizontal = [{
+              label = "Replication slot warning (${local.rds_replication_slot_lag_alarm_threshold_mib} MiB)"
+              value = local.rds_replication_slot_lag_alarm_threshold_bytes
+              color = "#ff7f0e"
+            }]
+          }
+          metrics = [
+            ["AWS/RDS", "OldestReplicationSlotLag", "DBInstanceIdentifier", aws_db_instance.postgres.identifier, { label = "Oldest slot lag" }],
+            [".", "TransactionLogsDiskUsage", ".", ".", { label = "Transaction logs disk usage" }],
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 12
+        width  = 12
         height = 6
         properties = {
           title  = "Application, consumer, and Debezium failure signals"

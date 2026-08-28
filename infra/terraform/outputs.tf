@@ -89,6 +89,11 @@ output "event_runtime_service_name" {
   value       = aws_ecs_service.event_runtime.name
 }
 
+output "event_runtime_security_group_id" {
+  description = "Security group ID used by the event runtime task."
+  value       = aws_security_group.event_runtime.id
+}
+
 output "event_runtime_dns_name" {
   description = "Private Cloud Map hostname shared by the event runtime containers."
   value       = local.event_runtime_dns_name

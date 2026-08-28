@@ -33,7 +33,7 @@ image_bucket_force_destroy    = false
 kafka_cluster_id       = "4L6g3nShT-eMCtK--X86sw"
 kafka_topic_partitions = 3
 
-# Logical replication safety limit. Monitor RDS FreeStorageSpace and replication slot lag.
+# Logical replication safety limit. CloudWatch warns when the oldest slot lag reaches 75% of this value.
 rds_replication_slots         = 10
 rds_max_slot_wal_keep_size_mb = 2048
 
