@@ -114,7 +114,7 @@ variable "redis_image" {
 }
 
 variable "backend_image_tag" {
-  description = "Immutable ECR image tag for the Spring Boot task. Use a Git commit SHA, not latest."
+  description = "Baseline ECR image tag for the Terraform task definition. GitHub Actions activates an immutable Git SHA revision before tasks start."
   type        = string
   default     = "bootstrap"
 
@@ -128,7 +128,7 @@ variable "backend_image_tag" {
 }
 
 variable "backend_desired_count" {
-  description = "Desired Spring Boot task count. Keep 0 for the bootstrap apply, then set 1 after pushing the image."
+  description = "Desired Spring Boot task count. Keep 0 until the staging workflow activates a real image revision, then set 1."
   type        = number
   default     = 0
 
@@ -364,17 +364,6 @@ variable "github_actions_repository" {
   validation {
     condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_actions_repository))
     error_message = "github_actions_repository must use owner/repository format."
-  }
-}
-
-variable "github_actions_environment_name" {
-  description = "GitHub Environment whose workflows may assume the deployment role. Restrict it to the main branch in GitHub."
-  type        = string
-  default     = "staging"
-
-  validation {
-    condition     = can(regex("^[A-Za-z0-9_.-]+$", var.github_actions_environment_name))
-    error_message = "github_actions_environment_name may contain only letters, numbers, dots, underscores, and hyphens."
   }
 }
 

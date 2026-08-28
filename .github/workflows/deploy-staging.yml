@@ -26,10 +26,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: staging-backend-deployment
-  cancel-in-progress: false
-
 env:
   AWS_REGION: ap-northeast-2
   ECR_REPOSITORY: meetple-staging-backend
@@ -67,6 +63,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging
+    concurrency:
+      group: staging-backend-deployment
+      cancel-in-progress: false
 
     permissions:
       contents: read
