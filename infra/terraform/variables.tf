@@ -349,3 +349,46 @@ variable "additional_tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "github_actions_deploy_enabled" {
+  description = "Create the GitHub OIDC provider and least-privilege role used to deploy the staging backend."
+  type        = bool
+  default     = false
+}
+
+variable "github_actions_repository" {
+  description = "GitHub repository allowed to assume the deployment role, in owner/repository format."
+  type        = string
+  default     = "taemin3/meetple-backend"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_actions_repository))
+    error_message = "github_actions_repository must use owner/repository format."
+  }
+}
+
+variable "github_actions_environment_name" {
+  description = "GitHub Environment whose workflows may assume the deployment role. Restrict it to the main branch in GitHub."
+  type        = string
+  default     = "staging"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+$", var.github_actions_environment_name))
+    error_message = "github_actions_environment_name may contain only letters, numbers, dots, underscores, and hyphens."
+  }
+}
+
+variable "github_actions_oidc_provider_arn" {
+  description = "Existing account-wide GitHub OIDC provider ARN. Leave null to let this workspace create it once per AWS account."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = (
+      var.github_actions_oidc_provider_arn == null ||
+      can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:oidc-provider/token\\.actions\\.githubusercontent\\.com$", var.github_actions_oidc_provider_arn))
+    )
+    error_message = "github_actions_oidc_provider_arn must be null or the GitHub Actions OIDC provider ARN."
+  }
+}

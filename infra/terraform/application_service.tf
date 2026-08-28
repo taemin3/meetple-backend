@@ -235,6 +235,10 @@ resource "aws_ecs_service" "backend" {
   ]
 
   lifecycle {
+    # GitHub Actions registers image-specific revisions and owns the active service revision.
+    # Terraform continues to own the baseline task definition, roles, environment, and service configuration.
+    ignore_changes = [task_definition]
+
     precondition {
       condition     = var.backend_desired_count == 0 || var.ecs_desired_capacity >= 1
       error_message = "Running the backend requires at least one ECS container instance."

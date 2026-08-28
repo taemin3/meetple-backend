@@ -45,3 +45,10 @@ db_skip_final_snapshot   = true
 additional_tags = {
   Owner = "replace-with-owner"
 }
+
+# GitHub Actions deployment is opt-in because the account-wide OIDC provider must be created only once.
+# If another Terraform state already owns the provider, pass its ARN instead of creating a duplicate.
+github_actions_deploy_enabled       = false
+github_actions_repository           = "taemin3/meetple-backend"
+github_actions_environment_name     = "staging"
+github_actions_oidc_provider_arn    = null
