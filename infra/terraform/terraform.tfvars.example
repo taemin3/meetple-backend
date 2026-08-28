@@ -33,9 +33,10 @@ image_bucket_force_destroy    = false
 kafka_cluster_id       = "4L6g3nShT-eMCtK--X86sw"
 kafka_topic_partitions = 3
 
-# Logical replication safety limit. CloudWatch warns when the oldest slot lag reaches 75% of this value.
-rds_replication_slots         = 10
-rds_max_slot_wal_keep_size_mb = 2048
+# Logical replication safety limit. Increase the alarm threshold only after the pending RDS reboot is complete.
+rds_replication_slots                       = 10
+rds_max_slot_wal_keep_size_mb               = 2048
+rds_replication_slot_lag_alarm_threshold_mb = 1536
 
 db_instance_class        = "db.t4g.micro"
 db_multi_az              = false

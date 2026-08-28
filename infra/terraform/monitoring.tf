@@ -1,8 +1,7 @@
 locals {
   monitoring_metric_namespace                    = "${title(var.project_name)}/${title(local.environment)}/Logs"
   monitoring_alarm_actions                       = [aws_sns_topic.monitoring.arn]
-  rds_replication_slot_lag_alarm_threshold_mib   = floor(var.rds_max_slot_wal_keep_size_mb * 0.75)
-  rds_replication_slot_lag_alarm_threshold_bytes = local.rds_replication_slot_lag_alarm_threshold_mib * 1024 * 1024
+  rds_replication_slot_lag_alarm_threshold_bytes = var.rds_replication_slot_lag_alarm_threshold_mb * 1024 * 1024
 
   monitoring_infrastructure_alarms = {
     backend_running_tasks = {
@@ -164,7 +163,7 @@ locals {
       }
     }
     rds_replication_slot_lag_high = {
-      description         = "RDS oldest replication slot lag reached 75 percent (${local.rds_replication_slot_lag_alarm_threshold_mib} MiB) of max_slot_wal_keep_size. Debezium must catch up before the slot becomes lost."
+      description         = "RDS oldest replication slot lag reached the configured warning threshold (${var.rds_replication_slot_lag_alarm_threshold_mb} MiB). Debezium must catch up before the slot becomes lost."
       namespace           = "AWS/RDS"
       metric_name         = "OldestReplicationSlotLag"
       statistic           = "Maximum"
@@ -402,7 +401,7 @@ resource "aws_cloudwatch_dashboard" "staging" {
           yAxis  = { left = { min = 0 } }
           annotations = {
             horizontal = [{
-              label = "Replication slot warning (${local.rds_replication_slot_lag_alarm_threshold_mib} MiB)"
+              label = "Replication slot warning (${var.rds_replication_slot_lag_alarm_threshold_mb} MiB)"
               value = local.rds_replication_slot_lag_alarm_threshold_bytes
               color = "#ff7f0e"
             }]
