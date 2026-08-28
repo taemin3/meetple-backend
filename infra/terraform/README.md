@@ -20,7 +20,7 @@ Terraform이 만들지 않는 항목:
 - 애플리케이션/Firebase secret 값
 - ECR image build와 push
 - Route 53 record와 ACM certificate 발급
-- GitHub Actions 배포
+- GitHub Environment와 repository variable
 - 실제 `terraform apply`
 
 ## 배치 구조
@@ -104,23 +104,12 @@ terraform plan -out=meetple-staging.tfplan
 
 ## 최초 배포 순서
 
-ECR repository와 사용할 image가 동시에 처음 생기므로 두 단계로 적용합니다.
+ECR repository, GitHub 배포 role, 실제 image가 동시에 처음 생기므로 다음 순서를 지킵니다. `backend_desired_count`를 올리기 전에 GitHub Actions가 실제 image revision을 ECS service에 활성화해야 합니다.
 
-1. `terraform.tfvars`에 실제 secret ARN을 넣고 `backend_image_tag="bootstrap"`, `backend_desired_count=0`으로 plan/apply합니다.
-2. 생성된 ECR에 현재 commit SHA tag로 image를 push합니다.
-3. `backend_image_tag`를 push한 tag로 바꾸고 `backend_desired_count=1`로 올려 다시 plan/apply합니다.
-
-```powershell
-$Region = "ap-northeast-2"
-$Repository = terraform output -raw ecr_repository_url
-$ImageTag = git rev-parse --short=12 HEAD
-$Registry = $Repository.Split('/')[0]
-
-aws ecr get-login-password --region $Region | docker login --username AWS --password-stdin $Registry
-docker build -t "meetple-backend:$ImageTag" ../..
-docker tag "meetple-backend:$ImageTag" "${Repository}:$ImageTag"
-docker push "${Repository}:$ImageTag"
-```
+1. `terraform.tfvars`에 실제 secret ARN과 `github_actions_deploy_enabled=true`를 넣고 `backend_image_tag="bootstrap"`, `backend_desired_count=0`으로 plan/apply합니다.
+2. Terraform output의 배포 role ARN을 GitHub `staging` Environment에 등록합니다.
+3. `Actions -> Deploy staging backend -> Run workflow`를 수동 실행합니다. workflow가 commit SHA image를 ECR에 push하고, desired count가 0인 ECS service에 실제 task definition revision을 활성화합니다.
+4. workflow가 성공한 뒤 `backend_desired_count=1`로 올려 다시 plan/apply합니다. Terraform은 활성 task definition revision을 변경하지 않으므로 ECS가 앞 단계의 실제 image로 기동됩니다.
 
 두 번째 apply가 끝나면 다음을 확인합니다.
 
@@ -131,6 +120,64 @@ curl.exe "http://$Alb/readyz"
 ```
 
 HTTPS certificate를 연결했다면 `https://`로 확인합니다. `/livez`는 프로세스 생존 여부, `/readyz`는 DB와 Redis까지 요청을 받을 준비가 됐는지를 확인합니다. ECS container health check는 `/livez`, ALB target health check는 `/readyz`를 사용합니다.
+
+## GitHub Actions staging 배포
+
+`.github/workflows/deploy-staging.yml`은 PR에서 테스트를 실행하고, 승인된 staging workflow가 다음 순서로 Spring Boot를 배포합니다.
+
+1. Java 21로 Gradle test 실행
+2. GitHub OIDC로 단기 AWS 자격 증명 발급
+3. Git commit SHA를 immutable ECR tag로 build/push
+4. 현재 ECS task definition에서 환경·secret·CPU·memory 설정을 가져와 image만 교체
+5. 새 task definition revision을 등록하고 ECS rolling deployment 대기
+6. `https://api.meetple.shop/livez`, `/readyz` smoke test
+
+Terraform은 backend task definition의 기반 설정과 ECS service 구성을 관리합니다. GitHub Actions는 image-specific task definition revision과 ECS service의 활성 revision을 관리하므로 `aws_ecs_service.backend.task_definition`은 Terraform drift 대상에서 제외합니다. CPU, memory, environment, secret 같은 기반 설정을 Terraform에서 바꿨다면 먼저 Terraform을 적용한 뒤 staging workflow를 수동 실행해 최신 기반 revision에 애플리케이션 image를 반영합니다.
+
+### 1. AWS OIDC role bootstrap
+
+staging의 로컬 `terraform.tfvars`에 다음 값을 추가합니다.
+
+```hcl
+github_actions_deploy_enabled = true
+github_actions_repository     = "taemin3/meetple-backend"
+```
+
+AWS 계정에 `token.actions.githubusercontent.com` OIDC provider가 이미 다른 Terraform state로 관리되고 있다면 중복 생성하지 않고 해당 ARN을 전달합니다.
+
+```hcl
+github_actions_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+```
+
+그다음 기존 절차대로 staging workspace에서 plan을 검토하고 한 번 적용합니다.
+
+```powershell
+terraform plan -out=meetple-staging-github-oidc.tfplan
+terraform apply meetple-staging-github-oidc.tfplan
+terraform output -raw github_actions_deploy_role_arn
+```
+
+OIDC trust는 `staging` GitHub Environment로 한정됩니다. OIDC provider는 AWS 계정 전체에서 하나만 생성해야 하므로 다른 workspace나 Terraform state에서 재사용할 때는 output ARN을 `github_actions_oidc_provider_arn`에 전달합니다.
+
+### 2. GitHub 설정
+
+GitHub repository의 `Settings -> Environments`에서 `staging` Environment를 만들고 deployment branch를 `main`으로 제한합니다. 해당 Environment variable을 추가합니다.
+
+```text
+AWS_DEPLOY_ROLE_ARN=<terraform output github_actions_deploy_role_arn>
+```
+
+최초 배포 순서의 수동 workflow와 `backend_desired_count=1` 적용을 완료한 뒤 health endpoint를 확인합니다. 검증이 끝나면 repository variable을 추가해 이후 `main` 애플리케이션 변경을 자동 배포합니다.
+
+```text
+AUTO_DEPLOY_ENABLED=true
+```
+
+배포 role에는 backend ECR push, backend ECS service update, task definition register, backend task role의 `iam:PassRole`만 허용합니다. 장기 AWS access key를 GitHub Secret에 저장하지 않습니다. 동일 commit을 재실행하면 immutable ECR tag가 이미 있는지 확인하고 기존 image를 재사용합니다.
+
+### 3. 배포 실패와 rollback
+
+GitHub Actions는 ECS service가 안정화될 때까지 대기합니다. 새 task가 container health check 또는 ALB `/readyz`를 통과하지 못하면 ECS deployment circuit breaker가 마지막 정상 revision으로 rollback하고 workflow가 실패합니다. 현재 rolling deployment는 기존 task를 유지한 채 새 task를 시작하므로 단일 EC2 자원이 부족하면 Capacity Provider가 `ecs_max_size` 범위에서 임시 EC2를 추가할 수 있습니다.
 
 ## consumer와 CDC 동작
 

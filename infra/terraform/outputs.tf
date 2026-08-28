@@ -123,3 +123,8 @@ output "backend_secret_rotation_event_rule_name" {
   description = "EventBridge rule that redeploys the backend after an application or Firebase secret changes."
   value       = aws_cloudwatch_event_rule.backend_secrets_rotated.name
 }
+
+output "github_actions_deploy_role_arn" {
+  description = "IAM role ARN to configure as the staging GitHub Environment variable AWS_DEPLOY_ROLE_ARN."
+  value       = var.github_actions_deploy_enabled ? aws_iam_role.github_actions_deploy[0].arn : null
+}

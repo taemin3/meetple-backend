@@ -20,7 +20,7 @@ ecs_desired_capacity = 1
 ecs_max_size         = 2
 
 # First apply: keep desired_count=0 and use the placeholder tag.
-# After ECR exists, push a Git-SHA tag, set it here, then apply again with desired_count=1.
+# Run the staging workflow once so it activates a Git-SHA revision, then apply desired_count=1.
 backend_image_tag          = "bootstrap"
 backend_desired_count      = 0
 kafka_consumer_concurrency = 1
@@ -45,3 +45,9 @@ db_skip_final_snapshot   = true
 additional_tags = {
   Owner = "replace-with-owner"
 }
+
+# GitHub Actions deployment is opt-in because the account-wide OIDC provider must be created only once.
+# If another Terraform state already owns the provider, pass its ARN instead of creating a duplicate.
+github_actions_deploy_enabled       = false
+github_actions_repository           = "taemin3/meetple-backend"
+github_actions_oidc_provider_arn    = null

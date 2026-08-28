@@ -114,7 +114,7 @@ variable "redis_image" {
 }
 
 variable "backend_image_tag" {
-  description = "Immutable ECR image tag for the Spring Boot task. Use a Git commit SHA, not latest."
+  description = "Baseline ECR image tag for the Terraform task definition. GitHub Actions activates an immutable Git SHA revision before tasks start."
   type        = string
   default     = "bootstrap"
 
@@ -128,7 +128,7 @@ variable "backend_image_tag" {
 }
 
 variable "backend_desired_count" {
-  description = "Desired Spring Boot task count. Keep 0 for the bootstrap apply, then set 1 after pushing the image."
+  description = "Desired Spring Boot task count. Keep 0 until the staging workflow activates a real image revision, then set 1."
   type        = number
   default     = 0
 
@@ -348,4 +348,36 @@ variable "additional_tags" {
   description = "Additional tags applied to supported AWS resources."
   type        = map(string)
   default     = {}
+}
+
+variable "github_actions_deploy_enabled" {
+  description = "Create the GitHub OIDC provider and least-privilege role used to deploy the staging backend."
+  type        = bool
+  default     = false
+}
+
+variable "github_actions_repository" {
+  description = "GitHub repository allowed to assume the deployment role, in owner/repository format."
+  type        = string
+  default     = "taemin3/meetple-backend"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_actions_repository))
+    error_message = "github_actions_repository must use owner/repository format."
+  }
+}
+
+variable "github_actions_oidc_provider_arn" {
+  description = "Existing account-wide GitHub OIDC provider ARN. Leave null to let this workspace create it once per AWS account."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = (
+      var.github_actions_oidc_provider_arn == null ||
+      can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:oidc-provider/token\\.actions\\.githubusercontent\\.com$", var.github_actions_oidc_provider_arn))
+    )
+    error_message = "github_actions_oidc_provider_arn must be null or the GitHub Actions OIDC provider ARN."
+  }
 }
