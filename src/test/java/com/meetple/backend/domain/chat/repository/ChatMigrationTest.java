@@ -78,7 +78,7 @@ class ChatMigrationTest {
 
         var result = flyway.migrate();
 
-        assertThat(result.migrationsExecuted).isEqualTo(12);
+        assertThat(result.migrationsExecuted).isEqualTo(13);
         try (var connection = DriverManager.getConnection(url, "sa", "")) {
             assertThat(tableExists(connection, "CHAT_MESSAGES")).isTrue();
             assertThat(tableExists(connection, "CHAT_READ_STATES")).isTrue();
@@ -86,6 +86,9 @@ class ChatMigrationTest {
             assertThat(tableExists(connection, "PUSH_DEVICE_TOKENS")).isTrue();
             assertThat(tableExists(connection, "PUSH_EVENT_DELIVERIES")).isTrue();
             assertThat(tableExists(connection, "CHAT_NOTIFICATION_SETTINGS")).isTrue();
+            assertThat(tableExists(connection, "DEBEZIUM_HEARTBEAT")).isTrue();
+            assertThat(singleIntValue(connection, "select count(*) from debezium_heartbeat"))
+                    .isEqualTo(1);
             assertThat(tableExists(connection, "LEGAL_DOCUMENTS")).isTrue();
             assertThat(tableExists(connection, "MEMBER_LEGAL_RECORDS")).isTrue();
             assertThat(tableExists(connection, "IMAGE_DELETION_TASKS")).isFalse();

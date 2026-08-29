@@ -57,3 +57,4 @@ github_actions_oidc_provider_arn    = null
 # After apply, confirm the subscription from the email sent by AWS SNS.
 monitoring_notification_email     = null
 monitoring_alarm_actions_enabled = true
+rds_freeable_memory_alarm_threshold_mb = 128

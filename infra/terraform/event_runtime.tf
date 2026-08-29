@@ -26,9 +26,12 @@ locals {
     "meetple.email.delivery.v1.retry-1",
     "meetple.email.delivery.v1.retry-2",
     "meetple.email.delivery.v1.dlq",
+    "__debezium-heartbeat.meetple-outbox",
+    "meetple-outbox.public.debezium_heartbeat",
   ]
 
-  kafka_email_topics = [for topic in local.kafka_topics : topic if startswith(topic, "meetple.email.delivery.v1")]
+  kafka_email_topics     = [for topic in local.kafka_topics : topic if startswith(topic, "meetple.email.delivery.v1")]
+  kafka_heartbeat_topics = [for topic in local.kafka_topics : topic if startswith(topic, "__debezium-heartbeat.") || endswith(topic, ".debezium_heartbeat")]
   debezium_connector_config = jsondecode(
     file("${path.module}/../../docker/debezium/connectors/meetple-outbox-connector.json")
   ).config
@@ -202,21 +205,25 @@ resource "aws_ecs_task_definition" "event_runtime" {
       essential         = false
       cpu               = 64
       memoryReservation = 64
-      memory            = 128
+      memory            = 512
       entryPoint        = ["/bin/bash", "-ec"]
       command = [<<-SCRIPT
+        existing_topics="$(/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list)"
         for topic in $KAFKA_TOPICS; do
-          /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --create --if-not-exists --topic "$topic" --partitions "$KAFKA_TOPIC_PARTITIONS" --replication-factor 1
+          if ! printf '%s\n' "$existing_topics" | grep -Fxq "$topic"; then
+            /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --create --if-not-exists --topic "$topic" --partitions "$KAFKA_TOPIC_PARTITIONS" --replication-factor 1
+          fi
         done
-        for topic in $KAFKA_EMAIL_TOPICS; do
+        for topic in $KAFKA_SHORT_RETENTION_TOPICS; do
           /opt/kafka/bin/kafka-configs.sh --bootstrap-server localhost:19092 --entity-type topics --entity-name "$topic" --alter --add-config retention.ms=86400000
         done
       SCRIPT
       ]
       environment = [
         { name = "KAFKA_TOPICS", value = join(" ", local.kafka_topics) },
-        { name = "KAFKA_EMAIL_TOPICS", value = join(" ", local.kafka_email_topics) },
+        { name = "KAFKA_SHORT_RETENTION_TOPICS", value = join(" ", concat(local.kafka_email_topics, local.kafka_heartbeat_topics)) },
         { name = "KAFKA_TOPIC_PARTITIONS", value = tostring(var.kafka_topic_partitions) },
+        { name = "KAFKA_HEAP_OPTS", value = "-Xms64m -Xmx256m" },
       ]
       dependsOn = [{
         containerName = "kafka"
@@ -328,10 +335,19 @@ resource "aws_ecs_task_definition" "event_runtime" {
 
         apply_connector_config
 
+        consecutive_restarting_checks=0
+
         while true; do
           status="$(curl --silent --show-error http://localhost:8083/connectors/meetple-outbox-connector/status || true)"
           running_count="$(printf '%s' "$status" | grep -Eo '"state"[[:space:]]*:[[:space:]]*"RUNNING"' | wc -l | tr -d ' ')"
           failed_count="$(printf '%s' "$status" | grep -Eo '"state"[[:space:]]*:[[:space:]]*"FAILED"' | wc -l | tr -d ' ')"
+          restarting_count="$(printf '%s' "$status" | grep -Eo '"state"[[:space:]]*:[[:space:]]*"RESTARTING"' | wc -l | tr -d ' ')"
+
+          if [ "$restarting_count" -gt 0 ]; then
+            consecutive_restarting_checks=$((consecutive_restarting_checks + 1))
+          else
+            consecutive_restarting_checks=0
+          fi
 
           if printf '%s' "$status" | grep -Eq '"error_code"[[:space:]]*:[[:space:]]*404'; then
             echo "Debezium connector is missing; applying the connector configuration"
@@ -342,6 +358,10 @@ resource "aws_ecs_task_definition" "event_runtime" {
               'http://localhost:8083/connectors/meetple-outbox-connector/restart?includeTasks=true&onlyFailed=true' || true
           elif [ "$running_count" -lt 2 ]; then
             echo "Debezium connector is still starting"
+          fi
+
+          if [ "$consecutive_restarting_checks" -ge 10 ]; then
+            echo "Debezium connector task is stuck restarting"
           fi
 
           sleep 30
