@@ -2,6 +2,7 @@ locals {
   monitoring_metric_namespace                    = "${title(var.project_name)}/${title(local.environment)}/Logs"
   monitoring_alarm_actions                       = [aws_sns_topic.monitoring.arn]
   rds_replication_slot_lag_alarm_threshold_bytes = var.rds_replication_slot_lag_alarm_threshold_mb * 1024 * 1024
+  rds_freeable_memory_alarm_threshold_bytes      = var.rds_freeable_memory_alarm_threshold_mb * 1024 * 1024
 
   monitoring_infrastructure_alarms = {
     backend_running_tasks = {
@@ -165,7 +166,7 @@ locals {
     rds_replication_slot_lag_high = {
       description         = "RDS oldest replication slot lag reached the configured warning threshold (${var.rds_replication_slot_lag_alarm_threshold_mb} MiB). Debezium must catch up before the slot becomes lost."
       namespace           = "AWS/RDS"
-      metric_name         = "OldestReplicationSlotLag"
+      metric_name         = "OldestLogicalReplicationSlotLag"
       statistic           = "Maximum"
       comparison_operator = "GreaterThanOrEqualToThreshold"
       threshold           = local.rds_replication_slot_lag_alarm_threshold_bytes
@@ -193,12 +194,12 @@ locals {
       }
     }
     rds_freeable_memory_low = {
-      description         = "RDS freeable memory is below 256 MiB."
+      description         = "RDS freeable memory is below the configured baseline threshold (${var.rds_freeable_memory_alarm_threshold_mb} MiB)."
       namespace           = "AWS/RDS"
       metric_name         = "FreeableMemory"
       statistic           = "Minimum"
       comparison_operator = "LessThanThreshold"
-      threshold           = 268435456
+      threshold           = local.rds_freeable_memory_alarm_threshold_bytes
       period              = 300
       evaluation_periods  = 2
       datapoints_to_alarm = 2
@@ -227,6 +228,18 @@ locals {
       log_group_name = aws_cloudwatch_log_group.event_runtime.name
       metric_name    = "DebeziumFailedCount"
       pattern        = "\"Debezium connector has failed tasks\""
+    }
+    debezium_restarting = {
+      description    = "The Debezium source task remained in RESTARTING for at least five minutes."
+      log_group_name = aws_cloudwatch_log_group.event_runtime.name
+      metric_name    = "DebeziumRestartingCount"
+      pattern        = "\"Debezium connector task is stuck restarting\""
+    }
+    debezium_invalid_slot = {
+      description    = "Debezium could not obtain a valid PostgreSQL replication slot."
+      log_group_name = aws_cloudwatch_log_group.event_runtime.name
+      metric_name    = "DebeziumInvalidSlotCount"
+      pattern        = "\"Unable to obtain valid replication slot\""
     }
   }
 }
@@ -382,6 +395,7 @@ resource "aws_cloudwatch_dashboard" "staging" {
             ["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", aws_db_instance.postgres.identifier, { label = "CPU %", stat = "Average" }],
             [".", "DatabaseConnections", ".", ".", { label = "Connections", stat = "Average" }],
             [".", "FreeableMemory", ".", ".", { label = "Freeable memory", stat = "Minimum", yAxis = "right" }],
+            [".", "SwapUsage", ".", ".", { label = "Swap usage", stat = "Maximum", yAxis = "right" }],
             [".", "FreeStorageSpace", ".", ".", { label = "Free storage", stat = "Minimum", yAxis = "right" }],
           ]
         }
@@ -407,7 +421,7 @@ resource "aws_cloudwatch_dashboard" "staging" {
             }]
           }
           metrics = [
-            ["AWS/RDS", "OldestReplicationSlotLag", "DBInstanceIdentifier", aws_db_instance.postgres.identifier, { label = "Oldest slot lag" }],
+            ["AWS/RDS", "OldestLogicalReplicationSlotLag", "DBInstanceIdentifier", aws_db_instance.postgres.identifier, { label = "Oldest logical slot lag" }],
             [".", "TransactionLogsDiskUsage", ".", ".", { label = "Transaction logs disk usage" }],
           ]
         }
@@ -428,6 +442,8 @@ resource "aws_cloudwatch_dashboard" "staging" {
             [local.monitoring_metric_namespace, "BackendErrorCount", { label = "Backend ERROR" }],
             [".", "ConsumerDlqCount", { label = "Consumer DLQ" }],
             [".", "DebeziumFailedCount", { label = "Debezium failed" }],
+            [".", "DebeziumRestartingCount", { label = "Debezium restarting" }],
+            [".", "DebeziumInvalidSlotCount", { label = "Debezium invalid slot" }],
           ]
         }
       },

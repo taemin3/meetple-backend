@@ -264,6 +264,20 @@ variable "rds_replication_slot_lag_alarm_threshold_mb" {
   }
 }
 
+variable "rds_freeable_memory_alarm_threshold_mb" {
+  description = "CloudWatch warning threshold for RDS freeable memory in MiB. Set from the observed baseline for the selected DB instance class."
+  type        = number
+  default     = 128
+
+  validation {
+    condition = (
+      var.rds_freeable_memory_alarm_threshold_mb >= 64 &&
+      floor(var.rds_freeable_memory_alarm_threshold_mb) == var.rds_freeable_memory_alarm_threshold_mb
+    )
+    error_message = "rds_freeable_memory_alarm_threshold_mb must be an integer of at least 64 MiB."
+  }
+}
+
 variable "ecs_min_size" {
   description = "Minimum number of ECS container instances."
   type        = number

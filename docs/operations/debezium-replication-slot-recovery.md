@@ -314,5 +314,5 @@ aws ec2 revoke-security-group-ingress `
 
 - `meetple-staging-rds-replication-slot-lag-high`가 `OK`인지 확인합니다.
 - `meetple-staging-debezium-failed`가 반복되지 않는지 확인합니다.
-- Dashboard의 `OldestReplicationSlotLag`와 `TransactionLogsDiskUsage` 추이를 확인합니다.
+- Dashboard의 `OldestLogicalReplicationSlotLag`와 `TransactionLogsDiskUsage` 추이를 확인합니다.
 - WAL 제한을 늘리는 것만으로 장애 원인을 해결하지 않습니다. Debezium task 실패, EC2 자원 부족, RDS 연결 문제를 함께 확인합니다.
