@@ -164,9 +164,10 @@ locals {
       }
     }
     rds_replication_slot_lag_high = {
-      description         = "RDS oldest replication slot lag reached the configured warning threshold (${var.rds_replication_slot_lag_alarm_threshold_mb} MiB). Debezium must catch up before the slot becomes lost."
-      namespace           = "AWS/RDS"
-      metric_name         = "OldestLogicalReplicationSlotLag"
+      description = "RDS oldest replication slot lag reached the configured warning threshold (${var.rds_replication_slot_lag_alarm_threshold_mb} MiB). Debezium must catch up before the slot becomes lost."
+      namespace   = "AWS/RDS"
+      # OldestLogicalReplicationSlotLag reports -1 for this Debezium slot, while this metric matches pg_replication_slots lag.
+      metric_name         = "OldestReplicationSlotLag"
       statistic           = "Maximum"
       comparison_operator = "GreaterThanOrEqualToThreshold"
       threshold           = local.rds_replication_slot_lag_alarm_threshold_bytes
@@ -421,7 +422,8 @@ resource "aws_cloudwatch_dashboard" "staging" {
             }]
           }
           metrics = [
-            ["AWS/RDS", "OldestLogicalReplicationSlotLag", "DBInstanceIdentifier", aws_db_instance.postgres.identifier, { label = "Oldest logical slot lag" }],
+            ["AWS/RDS", "OldestReplicationSlotLag", "DBInstanceIdentifier", aws_db_instance.postgres.identifier, { label = "Oldest slot lag" }],
+            [".", "ReplicationSlotDiskUsage", ".", ".", { label = "Replication slot disk usage" }],
             [".", "TransactionLogsDiskUsage", ".", ".", { label = "Transaction logs disk usage" }],
           ]
         }
