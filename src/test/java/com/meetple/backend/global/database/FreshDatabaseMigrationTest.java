@@ -37,7 +37,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(13);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(14);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
@@ -56,14 +56,16 @@ class FreshDatabaseMigrationTest {
                     "push_event_deliveries",
                     "chat_notification_settings",
                     "legal_documents",
-                    "member_legal_records"
+                    "member_legal_records",
+                    "debezium_heartbeat"
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
-                    "7", "8", "9", "10", "11", "12"
+                    "7", "8", "9", "10", "11", "12", "13"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder("운동", "스터디", "취미");
             assertThat(rowCount(connection, "legal_documents")).isEqualTo(3);
+            assertThat(rowCount(connection, "debezium_heartbeat")).isEqualTo(1);
 
             assertThat(columnType(connection, "outbox_events", "payload")).isEqualTo("jsonb");
             assertThat(columnType(connection, "outbox_events", "id")).isEqualTo("uuid");
@@ -140,7 +142,7 @@ class FreshDatabaseMigrationTest {
     }
 
     private int rowCount(Connection connection, String tableName) throws SQLException {
-        if (!Set.of("legal_documents").contains(tableName)) {
+        if (!Set.of("legal_documents", "debezium_heartbeat").contains(tableName)) {
             throw new IllegalArgumentException("Unsupported table: " + tableName);
         }
         try (var statement = connection.createStatement();
