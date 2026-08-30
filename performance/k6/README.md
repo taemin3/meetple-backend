@@ -184,8 +184,21 @@ $end = (Get-Date).ToUniversalTime()
 - ECS cluster MemoryUtilized/MemoryReserved
 - RDS CPU, CPU credit, Connections, FreeableMemory, Read/WriteLatency, FreeStorage
 - RDS replication slot lag, slot disk usage, transaction log disk usage
+- Tomcat busy/current/max threads
+- Hikari active/idle/pending/max connections
+- JVM process CPU ratio and GC pause average/max
+- Redis GET/MGET/SET/DEL command latency average/max
+- 성능 테스트 대상 API의 서버 처리시간 average/max와 요청 수
 
 EC2 OS 메모리는 CloudWatch Agent가 설치되어 있지 않아 현재 직접 수집할 수 없습니다. ECS cluster 메모리를 대용 지표로 저장합니다.
+
+애플리케이션 지표는 `Meetple/Staging/Application` namespace에 60초 간격으로 전송됩니다. `/actuator/metrics`는 외부에 공개하지 않습니다. CloudWatch 대시보드의 `Backend Tomcat threads`, `Backend Hikari connections`, `Backend JVM CPU and GC pause`, `Backend Redis command latency`, `Performance-test API server latency` 위젯에서 확인합니다. 이 지표는 Terraform의 Task Role 정책과 새 backend task definition을 적용한 뒤부터 생성됩니다.
+
+새 custom metric이 처음 만들어진 직후에는 CloudWatch `ListMetrics` 검색에 나타나기까지 최대 15분 정도 걸릴 수 있습니다. 첫 배포 검증에서 대시보드나 `cloudwatch.json`이 잠시 비어 있으면 15분 뒤 다시 확인합니다. 한 번 검색된 metric의 이후 datapoint는 통상적인 수집 지연만 기다리면 됩니다.
+
+CloudWatch의 API/Redis 타이머는 60초 구간의 average/max를 병목 상관분석에 사용합니다. 전체 p50/p95/p99와 오류율의 기준값은 k6 결과를 사용합니다. 비용과 metric cardinality를 제한하기 위해 HTTP는 네 개 성능 테스트 URI만 수집하고 status/method/exception 차원은 합치며, Redis는 GET/MGET/SET/DEL의 completion latency만 수집합니다.
+
+배포할 때는 먼저 `infra/terraform`에서 `terraform plan`을 검토하고 `terraform apply`로 Task Role, 환경변수, 대시보드를 반영한 다음, GitHub Actions의 `Deploy staging backend`를 `workflow_dispatch`로 실행합니다. 서비스는 Terraform task definition 변경을 직접 활성화하지 않으므로 이 수동 배포 단계가 새 애플리케이션 이미지와 metrics-enabled task definition을 함께 활성화합니다.
 
 ## Load 실행 순서
 

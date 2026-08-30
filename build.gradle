@@ -27,12 +27,13 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-kafka'
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'io.micrometer:micrometer-registry-cloudwatch2'
 	implementation 'org.springframework.security:spring-security-crypto'
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
 	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
 	implementation 'com.google.firebase:firebase-admin:9.10.0'
-	implementation platform('software.amazon.awssdk:bom:2.29.52')
+	implementation platform('software.amazon.awssdk:bom:2.37.5')
 	implementation 'software.amazon.awssdk:auth'
 	implementation 'software.amazon.awssdk:cloudfront'
 	implementation 'software.amazon.awssdk:s3'

@@ -36,6 +36,9 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+  tomcat:
+    mbeanregistry:
+      enabled: ${TOMCAT_MBEAN_REGISTRY_ENABLED:false}
 
 management:
   endpoints:
@@ -53,6 +56,14 @@ management:
           include: "livenessState"
         readiness:
           include: "readinessState,db,redis"
+
+meetple:
+  observability:
+    cloudwatch:
+      enabled: ${MEETPLE_CLOUDWATCH_METRICS_ENABLED:false}
+      namespace: ${MEETPLE_CLOUDWATCH_METRICS_NAMESPACE:Meetple/Staging/Application}
+      step: ${MEETPLE_CLOUDWATCH_METRICS_STEP:60s}
+      environment: ${MEETPLE_CLOUDWATCH_METRICS_ENVIRONMENT:staging}
 
 push:
   kafka:

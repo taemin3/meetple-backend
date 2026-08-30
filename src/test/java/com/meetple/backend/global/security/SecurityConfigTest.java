@@ -97,6 +97,14 @@ class SecurityConfigTest {
     }
 
     @Test
+    void metricsEndpointIsNotPublic() throws Exception {
+        mockMvc.perform(get("/actuator/metrics"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.UNAUTHORIZED.getCode()));
+    }
+
+    @Test
     void protectedEndpointWithoutTokenReturnsUnauthorizedApiResponse() throws Exception {
         mockMvc.perform(get("/api/v1/users/me"))
                 .andExpect(status().isUnauthorized())
