@@ -43,6 +43,12 @@ docs/work-logs/*.md
 !docs/work-logs/README.md
 !docs/work-logs/TEMPLATE.md
 
+### k6 performance test results ###
+performance/k6/results/
+performance/k6/data/images/*
+!performance/k6/data/images/.gitkeep
+performance/k6/data/manifests/
+
 ### Firebase credentials ###
 *firebase-adminsdk*.json
 service-account*.json
