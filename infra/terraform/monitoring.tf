@@ -1,5 +1,6 @@
 locals {
   monitoring_metric_namespace                    = "${title(var.project_name)}/${title(local.environment)}/Logs"
+  application_metric_namespace                   = "${title(var.project_name)}/${title(local.environment)}/Application"
   monitoring_alarm_actions                       = [aws_sns_topic.monitoring.arn]
   rds_replication_slot_lag_alarm_threshold_bytes = var.rds_replication_slot_lag_alarm_threshold_mb * 1024 * 1024
   rds_freeable_memory_alarm_threshold_bytes      = var.rds_freeable_memory_alarm_threshold_mb * 1024 * 1024
@@ -446,6 +447,95 @@ resource "aws_cloudwatch_dashboard" "staging" {
             [".", "DebeziumFailedCount", { label = "Debezium failed" }],
             [".", "DebeziumRestartingCount", { label = "Debezium restarting" }],
             [".", "DebeziumInvalidSlotCount", { label = "Debezium invalid slot" }],
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 18
+        width  = 12
+        height = 6
+        properties = {
+          title  = "Backend Tomcat threads"
+          view   = "timeSeries"
+          region = var.aws_region
+          period = 60
+          metrics = [
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"tomcat.threads.busy.value\"', 'Maximum', 60)", id = "tomcat_busy", label = "Busy threads" }],
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"tomcat.threads.current.value\"', 'Maximum', 60)", id = "tomcat_current", label = "Current threads" }],
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"tomcat.threads.config.max.value\"', 'Maximum', 60)", id = "tomcat_max", label = "Configured max" }],
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 18
+        width  = 12
+        height = 6
+        properties = {
+          title  = "Backend Hikari connections"
+          view   = "timeSeries"
+          region = var.aws_region
+          period = 60
+          metrics = [
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"hikaricp.connections.active.value\"', 'Maximum', 60)", id = "hikari_active", label = "Active" }],
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"hikaricp.connections.idle.value\"', 'Minimum', 60)", id = "hikari_idle", label = "Idle" }],
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"hikaricp.connections.pending.value\"', 'Maximum', 60)", id = "hikari_pending", label = "Pending" }],
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"hikaricp.connections.max.value\"', 'Maximum', 60)", id = "hikari_max", label = "Pool max" }],
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 24
+        width  = 12
+        height = 6
+        properties = {
+          title  = "Backend JVM CPU and GC pause"
+          view   = "timeSeries"
+          region = var.aws_region
+          period = 60
+          metrics = [
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"process.cpu.usage.value\"', 'Average', 60)", id = "process_cpu", label = "Process CPU ratio" }],
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"jvm.gc.pause.avg\"', 'Average', 60)", id = "gc_pause_avg", label = "GC pause avg (ms)", yAxis = "right" }],
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"jvm.gc.pause.max\"', 'Maximum', 60)", id = "gc_pause_max", label = "GC pause max (ms)", yAxis = "right" }],
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 24
+        width  = 12
+        height = 6
+        properties = {
+          title  = "Backend Redis command latency"
+          view   = "timeSeries"
+          region = var.aws_region
+          period = 60
+          metrics = [
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"lettuce.command.completion.avg\"', 'Average', 60)", id = "redis_completion_avg", label = "avg $${PROP('Dim.command')} (ms)" }],
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"lettuce.command.completion.max\"', 'Maximum', 60)", id = "redis_completion_max", label = "max $${PROP('Dim.command')} (ms)" }],
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 30
+        width  = 24
+        height = 7
+        properties = {
+          title  = "Performance-test API server latency"
+          view   = "timeSeries"
+          region = var.aws_region
+          period = 60
+          metrics = [
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"http.server.requests.avg\"', 'Average', 60)", id = "http_avg", label = "avg $${PROP('Dim.uri')} (ms)" }],
+            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"http.server.requests.max\"', 'Maximum', 60)", id = "http_max", label = "max $${PROP('Dim.uri')} (ms)" }],
           ]
         }
       },

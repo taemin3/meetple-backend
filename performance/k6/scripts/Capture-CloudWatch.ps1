@@ -16,7 +16,9 @@ param(
     [string] $EventRuntimeServiceName = 'meetple-staging-event-runtime',
     [string] $LoadBalancerName = 'meetple-staging-alb',
     [string] $TargetGroupName = 'meetple-staging-app',
-    [string] $DbInstanceIdentifier = 'meetple-staging-postgres'
+    [string] $DbInstanceIdentifier = 'meetple-staging-postgres',
+    [string] $ApplicationMetricNamespace = 'Meetple/Staging/Application',
+    [string] $ApplicationEnvironment = 'staging'
 )
 
 Set-StrictMode -Version Latest
@@ -69,6 +71,40 @@ function Get-CloudWatchSeries {
         statistic = if ($ExtendedStatistics.Count -gt 0) { $ExtendedStatistics } else { $Statistic }
         dimensions = $Dimensions
         datapoints = @($result.Datapoints | Sort-Object Timestamp)
+    }
+}
+
+function Get-ApplicationMetricSeries {
+    param(
+        [Parameter(Mandatory = $true)][string] $Name,
+        [Parameter(Mandatory = $true)][string] $MetricName,
+        [string] $Statistic = 'Average'
+    )
+
+    $listedMetrics = Invoke-AwsJson -Arguments @(
+        'cloudwatch', 'list-metrics',
+        '--namespace', $ApplicationMetricNamespace,
+        '--metric-name', $MetricName,
+        '--profile', $AwsProfile,
+        '--region', $AwsRegion,
+        '--output', 'json'
+    )
+
+    foreach ($metric in @($listedMetrics.Metrics)) {
+        $dimensions = @{}
+        foreach ($dimension in @($metric.Dimensions)) {
+            $dimensions[$dimension.Name] = $dimension.Value
+        }
+        if ($dimensions['service'] -ne 'backend' -or $dimensions['environment'] -ne $ApplicationEnvironment) {
+            continue
+        }
+
+        Get-CloudWatchSeries `
+            -Name $Name `
+            -Namespace $ApplicationMetricNamespace `
+            -MetricName $MetricName `
+            -Dimensions $dimensions `
+            -Statistic $Statistic
     }
 }
 
@@ -131,6 +167,21 @@ $metrics = @(
     Get-CloudWatchSeries -Name 'rds_oldest_slot_lag' -Namespace 'AWS/RDS' -MetricName 'OldestReplicationSlotLag' -Dimensions $rdsDimensions -Statistic 'Maximum'
     Get-CloudWatchSeries -Name 'rds_replication_slot_disk_usage' -Namespace 'AWS/RDS' -MetricName 'ReplicationSlotDiskUsage' -Dimensions $rdsDimensions -Statistic 'Maximum'
     Get-CloudWatchSeries -Name 'rds_transaction_logs_disk_usage' -Namespace 'AWS/RDS' -MetricName 'TransactionLogsDiskUsage' -Dimensions $rdsDimensions -Statistic 'Maximum'
+    Get-ApplicationMetricSeries -Name 'tomcat_busy_threads' -MetricName 'tomcat.threads.busy.value' -Statistic 'Maximum'
+    Get-ApplicationMetricSeries -Name 'tomcat_current_threads' -MetricName 'tomcat.threads.current.value' -Statistic 'Maximum'
+    Get-ApplicationMetricSeries -Name 'tomcat_max_threads' -MetricName 'tomcat.threads.config.max.value' -Statistic 'Maximum'
+    Get-ApplicationMetricSeries -Name 'hikari_active_connections' -MetricName 'hikaricp.connections.active.value' -Statistic 'Maximum'
+    Get-ApplicationMetricSeries -Name 'hikari_idle_connections' -MetricName 'hikaricp.connections.idle.value' -Statistic 'Minimum'
+    Get-ApplicationMetricSeries -Name 'hikari_pending_connections' -MetricName 'hikaricp.connections.pending.value' -Statistic 'Maximum'
+    Get-ApplicationMetricSeries -Name 'hikari_max_connections' -MetricName 'hikaricp.connections.max.value' -Statistic 'Maximum'
+    Get-ApplicationMetricSeries -Name 'process_cpu_ratio' -MetricName 'process.cpu.usage.value' -Statistic 'Average'
+    Get-ApplicationMetricSeries -Name 'jvm_gc_pause_average_ms' -MetricName 'jvm.gc.pause.avg' -Statistic 'Average'
+    Get-ApplicationMetricSeries -Name 'jvm_gc_pause_max_ms' -MetricName 'jvm.gc.pause.max' -Statistic 'Maximum'
+    Get-ApplicationMetricSeries -Name 'redis_command_average_ms' -MetricName 'lettuce.command.completion.avg' -Statistic 'Average'
+    Get-ApplicationMetricSeries -Name 'redis_command_max_ms' -MetricName 'lettuce.command.completion.max' -Statistic 'Maximum'
+    Get-ApplicationMetricSeries -Name 'api_server_average_ms' -MetricName 'http.server.requests.avg' -Statistic 'Average'
+    Get-ApplicationMetricSeries -Name 'api_server_max_ms' -MetricName 'http.server.requests.max' -Statistic 'Maximum'
+    Get-ApplicationMetricSeries -Name 'api_server_request_count' -MetricName 'http.server.requests.count' -Statistic 'Sum'
 )
 
 $document = [ordered]@{
@@ -141,7 +192,8 @@ $document = [ordered]@{
     instanceId = $instanceId
     notes = @(
         'EC2 OS memory is not available because CloudWatch Agent is not installed.',
-        'ECS cluster MemoryUtilized and MemoryReserved are included as the current memory proxy.'
+        'ECS cluster MemoryUtilized and MemoryReserved are included as the current memory proxy.',
+        'Application metrics appear only after the metrics-enabled backend task and IAM policy are deployed.'
     )
     metrics = $metrics
 }
