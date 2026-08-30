@@ -13,7 +13,6 @@ import java.util.Arrays;
 import java.util.List;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
@@ -67,18 +66,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         try {
-            Authentication authentication = jwtTokenProvider.getAuthentication(token);
+            AuthenticatedAccessToken authenticatedToken = jwtTokenProvider.authenticateAccessToken(token);
             if (accessTokenBlacklistRepository.exists(token)) {
                 throw new IllegalArgumentException("Blacklisted access token.");
             }
-            JwtTokenSession tokenSession = jwtTokenProvider.getAccessTokenSession(token);
+            JwtTokenSession tokenSession = authenticatedToken.session();
             if (!refreshTokenRepository.existsByMemberIdAndSessionId(
                     tokenSession.memberId(),
                     tokenSession.sessionId()
             )) {
                 throw new IllegalArgumentException("Inactive access token session.");
             }
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+            SecurityContextHolder.getContext().setAuthentication(authenticatedToken.authentication());
         } catch (JwtException | IllegalArgumentException e) {
             SecurityContextHolder.clearContext();
             request.setAttribute(JwtAuthenticationEntryPoint.ERROR_STATUS_ATTRIBUTE, ErrorStatus.INVALID_TOKEN);

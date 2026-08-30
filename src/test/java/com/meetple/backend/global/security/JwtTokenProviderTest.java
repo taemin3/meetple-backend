@@ -25,10 +25,11 @@ class JwtTokenProviderTest {
         ReflectionTestUtils.setField(member, "id", 1L);
 
         String accessToken = jwtTokenProvider.createAccessToken(member, "session-id");
-        Authentication authentication = jwtTokenProvider.getAuthentication(accessToken);
+        AuthenticatedAccessToken authenticatedToken = jwtTokenProvider.authenticateAccessToken(accessToken);
+        Authentication authentication = authenticatedToken.authentication();
 
         assertThat(jwtTokenProvider.getAccessTokenMemberId(accessToken)).isEqualTo(1L);
-        assertThat(jwtTokenProvider.getAccessTokenSession(accessToken))
+        assertThat(authenticatedToken.session())
                 .isEqualTo(new JwtTokenSession(1L, "session-id"));
         assertThat(jwtTokenProvider.getAccessTokenRemainingExpiration(accessToken))
                 .isGreaterThan(Duration.ZERO);

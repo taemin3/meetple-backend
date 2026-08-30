@@ -14,6 +14,7 @@ import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
 import com.meetple.backend.domain.member.entity.MemberRole;
 import com.meetple.backend.global.exception.ForbiddenException;
+import com.meetple.backend.global.security.AuthenticatedAccessToken;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
@@ -65,9 +66,8 @@ class ChatStompChannelInterceptorTest {
     @Test
     void connectAuthenticatesAccessTokenAndStoresSessionToken() {
         Authentication authentication = authentication(1L);
-        given(jwtTokenProvider.getAuthentication(ACCESS_TOKEN)).willReturn(authentication);
-        given(jwtTokenProvider.getAccessTokenSession(ACCESS_TOKEN))
-                .willReturn(new JwtTokenSession(1L, "session-1"));
+        given(jwtTokenProvider.authenticateAccessToken(ACCESS_TOKEN))
+                .willReturn(authenticatedAccessToken(authentication));
         given(refreshTokenRepository.existsByMemberIdAndSessionId(1L, "session-1"))
                 .willReturn(true);
         StompHeaderAccessor accessor = accessor(StompCommand.CONNECT, null, null);
@@ -90,6 +90,8 @@ class ChatStompChannelInterceptorTest {
         );
         inOrder.verify(refreshTokenRepository)
                 .existsByMemberIdAndSessionId(1L, "session-1");
+        verify(jwtTokenProvider, never()).getAuthentication(ACCESS_TOKEN);
+        verify(jwtTokenProvider, never()).getAccessTokenSession(ACCESS_TOKEN);
     }
 
     @Test
@@ -104,9 +106,8 @@ class ChatStompChannelInterceptorTest {
     @Test
     void stompCommandAuthenticatesAccessTokenAndStoresSessionToken() {
         Authentication authentication = authentication(1L);
-        given(jwtTokenProvider.getAuthentication(ACCESS_TOKEN)).willReturn(authentication);
-        given(jwtTokenProvider.getAccessTokenSession(ACCESS_TOKEN))
-                .willReturn(new JwtTokenSession(1L, "session-1"));
+        given(jwtTokenProvider.authenticateAccessToken(ACCESS_TOKEN))
+                .willReturn(authenticatedAccessToken(authentication));
         given(refreshTokenRepository.existsByMemberIdAndSessionId(1L, "session-1"))
                 .willReturn(true);
         StompHeaderAccessor accessor = accessor(StompCommand.STOMP, null, null);
@@ -123,9 +124,8 @@ class ChatStompChannelInterceptorTest {
     @Test
     void connectRemovesPendingAuthenticationWhenTokenSessionIsInvalid() {
         Authentication authentication = authentication(1L);
-        given(jwtTokenProvider.getAuthentication(ACCESS_TOKEN)).willReturn(authentication);
-        given(jwtTokenProvider.getAccessTokenSession(ACCESS_TOKEN))
-                .willReturn(new JwtTokenSession(1L, "session-1"));
+        given(jwtTokenProvider.authenticateAccessToken(ACCESS_TOKEN))
+                .willReturn(authenticatedAccessToken(authentication));
         StompHeaderAccessor accessor = accessor(StompCommand.CONNECT, null, null);
         accessor.setNativeHeader("Authorization", "Bearer " + ACCESS_TOKEN);
 
@@ -268,7 +268,8 @@ class ChatStompChannelInterceptorTest {
 
     private void connectSession() {
         Authentication authentication = authentication(1L);
-        given(jwtTokenProvider.getAuthentication(ACCESS_TOKEN)).willReturn(authentication);
+        given(jwtTokenProvider.authenticateAccessToken(ACCESS_TOKEN))
+                .willReturn(authenticatedAccessToken(authentication));
         stubActiveSession();
         StompHeaderAccessor accessor = accessor(StompCommand.CONNECT, null, null);
         accessor.setNativeHeader("Authorization", "Bearer " + ACCESS_TOKEN);
@@ -281,6 +282,13 @@ class ChatStompChannelInterceptorTest {
                                 ACCESS_TOKEN
                         )
                 ));
+    }
+
+    private AuthenticatedAccessToken authenticatedAccessToken(Authentication authentication) {
+        return new AuthenticatedAccessToken(
+                authentication,
+                new JwtTokenSession(1L, "session-1")
+        );
     }
 
     private Authentication authentication(Long memberId) {
