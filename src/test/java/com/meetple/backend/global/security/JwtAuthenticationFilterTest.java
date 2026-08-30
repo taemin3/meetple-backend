@@ -1,5 +1,6 @@
 package com.meetple.backend.global.security;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -11,6 +12,7 @@ import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
@@ -21,6 +23,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @ExtendWith(MockitoExtension.class)
 class JwtAuthenticationFilterTest {
@@ -43,12 +46,40 @@ class JwtAuthenticationFilterTest {
     @Mock
     private Authentication authentication;
 
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void activeSessionUsesSingleParsedTokenAndContinuesFilterChain() throws Exception {
+        JwtAuthenticationFilter filter = createFilter();
+        MockHttpServletRequest request = protectedRequest("access-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        given(jwtTokenProvider.authenticateAccessToken("access-token"))
+                .willReturn(new AuthenticatedAccessToken(
+                        authentication,
+                        new JwtTokenSession(1L, "session-id")
+                ));
+        given(accessTokenBlacklistRepository.exists("access-token")).willReturn(false);
+        given(refreshTokenRepository.existsByMemberIdAndSessionId(1L, "session-id")).willReturn(true);
+
+        filter.doFilter(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isSameAs(authentication);
+        verify(jwtTokenProvider).authenticateAccessToken("access-token");
+        verify(jwtTokenProvider, never()).getAuthentication(any());
+        verify(jwtTokenProvider, never()).getAccessTokenSession(any());
+        verify(filterChain).doFilter(request, response);
+    }
+
     @Test
     void invalidTokenDoesNotHitBlacklistRepository() throws Exception {
         JwtAuthenticationFilter filter = createFilter();
         MockHttpServletRequest request = protectedRequest("invalid-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
-        given(jwtTokenProvider.getAuthentication("invalid-token")).willThrow(new JwtException("invalid"));
+        given(jwtTokenProvider.authenticateAccessToken("invalid-token"))
+                .willThrow(new JwtException("invalid"));
 
         filter.doFilter(request, response, filterChain);
 
@@ -67,13 +98,17 @@ class JwtAuthenticationFilterTest {
         JwtAuthenticationFilter filter = createFilter();
         MockHttpServletRequest request = protectedRequest("access-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
-        given(jwtTokenProvider.getAuthentication("access-token")).willReturn(authentication);
+        given(jwtTokenProvider.authenticateAccessToken("access-token"))
+                .willReturn(new AuthenticatedAccessToken(
+                        authentication,
+                        new JwtTokenSession(1L, "session-id")
+                ));
         given(accessTokenBlacklistRepository.exists("access-token")).willReturn(true);
 
         filter.doFilter(request, response, filterChain);
 
         InOrder inOrder = inOrder(jwtTokenProvider, accessTokenBlacklistRepository);
-        inOrder.verify(jwtTokenProvider).getAuthentication("access-token");
+        inOrder.verify(jwtTokenProvider).authenticateAccessToken("access-token");
         inOrder.verify(accessTokenBlacklistRepository).exists("access-token");
         verify(refreshTokenRepository, never()).existsByMemberIdAndSessionId(any(), any());
         verify(authenticationEntryPoint).commence(
@@ -89,10 +124,12 @@ class JwtAuthenticationFilterTest {
         JwtAuthenticationFilter filter = createFilter();
         MockHttpServletRequest request = protectedRequest("access-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
-        given(jwtTokenProvider.getAuthentication("access-token")).willReturn(authentication);
+        given(jwtTokenProvider.authenticateAccessToken("access-token"))
+                .willReturn(new AuthenticatedAccessToken(
+                        authentication,
+                        new JwtTokenSession(1L, "session-id")
+                ));
         given(accessTokenBlacklistRepository.exists("access-token")).willReturn(false);
-        given(jwtTokenProvider.getAccessTokenSession("access-token"))
-                .willReturn(new JwtTokenSession(1L, "session-id"));
         given(refreshTokenRepository.existsByMemberIdAndSessionId(1L, "session-id")).willReturn(false);
 
         filter.doFilter(request, response, filterChain);

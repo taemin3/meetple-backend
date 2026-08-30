@@ -5,6 +5,7 @@ import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
 import com.meetple.backend.global.exception.BaseException;
 import com.meetple.backend.global.response.ErrorStatus;
+import com.meetple.backend.global.security.AuthenticatedAccessToken;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
@@ -109,9 +110,10 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
         String accessToken = resolveAccessToken(accessor);
         Instant authenticationStartedAt = Instant.now();
         try {
-            Authentication authentication = jwtTokenProvider.getAuthentication(accessToken);
+            AuthenticatedAccessToken authenticatedToken = jwtTokenProvider.authenticateAccessToken(accessToken);
+            Authentication authentication = authenticatedToken.authentication();
             AuthenticatedMember member = authenticatedMember(authentication);
-            JwtTokenSession tokenSession = jwtTokenProvider.getAccessTokenSession(accessToken);
+            JwtTokenSession tokenSession = authenticatedToken.session();
             sessionRegistry.authenticate(
                     accessor.getSessionId(),
                     member.id(),

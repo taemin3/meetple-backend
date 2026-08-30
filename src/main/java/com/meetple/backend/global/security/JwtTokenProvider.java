@@ -61,6 +61,10 @@ public class JwtTokenProvider {
     }
 
     public Authentication getAuthentication(String token) {
+        return authenticateAccessToken(token).authentication();
+    }
+
+    public AuthenticatedAccessToken authenticateAccessToken(String token) {
         Claims claims = parseClaims(token);
         validateTokenType(claims, ACCESS_TOKEN_TYPE);
         JwtTokenSession tokenSession = toTokenSession(claims);
@@ -71,11 +75,12 @@ public class JwtTokenProvider {
                 role
         );
 
-        return new UsernamePasswordAuthenticationToken(
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
                 principal,
                 null,
                 List.of(new SimpleGrantedAuthority(ROLE_PREFIX + role.name()))
         );
+        return new AuthenticatedAccessToken(authentication, tokenSession);
     }
 
     public Long getRefreshTokenMemberId(String token) {
