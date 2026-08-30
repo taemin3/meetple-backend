@@ -8,8 +8,7 @@ import static org.mockito.BDDMockito.given;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
-import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
+import com.meetple.backend.domain.auth.repository.AccessTokenValidationRepository;
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
@@ -75,10 +74,7 @@ class ChatWebSocketIntegrationTest {
     private ChatMessageRepository messageRepository;
 
     @MockitoBean
-    private AccessTokenBlacklistRepository accessTokenBlacklistRepository;
-
-    @MockitoBean
-    private RefreshTokenRepository refreshTokenRepository;
+    private AccessTokenValidationRepository accessTokenValidationRepository;
 
     private WebSocketStompClient stompClient;
     private StompSession stompSession;
@@ -87,9 +83,8 @@ class ChatWebSocketIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        given(accessTokenBlacklistRepository.exists(anyString())).willReturn(false);
-        given(refreshTokenRepository.existsByMemberIdAndSessionId(anyLong(), anyString()))
-                .willReturn(true);
+        given(accessTokenValidationRepository.getStatus(anyString(), anyLong(), anyString()))
+                .willReturn(AccessTokenValidationRepository.Status.ACTIVE);
 
         String suffix = UUID.randomUUID().toString();
         Member host = memberRepository.save(member("host-" + suffix));

@@ -9,8 +9,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
-import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
+import com.meetple.backend.domain.auth.repository.AccessTokenValidationRepository;
 import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
 import com.meetple.backend.domain.member.entity.MemberRole;
 import com.meetple.backend.global.exception.ForbiddenException;
@@ -49,10 +48,7 @@ class ChatStompChannelInterceptorTest {
     private JwtTokenProvider jwtTokenProvider;
 
     @Mock
-    private AccessTokenBlacklistRepository accessTokenBlacklistRepository;
-
-    @Mock
-    private RefreshTokenRepository refreshTokenRepository;
+    private AccessTokenValidationRepository accessTokenValidationRepository;
 
     @Mock
     private ChatAccessPolicy chatAccessPolicy;
@@ -68,8 +64,8 @@ class ChatStompChannelInterceptorTest {
         Authentication authentication = authentication(1L);
         given(jwtTokenProvider.authenticateAccessToken(ACCESS_TOKEN))
                 .willReturn(authenticatedAccessToken(authentication));
-        given(refreshTokenRepository.existsByMemberIdAndSessionId(1L, "session-1"))
-                .willReturn(true);
+        given(accessTokenValidationRepository.getStatus(ACCESS_TOKEN, 1L, "session-1"))
+                .willReturn(AccessTokenValidationRepository.Status.ACTIVE);
         StompHeaderAccessor accessor = accessor(StompCommand.CONNECT, null, null);
         accessor.setNativeHeader("Authorization", "Bearer " + ACCESS_TOKEN);
 
@@ -79,7 +75,7 @@ class ChatStompChannelInterceptorTest {
         assertThat(interceptedAccessor.getUser()).isEqualTo(authentication);
         assertThat(interceptedAccessor.getSessionAttributes())
                 .containsEntry("chatAccessToken", ACCESS_TOKEN);
-        InOrder inOrder = inOrder(sessionRegistry, refreshTokenRepository);
+        InOrder inOrder = inOrder(sessionRegistry, accessTokenValidationRepository);
         inOrder.verify(sessionRegistry).authenticate(
                 eq("session-1"),
                 eq(1L),
@@ -88,8 +84,8 @@ class ChatStompChannelInterceptorTest {
                 eq(authentication.getName()),
                 any(Instant.class)
         );
-        inOrder.verify(refreshTokenRepository)
-                .existsByMemberIdAndSessionId(1L, "session-1");
+        inOrder.verify(accessTokenValidationRepository)
+                .getStatus(ACCESS_TOKEN, 1L, "session-1");
         verify(jwtTokenProvider, never()).getAuthentication(ACCESS_TOKEN);
         verify(jwtTokenProvider, never()).getAccessTokenSession(ACCESS_TOKEN);
     }
@@ -108,8 +104,8 @@ class ChatStompChannelInterceptorTest {
         Authentication authentication = authentication(1L);
         given(jwtTokenProvider.authenticateAccessToken(ACCESS_TOKEN))
                 .willReturn(authenticatedAccessToken(authentication));
-        given(refreshTokenRepository.existsByMemberIdAndSessionId(1L, "session-1"))
-                .willReturn(true);
+        given(accessTokenValidationRepository.getStatus(ACCESS_TOKEN, 1L, "session-1"))
+                .willReturn(AccessTokenValidationRepository.Status.ACTIVE);
         StompHeaderAccessor accessor = accessor(StompCommand.STOMP, null, null);
         accessor.setNativeHeader("Authorization", "Bearer " + ACCESS_TOKEN);
 
@@ -126,6 +122,8 @@ class ChatStompChannelInterceptorTest {
         Authentication authentication = authentication(1L);
         given(jwtTokenProvider.authenticateAccessToken(ACCESS_TOKEN))
                 .willReturn(authenticatedAccessToken(authentication));
+        given(accessTokenValidationRepository.getStatus(ACCESS_TOKEN, 1L, "session-1"))
+                .willReturn(AccessTokenValidationRepository.Status.INACTIVE_SESSION);
         StompHeaderAccessor accessor = accessor(StompCommand.CONNECT, null, null);
         accessor.setNativeHeader("Authorization", "Bearer " + ACCESS_TOKEN);
 
@@ -215,7 +213,10 @@ class ChatStompChannelInterceptorTest {
 
     @Test
     void sendRejectsBlacklistedConnectedSession() {
-        given(accessTokenBlacklistRepository.exists(ACCESS_TOKEN)).willReturn(true);
+        given(jwtTokenProvider.getAccessTokenSession(ACCESS_TOKEN))
+                .willReturn(new JwtTokenSession(1L, "session-1"));
+        given(accessTokenValidationRepository.getStatus(ACCESS_TOKEN, 1L, "session-1"))
+                .willReturn(AccessTokenValidationRepository.Status.BLACKLISTED);
         StompHeaderAccessor accessor = accessor(
                 StompCommand.SEND,
                 "/app/chat/rooms/10/messages",
@@ -252,7 +253,8 @@ class ChatStompChannelInterceptorTest {
     @Test
     void outboundRoomMessageIsDroppedAfterLogout() {
         connectSession();
-        given(accessTokenBlacklistRepository.exists(ACCESS_TOKEN)).willReturn(true);
+        given(accessTokenValidationRepository.getStatus(ACCESS_TOKEN, 1L, "session-1"))
+                .willReturn(AccessTokenValidationRepository.Status.BLACKLISTED);
         Message<?> result = interceptor.preSend(outboundMessage(10L), null);
 
         assertThat(result).isNull();
@@ -262,8 +264,8 @@ class ChatStompChannelInterceptorTest {
     private void stubActiveSession() {
         given(jwtTokenProvider.getAccessTokenSession(ACCESS_TOKEN))
                 .willReturn(new JwtTokenSession(1L, "session-1"));
-        given(refreshTokenRepository.existsByMemberIdAndSessionId(1L, "session-1"))
-                .willReturn(true);
+        given(accessTokenValidationRepository.getStatus(ACCESS_TOKEN, 1L, "session-1"))
+                .willReturn(AccessTokenValidationRepository.Status.ACTIVE);
     }
 
     private void connectSession() {

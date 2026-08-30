@@ -1,7 +1,6 @@
 package com.meetple.backend.global.websocket;
 
-import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
-import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
+import com.meetple.backend.domain.auth.repository.AccessTokenValidationRepository;
 import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
 import com.meetple.backend.global.exception.BaseException;
 import com.meetple.backend.global.response.ErrorStatus;
@@ -45,8 +44,7 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
             Pattern.compile("^/app/chat/rooms/(\\d+)/messages$");
 
     private final JwtTokenProvider jwtTokenProvider;
-    private final AccessTokenBlacklistRepository accessTokenBlacklistRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
+    private final AccessTokenValidationRepository accessTokenValidationRepository;
     private final ChatAccessPolicy chatAccessPolicy;
     private final LocalChatWebSocketSessionRegistry sessionRegistry;
 
@@ -165,14 +163,16 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
             Long authenticatedMemberId,
             JwtTokenSession tokenSession
     ) {
-        if (accessTokenBlacklistRepository.exists(accessToken)) {
+        AccessTokenValidationRepository.Status status = accessTokenValidationRepository.getStatus(
+                accessToken,
+                tokenSession.memberId(),
+                tokenSession.sessionId()
+        );
+        if (status == AccessTokenValidationRepository.Status.BLACKLISTED) {
             throw new IllegalArgumentException("로그아웃된 액세스 토큰입니다.");
         }
         if (!tokenSession.memberId().equals(authenticatedMemberId)
-                || !refreshTokenRepository.existsByMemberIdAndSessionId(
-                        tokenSession.memberId(),
-                        tokenSession.sessionId()
-                )) {
+                || status == AccessTokenValidationRepository.Status.INACTIVE_SESSION) {
             throw new IllegalArgumentException("유효하지 않은 액세스 토큰 세션입니다.");
         }
         return tokenSession;
