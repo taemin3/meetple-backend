@@ -24,7 +24,7 @@ public class AccessTokenBlacklistRepository {
         return Boolean.TRUE.equals(stringRedisTemplate.hasKey(createKey(accessToken)));
     }
 
-    private String createKey(String accessToken) {
+    static String createKey(String accessToken) {
         return KEY_PREFIX + TokenHashUtil.sha256(accessToken);
     }
 }

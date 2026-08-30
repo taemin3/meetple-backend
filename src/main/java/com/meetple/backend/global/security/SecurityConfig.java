@@ -1,7 +1,6 @@
 package com.meetple.backend.global.security;
 
-import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
-import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
+import com.meetple.backend.domain.auth.repository.AccessTokenValidationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -44,16 +43,14 @@ public class SecurityConfig {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
-    private final AccessTokenBlacklistRepository accessTokenBlacklistRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
+    private final AccessTokenValidationRepository accessTokenValidationRepository;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(
                 jwtTokenProvider,
                 authenticationEntryPoint,
-                accessTokenBlacklistRepository,
-                refreshTokenRepository,
+                accessTokenValidationRepository,
                 PUBLIC_ENDPOINTS
         );
 

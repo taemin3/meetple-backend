@@ -69,7 +69,7 @@ public class RefreshTokenRepository {
         );
     }
 
-    private String createKey(Long memberId, String sessionId) {
+    static String createKey(Long memberId, String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("Refresh token session id is required.");
         }

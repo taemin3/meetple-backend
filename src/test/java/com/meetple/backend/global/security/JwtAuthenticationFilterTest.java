@@ -8,8 +8,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import com.meetple.backend.domain.auth.repository.AccessTokenBlacklistRepository;
-import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
+import com.meetple.backend.domain.auth.repository.AccessTokenValidationRepository;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
@@ -35,10 +34,7 @@ class JwtAuthenticationFilterTest {
     private JwtAuthenticationEntryPoint authenticationEntryPoint;
 
     @Mock
-    private AccessTokenBlacklistRepository accessTokenBlacklistRepository;
-
-    @Mock
-    private RefreshTokenRepository refreshTokenRepository;
+    private AccessTokenValidationRepository accessTokenValidationRepository;
 
     @Mock
     private FilterChain filterChain;
@@ -61,8 +57,8 @@ class JwtAuthenticationFilterTest {
                         authentication,
                         new JwtTokenSession(1L, "session-id")
                 ));
-        given(accessTokenBlacklistRepository.exists("access-token")).willReturn(false);
-        given(refreshTokenRepository.existsByMemberIdAndSessionId(1L, "session-id")).willReturn(true);
+        given(accessTokenValidationRepository.getStatus("access-token", 1L, "session-id"))
+                .willReturn(AccessTokenValidationRepository.Status.ACTIVE);
 
         filter.doFilter(request, response, filterChain);
 
@@ -74,7 +70,7 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void invalidTokenDoesNotHitBlacklistRepository() throws Exception {
+    void invalidTokenDoesNotHitRedisValidationRepository() throws Exception {
         JwtAuthenticationFilter filter = createFilter();
         MockHttpServletRequest request = protectedRequest("invalid-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -83,8 +79,7 @@ class JwtAuthenticationFilterTest {
 
         filter.doFilter(request, response, filterChain);
 
-        verify(accessTokenBlacklistRepository, never()).exists(any());
-        verify(refreshTokenRepository, never()).existsByMemberIdAndSessionId(any(), any());
+        verify(accessTokenValidationRepository, never()).getStatus(any(), any(), any());
         verify(authenticationEntryPoint).commence(
                 eq(request),
                 eq(response),
@@ -94,7 +89,7 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void blacklistRepositoryIsCheckedAfterTokenValidation() throws Exception {
+    void blacklistStatusIsCheckedAfterTokenValidation() throws Exception {
         JwtAuthenticationFilter filter = createFilter();
         MockHttpServletRequest request = protectedRequest("access-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -103,14 +98,14 @@ class JwtAuthenticationFilterTest {
                         authentication,
                         new JwtTokenSession(1L, "session-id")
                 ));
-        given(accessTokenBlacklistRepository.exists("access-token")).willReturn(true);
+        given(accessTokenValidationRepository.getStatus("access-token", 1L, "session-id"))
+                .willReturn(AccessTokenValidationRepository.Status.BLACKLISTED);
 
         filter.doFilter(request, response, filterChain);
 
-        InOrder inOrder = inOrder(jwtTokenProvider, accessTokenBlacklistRepository);
+        InOrder inOrder = inOrder(jwtTokenProvider, accessTokenValidationRepository);
         inOrder.verify(jwtTokenProvider).authenticateAccessToken("access-token");
-        inOrder.verify(accessTokenBlacklistRepository).exists("access-token");
-        verify(refreshTokenRepository, never()).existsByMemberIdAndSessionId(any(), any());
+        inOrder.verify(accessTokenValidationRepository).getStatus("access-token", 1L, "session-id");
         verify(authenticationEntryPoint).commence(
                 eq(request),
                 eq(response),
@@ -129,8 +124,8 @@ class JwtAuthenticationFilterTest {
                         authentication,
                         new JwtTokenSession(1L, "session-id")
                 ));
-        given(accessTokenBlacklistRepository.exists("access-token")).willReturn(false);
-        given(refreshTokenRepository.existsByMemberIdAndSessionId(1L, "session-id")).willReturn(false);
+        given(accessTokenValidationRepository.getStatus("access-token", 1L, "session-id"))
+                .willReturn(AccessTokenValidationRepository.Status.INACTIVE_SESSION);
 
         filter.doFilter(request, response, filterChain);
 
@@ -146,8 +141,7 @@ class JwtAuthenticationFilterTest {
         return new JwtAuthenticationFilter(
                 jwtTokenProvider,
                 authenticationEntryPoint,
-                accessTokenBlacklistRepository,
-                refreshTokenRepository
+                accessTokenValidationRepository
         );
     }
 
