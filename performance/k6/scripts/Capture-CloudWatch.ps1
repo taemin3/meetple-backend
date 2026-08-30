@@ -32,6 +32,8 @@ if ($EndTime -le $StartTime) {
 $startUtc = $StartTime.ToUniversalTime()
 $endUtc = $EndTime.ToUniversalTime()
 $periodSeconds = if (($endUtc - $startUtc).TotalMinutes -le 30) { 60 } else { 300 }
+$infrastructureQueryEndUtc = $endUtc.AddSeconds($periodSeconds)
+$applicationQueryEndUtc = $endUtc.AddSeconds($periodSeconds * 2)
 
 function Get-CloudWatchSeries {
     param(
@@ -40,15 +42,21 @@ function Get-CloudWatchSeries {
         [Parameter(Mandatory = $true)][string] $MetricName,
         [Parameter(Mandatory = $true)][hashtable] $Dimensions,
         [string] $Statistic = 'Average',
-        [string[]] $ExtendedStatistics = @()
+        [string[]] $ExtendedStatistics = @(),
+        [Nullable[DateTime]] $EndTimeOverride = $null
     )
 
+    $seriesEndUtc = if ($null -eq $EndTimeOverride) {
+        $infrastructureQueryEndUtc
+    } else {
+        $EndTimeOverride.ToUniversalTime()
+    }
     $arguments = @(
         'cloudwatch', 'get-metric-statistics',
         '--namespace', $Namespace,
         '--metric-name', $MetricName,
         '--start-time', $startUtc.ToString('yyyy-MM-ddTHH:mm:ssZ'),
-        '--end-time', $endUtc.ToString('yyyy-MM-ddTHH:mm:ssZ'),
+        '--end-time', $seriesEndUtc.ToString('yyyy-MM-ddTHH:mm:ssZ'),
         '--period', [string] $periodSeconds
     )
     if ($ExtendedStatistics.Count -gt 0) {
@@ -57,10 +65,18 @@ function Get-CloudWatchSeries {
     } else {
         $arguments += @('--statistics', $Statistic)
     }
-    $arguments += '--dimensions'
-    foreach ($key in ($Dimensions.Keys | Sort-Object)) {
-        $arguments += "Name=$key,Value=$($Dimensions[$key])"
-    }
+    $dimensionPayload = @(
+        foreach ($key in ($Dimensions.Keys | Sort-Object)) {
+            [ordered]@{
+                Name = $key
+                Value = [string] $Dimensions[$key]
+            }
+        }
+    )
+    $arguments += @(
+        '--dimensions',
+        (ConvertTo-Json -InputObject $dimensionPayload -Compress)
+    )
     $arguments += @('--profile', $AwsProfile, '--region', $AwsRegion, '--output', 'json')
 
     $result = Invoke-AwsJson -Arguments $arguments
@@ -104,7 +120,8 @@ function Get-ApplicationMetricSeries {
             -Namespace $ApplicationMetricNamespace `
             -MetricName $MetricName `
             -Dimensions $dimensions `
-            -Statistic $Statistic
+            -Statistic $Statistic `
+            -EndTimeOverride $applicationQueryEndUtc
     }
 }
 
@@ -188,12 +205,15 @@ $document = [ordered]@{
     capturedAtUtc = [DateTime]::UtcNow.ToString('o')
     startTimeUtc = $startUtc.ToString('o')
     endTimeUtc = $endUtc.ToString('o')
+    infrastructureQueryEndTimeUtc = $infrastructureQueryEndUtc.ToString('o')
+    applicationQueryEndTimeUtc = $applicationQueryEndUtc.ToString('o')
     periodSeconds = $periodSeconds
     instanceId = $instanceId
     notes = @(
         'EC2 OS memory is not available because CloudWatch Agent is not installed.',
         'ECS cluster MemoryUtilized and MemoryReserved are included as the current memory proxy.',
-        'Application metrics appear only after the metrics-enabled backend task and IAM policy are deployed.'
+        'Application metrics appear only after the metrics-enabled backend task and IAM policy are deployed.',
+        'CloudWatch query end times include one infrastructure period and two application periods after the test to include complete aggregation and publication buckets; adjacent traffic in those buckets can be included.'
     )
     metrics = $metrics
 }
