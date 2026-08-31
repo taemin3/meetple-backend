@@ -41,6 +41,32 @@
 - saturation 테스트 한계 판정: 전체 p95 500ms 미만, p99 1,000ms 미만
 - 오류, 5xx, 계약 실패는 안전 가드와 k6 threshold로 조기 중단
 
+### Isolated API
+
+- 한 번에 하나의 읽기 API만 `ramping-arrival-rate`로 호출
+- 30초 ramp-up, 2분 유지, 30초 ramp-down
+- 대상: `categories`, `meeting-list`, `meeting-detail`, `member-me`
+- API별 한계 비교 단계: 200 → 300 → 400 RPS
+- 예상 요청 수: 200 RPS 약 30,000개, 300 RPS 약 45,000개, 400 RPS 약 60,000개 + setup 로그인 1회
+- 각 endpoint/RPS는 별도 승인하고, 테스트 사이에 CloudWatch·ECS·RDS·Slack 복구 확인
+- 선택적으로 테스트 전후 `pg_stat_statements`를 읽어 DB QPS와 HTTP 요청당 SQL 실행 수 계산
+
+혼합 테스트는 전체 시스템 용량을, 단독 테스트는 API별 비용을 확인합니다. 단독 결과만으로 전체 서비스의 최대 RPS를 주장하지 않습니다.
+단독 400 RPS는 혼합 400 RPS에서 한 API가 받는 약 100 RPS의 네 배이므로, 200과 300 결과가 정상일 때만 실행합니다.
+
+## API 선정 기준
+
+모든 API를 동일한 부하로 실행하지 않습니다. 예상 호출 빈도, DB/Redis 비용, 핵심 사용자 흐름, 실패 영향을 기준으로 다음처럼 분류합니다.
+
+| 분류 | API | 이유 |
+| --- | --- | --- |
+| 1차 필수 | 카테고리, 모임 목록, 모임 상세, 내 프로필 | 홈/탐색/상세/인증 사용자 흐름이며 현재 혼합 baseline과 직접 비교 가능 |
+| 2차 후보 | 모임 검색, 주변 검색, hosted/joined/bookmarked 목록, 알림 목록, 채팅방/메시지 목록 | 실제 사용 빈도나 데이터 규모가 확보되면 별도 데이터셋과 계약으로 측정 |
+| Smoke만 | 로그인, 토큰 재발급, readiness | 인증·계약 검증에는 필요하지만 일반 읽기 트래픽과 섞으면 결과를 왜곡 |
+| 기본 부하 제외 | 이메일 인증/비밀번호 재설정, 이미지 presign/삭제, FCM 토큰, 알림 읽음, 참여·승인·북마크, 모임 생성·수정·삭제 | 외부 호출, 사용자 데이터 변경, Outbox/Kafka/FCM 등 부작용이 있음 |
+
+쓰기 API는 전용 계정과 격리된 테스트 데이터, 낮은 도착률, 정리 절차를 갖춘 별도 시나리오에서만 실행합니다.
+
 ## 준비
 
 ### 1. k6 설치
@@ -134,6 +160,11 @@ Set-Location C:\project\meetple\backend
 k6 inspect .\performance\k6\scenarios\smoke.js
 k6 inspect .\performance\k6\scenarios\load.js
 k6 inspect .\performance\k6\scenarios\stress.js
+k6 inspect `
+  -e K6_ISOLATED_ENDPOINT=meeting-list `
+  -e K6_TARGET_RPS=200 `
+  -e K6_DATASET_MANIFEST=C:/project/meetple/backend/performance/k6/data/manifests/meetple-k6-baseline-v1.json `
+  .\performance\k6\scenarios\isolated.js
 ```
 
 ## staging Smoke 실행
@@ -198,6 +229,52 @@ EC2 OS 메모리는 CloudWatch Agent가 설치되어 있지 않아 현재 직접
 
 CloudWatch의 API/Redis 타이머는 60초 구간의 average/max를 병목 상관분석에 사용합니다. 전체 p50/p95/p99와 오류율의 기준값은 k6 결과를 사용합니다. 비용과 metric cardinality를 제한하기 위해 HTTP는 네 개 성능 테스트 URI만 수집하고 status/method/exception 차원은 합치며, Redis는 GET/MGET/SET/DEL의 completion latency만 수집합니다.
 
+## PostgreSQL QPS 저장
+
+CloudWatch RDS CPU/IOPS는 SQL 실행 횟수가 아닙니다. 단독 API 실행기는 선택적으로 `pg_stat_statements.calls`의 테스트 전후 차이를 계산해 다음을 `db-qps.json`에 저장합니다. PC의 `psql`은 로컬 DB를 실행하는 것이 아니라, SSM 암호화 터널을 통해 private staging RDS에 `SELECT`를 보내는 원격 클라이언트입니다.
+
+- 관측된 전체 DB statement QPS
+- HTTP 요청당 statement 실행 수
+- 목표 API RPS 구간의 예상 DB QPS
+- 호출 횟수 상위 SQL
+- 누적 실행시간 상위 SQL
+- SQL 호출 수와 총/평균 실행시간
+
+수집 쿼리는 `SELECT`만 실행하며 `pg_stat_statements_reset()`을 호출하지 않습니다. RDS master password는 AWS Secrets Manager에서 현재 PowerShell 프로세스로만 읽고 파일이나 명령 인자에 저장하지 않습니다. 정규화된 SQL 텍스트를 포함한 결과는 Git에서 제외된 `performance/k6/results` 아래에만 저장됩니다.
+
+사전 조건:
+
+- AWS CLI profile `meetple-deploy`
+- AWS Session Manager plugin
+- PostgreSQL `psql` client
+- staging DB에 이미 설치된 `pg_stat_statements` extension
+
+`pg_stat_statements`가 없다면 실행기는 원격 부하를 시작하기 전에 실패합니다. 실행기가 extension을 생성하거나 DB parameter를 변경하지 않습니다.
+
+첫 번째 PowerShell에서 private RDS로 가는 SSM tunnel을 엽니다.
+
+```powershell
+.\performance\k6\scripts\Open-StagingPostgresTunnel.ps1 -LocalPort 15433 -DryRun
+.\performance\k6\scripts\Open-StagingPostgresTunnel.ps1 -LocalPort 15433
+```
+
+이 창을 열어둔 채 두 번째 PowerShell에서, 별도 원격 승인 후 단독 테스트와 QPS 수집을 함께 실행합니다.
+
+```powershell
+.\performance\k6\scripts\Invoke-IsolatedApi.ps1 `
+  -Endpoint meeting-list `
+  -TargetRps 200 `
+  -DatasetId meetple-k6-baseline-v1 `
+  -BaseUrl https://api.meetple.shop `
+  -AllowRemote `
+  -ConfirmTarget api.meetple.shop `
+  -AcknowledgeIsolated `
+  -CaptureDbQps `
+  -DbLocalPort 15433
+```
+
+관측 QPS는 ramp-up/hold/ramp-down 전체 구간의 평균입니다. 목표 RPS QPS는 측정된 `statementsPerHttpRequest × TargetRps`로 별도 표시합니다. 스냅샷에는 같은 DB에서 해당 시간 동안 실행된 저빈도 background statement가 포함될 수 있으므로 API별 상대 비교와 개선 전후 비교에 사용하고, 한 번의 절대값을 운영 전체의 정확한 QPS로 단정하지 않습니다.
+
 배포할 때는 먼저 `infra/terraform`에서 `terraform plan`을 검토하고 `terraform apply`로 Task Role, 환경변수, 대시보드를 반영한 다음, GitHub Actions의 `Deploy staging backend`를 `workflow_dispatch`로 실행합니다. 서비스는 Terraform task definition 변경을 직접 활성화하지 않으므로 이 수동 배포 단계가 새 애플리케이션 이미지와 metrics-enabled task definition을 함께 활성화합니다.
 
 ## Load 실행 순서
@@ -217,7 +294,7 @@ Smoke의 k6 결과, CloudWatch, Slack이 모두 정상일 때만 5 VU를 실행�
 
 ## Stress 실행 순서
 
-Load 30 VU 결과와 CloudWatch, Slack이 모두 정상이고 해당 RPS 단계에 대한 별도 승인을 받은 경우에만 실행합니다. `25`, `50`, `75`, `100`, `200` 이외의 값은 실행기가 거부합니다.
+Load 30 VU 결과와 CloudWatch, Slack이 모두 정상이고 해당 RPS 단계에 대한 별도 승인을 받은 경우에만 실행합니다. `25`, `50`, `75`, `100`, `200`, `300`, `400` 이외의 값은 실행기가 거부합니다.
 
 ```powershell
 .\performance\k6\scripts\Invoke-Stress.ps1 `
@@ -229,7 +306,7 @@ Load 30 VU 결과와 CloudWatch, Slack이 모두 정상이고 해당 RPS 단계�
   -AcknowledgeStress
 ```
 
-25 RPS 결과가 정상일 때만 같은 명령을 `-TargetRps 50`으로 실행하고, 다시 확인한 뒤 `75`, `100`으로 올립니다. 200 RPS 이상의 각 단계는 직전 결과와 별도 위험 승인을 확인한 경우에만 실행합니다. 그 외 중간값과 400 RPS 초과 단계는 현재 실행기에서 차단합니다. Stress의 한계 판정 기준은 p95 500ms, p99 1,000ms이며 초과해도 한계 관찰을 위해 실행을 중단하지 않고 최종 결과만 실패로 표시합니다. 오류·5xx·요청 누락은 즉시 중단합니다.
+25 RPS 결과가 정상일 때만 같은 명령을 `-TargetRps 50`으로 실행하고, 다시 확인한 뒤 `75`, `100`으로 올립니다. 200 RPS 이상의 각 단계는 직전 결과와 별도 위험 승인을 확인한 경우에만 실행합니다. 그 외 중간값과 400 RPS 초과 단계는 현재 실행기에서 차단합니다. Stress의 한계 판정 기준은 p95 500ms, p99 1,000ms이며 최종 결과에 실패로 표시합니다. 오류·5xx·요청 누락은 즉시 중단합니다.
 
 ## 결과와 비밀값 정리
 

@@ -35,6 +35,7 @@ export const config = Object.freeze({
   loadVus: integer('K6_LOAD_VUS', 5, 1, 30),
   iterationSeconds: integer('K6_ITERATION_SECONDS', 5, 1, 60),
   targetRps: integer('K6_TARGET_RPS', 25, 1, 400),
+  isolatedEndpoint: (__ENV.K6_ISOLATED_ENDPOINT || 'categories').trim(),
 });
 
 export function assertSafeTarget() {
