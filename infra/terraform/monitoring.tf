@@ -462,9 +462,9 @@ resource "aws_cloudwatch_dashboard" "staging" {
           region = var.aws_region
           period = 60
           metrics = [
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"tomcat.threads.busy.value\"', 'Maximum', 60)", id = "tomcat_busy", label = "Busy threads" }],
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"tomcat.threads.current.value\"', 'Maximum', 60)", id = "tomcat_current", label = "Current threads" }],
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"tomcat.threads.config.max.value\"', 'Maximum', 60)", id = "tomcat_max", label = "Configured max" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"tomcat.threads.busy.value\"', 'Maximum', 60)", id = "tomcat_busy", label = "Busy threads" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"tomcat.threads.current.value\"', 'Maximum', 60)", id = "tomcat_current", label = "Current threads" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"tomcat.threads.config.max.value\"', 'Maximum', 60)", id = "tomcat_max", label = "Configured max" }],
           ]
         }
       },
@@ -480,10 +480,10 @@ resource "aws_cloudwatch_dashboard" "staging" {
           region = var.aws_region
           period = 60
           metrics = [
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"hikaricp.connections.active.value\"', 'Maximum', 60)", id = "hikari_active", label = "Active" }],
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"hikaricp.connections.idle.value\"', 'Minimum', 60)", id = "hikari_idle", label = "Idle" }],
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"hikaricp.connections.pending.value\"', 'Maximum', 60)", id = "hikari_pending", label = "Pending" }],
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"hikaricp.connections.max.value\"', 'Maximum', 60)", id = "hikari_max", label = "Pool max" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"hikaricp.connections.active.value\"', 'Maximum', 60)", id = "hikari_active", label = "Active" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"hikaricp.connections.idle.value\"', 'Minimum', 60)", id = "hikari_idle", label = "Idle" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"hikaricp.connections.pending.value\"', 'Maximum', 60)", id = "hikari_pending", label = "Pending" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"hikaricp.connections.max.value\"', 'Maximum', 60)", id = "hikari_max", label = "Pool max" }],
           ]
         }
       },
@@ -499,9 +499,9 @@ resource "aws_cloudwatch_dashboard" "staging" {
           region = var.aws_region
           period = 60
           metrics = [
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"process.cpu.usage.value\"', 'Average', 60)", id = "process_cpu", label = "Process CPU ratio" }],
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"jvm.gc.pause.avg\"', 'Average', 60)", id = "gc_pause_avg", label = "GC pause avg (ms)", yAxis = "right" }],
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"jvm.gc.pause.max\"', 'Maximum', 60)", id = "gc_pause_max", label = "GC pause max (ms)", yAxis = "right" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"process.cpu.usage.value\"', 'Average', 60)", id = "process_cpu", label = "Process CPU ratio" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"jvm.gc.pause.avg\"', 'Average', 60)", id = "gc_pause_avg", label = "GC pause avg (ms)", yAxis = "right" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"jvm.gc.pause.max\"', 'Maximum', 60)", id = "gc_pause_max", label = "GC pause max (ms)", yAxis = "right" }],
           ]
         }
       },
@@ -517,8 +517,8 @@ resource "aws_cloudwatch_dashboard" "staging" {
           region = var.aws_region
           period = 60
           metrics = [
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"lettuce.command.completion.avg\"', 'Average', 60)", id = "redis_completion_avg", label = "avg $${PROP('Dim.command')} (ms)" }],
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"lettuce.command.completion.max\"', 'Maximum', 60)", id = "redis_completion_max", label = "max $${PROP('Dim.command')} (ms)" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"lettuce.command.completion.avg\"', 'Average', 60)", id = "redis_completion_avg", label = "avg $${PROP('Dim.command')} (ms)" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"lettuce.command.completion.max\"', 'Maximum', 60)", id = "redis_completion_max", label = "max $${PROP('Dim.command')} (ms)" }],
           ]
         }
       },
@@ -534,8 +534,8 @@ resource "aws_cloudwatch_dashboard" "staging" {
           region = var.aws_region
           period = 60
           metrics = [
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"http.server.requests.avg\"', 'Average', 60)", id = "http_avg", label = "avg $${PROP('Dim.uri')} (ms)" }],
-            [{ expression = "SEARCH('{${local.application_metric_namespace}} MetricName=\"http.server.requests.max\"', 'Maximum', 60)", id = "http_max", label = "max $${PROP('Dim.uri')} (ms)" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"http.server.requests.avg\"', 'Average', 60)", id = "http_avg", label = "avg $${PROP('Dim.uri')} (ms)" }],
+            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"http.server.requests.max\"', 'Maximum', 60)", id = "http_max", label = "max $${PROP('Dim.uri')} (ms)" }],
           ]
         }
       },
