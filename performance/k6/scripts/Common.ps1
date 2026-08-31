@@ -243,6 +243,10 @@ function Invoke-K6WithGuard {
         Test-StagingGuard -Context $guard
     }
 
+    if ($EnableStagingGuard -and $K6Arguments -notcontains '--address=127.0.0.1:6565') {
+        $K6Arguments = @($K6Arguments[0], '--address=127.0.0.1:6565') + $K6Arguments[1..($K6Arguments.Count - 1)]
+    }
+
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $K6Executable
     $startInfo.UseShellExecute = $false
@@ -268,7 +272,22 @@ function Invoke-K6WithGuard {
                     Test-StagingGuard -Context $guard
                 } catch {
                     $guardFailure = $_.Exception.Message
-                    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                    try {
+                        $stopBody = @{
+                            data = @{
+                                type = 'status'
+                                id = 'default'
+                                attributes = @{ stopped = $true }
+                            }
+                        } | ConvertTo-Json -Depth 4 -Compress
+                        Invoke-RestMethod -Method Patch -Uri 'http://127.0.0.1:6565/v1/status' `
+                            -ContentType 'application/json' -Body $stopBody -TimeoutSec 3 | Out-Null
+                        if (-not $process.WaitForExit(10000)) {
+                            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                        }
+                    } catch {
+                        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                    }
                     break
                 }
                 $nextGuardCheck = [DateTime]::UtcNow.AddSeconds(30)

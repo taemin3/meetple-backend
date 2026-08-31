@@ -37,7 +37,8 @@ export function recordResponse(response, options) {
     throw new Error(`Unknown endpoint metric: ${endpoint}`);
   }
 
-  trend.add(response.timings.duration);
+  const duration = response.timings.duration;
+  trend.add(duration);
 
   const status = Number(response.status || 0);
   const body = parseJson(response);
@@ -70,6 +71,7 @@ export function recordResponse(response, options) {
 
   return Object.freeze({
     body,
+    duration,
     ok: success,
     status,
   });
