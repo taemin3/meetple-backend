@@ -3,19 +3,18 @@ package com.meetple.backend.global.security;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.entity.MemberRole;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 public class JwtTokenProvider {
 
     private static final String EMAIL_CLAIM = "email";
@@ -27,6 +26,14 @@ public class JwtTokenProvider {
     private static final String ROLE_PREFIX = "ROLE_";
 
     private final JwtProperties jwtProperties;
+    private final JwtParser jwtParser;
+
+    public JwtTokenProvider(JwtProperties jwtProperties) {
+        this.jwtProperties = jwtProperties;
+        this.jwtParser = Jwts.parser()
+                .verifyWith(jwtProperties.secretKey())
+                .build();
+    }
 
     public String createAccessToken(Member member, String sessionId) {
         validateSessionId(sessionId);
@@ -122,9 +129,7 @@ public class JwtTokenProvider {
     }
 
     private Claims parseClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(jwtProperties.secretKey())
-                .build()
+        return jwtParser
                 .parseSignedClaims(token)
                 .getPayload();
     }

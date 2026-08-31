@@ -9,6 +9,8 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import java.time.Duration;
+import java.util.List;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.Authentication;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -46,6 +48,23 @@ class JwtTokenProviderTest {
     void getAuthenticationRejectsInvalidToken() {
         assertThatThrownBy(() -> jwtTokenProvider.getAuthentication("invalid-token"))
                 .isInstanceOf(JwtException.class);
+    }
+
+    @Test
+    void authenticatesAccessTokenConcurrentlyWithSharedParser() {
+        Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
+        ReflectionTestUtils.setField(member, "id", 1L);
+        String accessToken = jwtTokenProvider.createAccessToken(member, "session-id");
+
+        List<AuthenticatedAccessToken> authenticatedTokens = IntStream.range(0, 100)
+                .parallel()
+                .mapToObj(index -> jwtTokenProvider.authenticateAccessToken(accessToken))
+                .toList();
+
+        assertThat(authenticatedTokens)
+                .hasSize(100)
+                .allSatisfy(authenticatedToken -> assertThat(authenticatedToken.session())
+                        .isEqualTo(new JwtTokenSession(1L, "session-id")));
     }
 
     @Test

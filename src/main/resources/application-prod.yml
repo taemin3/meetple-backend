@@ -59,3 +59,10 @@ springdoc:
     enabled: false
   swagger-ui:
     enabled: false
+
+management:
+  metrics:
+    data:
+      repository:
+        autotime:
+          enabled: false
