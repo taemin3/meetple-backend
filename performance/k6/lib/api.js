@@ -66,6 +66,15 @@ export function getMeetings(accessToken, page = 0) {
   );
 }
 
+export function getMeetingSummaries(accessToken, page = 0) {
+  return request(
+    'GET',
+    `/api/v1/meetings/summaries?status=RECRUITING&page=${page}&size=20&sort=meetingDate,asc`,
+    'meeting_list_summary',
+    { headers: authHeaders(accessToken) },
+  );
+}
+
 export function getMyHostedMeetings(accessToken) {
   return request(
     'GET',

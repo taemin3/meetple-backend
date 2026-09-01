@@ -15,6 +15,7 @@ const endpointTrends = Object.freeze({
   member_me: new Trend('member_me_duration', true),
   hosted_meetings: new Trend('hosted_meetings_duration', true),
   meeting_list: new Trend('meeting_list_duration', true),
+  meeting_list_summary: new Trend('meeting_list_summary_duration', true),
   meeting_detail: new Trend('meeting_detail_duration', true),
 });
 

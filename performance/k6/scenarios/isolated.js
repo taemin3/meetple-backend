@@ -4,6 +4,7 @@ import {
   getCategories,
   getMeetingDetail,
   getMeetings,
+  getMeetingSummaries,
   getMyProfile,
   login,
   loginTokens,
@@ -19,13 +20,16 @@ import { datasetMeetingIds } from '../lib/dataset.js';
 const endpointExecutors = Object.freeze({
   categories: 'categoriesRequest',
   'meeting-list': 'meetingListRequest',
+  'meeting-list-summary': 'meetingListSummaryRequest',
   'meeting-detail': 'meetingDetailRequest',
   'member-me': 'memberProfileRequest',
 });
 
 const selectedExecutor = endpointExecutors[config.isolatedEndpoint];
 if (!selectedExecutor) {
-  throw new Error('K6_ISOLATED_ENDPOINT must be categories, meeting-list, meeting-detail, or member-me.');
+  throw new Error(
+    'K6_ISOLATED_ENDPOINT must be categories, meeting-list, meeting-list-summary, meeting-detail, or member-me.',
+  );
 }
 
 const preAllocatedVUs = Math.max(10, config.targetRps);
@@ -100,6 +104,14 @@ export function meetingListRequest(data) {
     : 1;
   const result = getMeetings(data.accessToken, meetingIndex() % pageCount);
   check(result, { 'meeting list contract succeeds': (response) => response.ok });
+}
+
+export function meetingListSummaryRequest(data) {
+  const pageCount = datasetMeetingIds.length > 0
+    ? Math.ceil(datasetMeetingIds.length / 20)
+    : 1;
+  const result = getMeetingSummaries(data.accessToken, meetingIndex() % pageCount);
+  check(result, { 'meeting list summary contract succeeds': (response) => response.ok });
 }
 
 export function meetingDetailRequest(data) {

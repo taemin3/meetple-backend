@@ -45,7 +45,7 @@
 
 - 한 번에 하나의 읽기 API만 `ramping-arrival-rate`로 호출
 - 30초 ramp-up, 2분 유지, 30초 ramp-down
-- 대상: `categories`, `meeting-list`, `meeting-detail`, `member-me`
+- 대상: `categories`, `meeting-list`, `meeting-list-summary`, `meeting-detail`, `member-me`
 - API별 한계 비교 단계: 200 → 300 → 400 RPS
 - 예상 요청 수: 200 RPS 약 30,000개, 300 RPS 약 45,000개, 400 RPS 약 60,000개 + setup 로그인 1회
 - 각 endpoint/RPS는 별도 승인하고, 테스트 사이에 CloudWatch·ECS·RDS·Slack 복구 확인
@@ -53,6 +53,7 @@
 
 혼합 테스트는 전체 시스템 용량을, 단독 테스트는 API별 비용을 확인합니다. 단독 결과만으로 전체 서비스의 최대 RPS를 주장하지 않습니다.
 단독 400 RPS는 혼합 400 RPS에서 한 API가 받는 약 100 RPS의 네 배이므로, 200과 300 결과가 정상일 때만 실행합니다.
+`meeting-list-summary`는 기존 앱 계약을 유지한 채 목록 전용 응답의 개선 효과를 같은 데이터와 RPS로 비교하기 위한 대상입니다.
 
 ## API 선정 기준
 
