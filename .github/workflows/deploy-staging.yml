@@ -132,6 +132,8 @@ jobs:
           task-definition: task-definition.json
           container-name: ${{ env.ECS_CONTAINER_NAME }}
           image: ${{ steps.image.outputs.image_uri }}
+          environment-variables: |
+            MEETPLE_PERFORMANCE_AUTH_PROBE_ENABLED=true
 
       - name: Deploy task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@c465972ecbd160473f22e683363b422a5412a3de # v2
