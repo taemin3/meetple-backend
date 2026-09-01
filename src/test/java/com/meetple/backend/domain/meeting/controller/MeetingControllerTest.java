@@ -18,6 +18,7 @@ import com.meetple.backend.domain.meeting.dto.request.CreateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.request.MeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
+import com.meetple.backend.domain.meeting.dto.response.MeetingSummaryResponse;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.service.MeetingService;
 import com.meetple.backend.domain.member.entity.MemberRole;
@@ -109,6 +110,27 @@ class MeetingControllerTest {
                         .value("https://cdn.meetple.com/images/meeting/1/first.png"))
                 .andExpect(jsonPath("$.data.content[0].imageUrls[1]")
                         .value("https://cdn.meetple.com/images/meeting/1/second.png"))
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+    }
+
+    @Test
+    void getMeetingSummariesReturnsPagedSummaryWithoutDetailFields() throws Exception {
+        given(meetingService.getMeetingSummaries(eq("RECRUITING"), any()))
+                .willReturn(PageResponse.from(new org.springframework.data.domain.PageImpl<>(
+                        List.of(meetingSummaryResponse()),
+                        PageRequest.of(0, 20),
+                        1
+                )));
+
+        mockMvc.perform(get("/api/v1/meetings/summaries")
+                        .param("status", "RECRUITING"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].id").value(10))
+                .andExpect(jsonPath("$.data.content[0].thumbnailImageUrl")
+                        .value("https://cdn.meetple.com/images/meeting/1/first.png"))
+                .andExpect(jsonPath("$.data.content[0].description").doesNotExist())
+                .andExpect(jsonPath("$.data.content[0].imageUrls").doesNotExist())
+                .andExpect(jsonPath("$.data.content[0].imageObjectKeys").doesNotExist())
                 .andExpect(jsonPath("$.data.totalElements").value(1));
     }
 
@@ -327,6 +349,27 @@ class MeetingControllerTest {
                 ),
                 now,
                 now
+        );
+    }
+
+    private MeetingSummaryResponse meetingSummaryResponse() {
+        LocalDateTime scheduledAt = LocalDateTime.of(2026, 6, 1, 10, 0);
+        return new MeetingSummaryResponse(
+                10L,
+                1L,
+                "host",
+                1L,
+                "exercise",
+                "Weekend running",
+                "Yeouido Park",
+                "330 Yeouidong-ro, Yeongdeungpo-gu, Seoul",
+                37.5219,
+                126.9245,
+                scheduledAt,
+                10,
+                1,
+                MeetingStatus.RECRUITING,
+                "https://cdn.meetple.com/images/meeting/1/first.png"
         );
     }
 }

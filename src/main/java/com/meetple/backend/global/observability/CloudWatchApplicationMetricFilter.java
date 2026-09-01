@@ -26,6 +26,7 @@ final class CloudWatchApplicationMetricFilter implements MeterFilter {
     private static final Set<String> ALLOWED_HTTP_URIS = Set.of(
             "/api/v1/categories",
             "/api/v1/meetings",
+            "/api/v1/meetings/summaries",
             "/api/v1/meetings/{meetingId}",
             "/api/v1/users/me"
     );

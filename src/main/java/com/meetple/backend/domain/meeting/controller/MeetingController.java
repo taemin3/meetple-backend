@@ -6,6 +6,7 @@ import com.meetple.backend.domain.meeting.dto.request.MeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
+import com.meetple.backend.domain.meeting.dto.response.MeetingSummaryResponse;
 import com.meetple.backend.domain.meeting.service.MeetingService;
 import com.meetple.backend.global.config.OpenApiConfig;
 import com.meetple.backend.global.response.ApiResponse;
@@ -62,6 +63,19 @@ public class MeetingController {
             @PageableDefault(size = 20, sort = "meetingDate", direction = Sort.Direction.ASC) Pageable pageable
     ) {
         return ApiResponse.success(SuccessStatus.OK, meetingService.getMeetings(status, pageable));
+    }
+
+    @GetMapping("/summaries")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(
+            summary = "모임 요약 목록 조회",
+            description = "목록 화면에 필요한 요약 정보와 대표 이미지만 조회합니다."
+    )
+    public ResponseEntity<ApiResponse<PageResponse<MeetingSummaryResponse>>> getMeetingSummaries(
+            @RequestParam(required = false) String status,
+            @PageableDefault(size = 20, sort = "meetingDate", direction = Sort.Direction.ASC) Pageable pageable
+    ) {
+        return ApiResponse.success(SuccessStatus.OK, meetingService.getMeetingSummaries(status, pageable));
     }
 
     @GetMapping("/search")

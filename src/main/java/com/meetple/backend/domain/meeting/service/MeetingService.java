@@ -10,6 +10,7 @@ import com.meetple.backend.domain.meeting.dto.request.MeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
+import com.meetple.backend.domain.meeting.dto.response.MeetingSummaryResponse;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingImage;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
@@ -122,6 +123,17 @@ public class MeetingService {
                 : meetingRepository.findByStatus(meetingStatus, pageable));
 
         return PageResponse.from(toResponsePage(meetings));
+    }
+
+    public PageResponse<MeetingSummaryResponse> getMeetingSummaries(String status, Pageable pageable) {
+        validateSort(pageable);
+        MeetingStatus meetingStatus = parseStatus(status);
+
+        Page<Meeting> meetings = (meetingStatus == null
+                ? meetingRepository.findAll(pageable)
+                : meetingRepository.findByStatus(meetingStatus, pageable));
+
+        return PageResponse.from(meetings.map(this::toSummaryResponse));
     }
 
     public PageResponse<MeetingResponse> getNearbyMeetings(NearbyMeetingSearchRequest request, Pageable pageable) {
@@ -317,6 +329,13 @@ public class MeetingService {
                 .map(this::toImageReference)
                 .toList();
         return toResponse(meeting, images);
+    }
+
+    private MeetingSummaryResponse toSummaryResponse(Meeting meeting) {
+        String thumbnailImageUrl = StringUtils.hasText(meeting.getThumbnailImageObjectKey())
+                ? imageService.createFileUrl(meeting.getThumbnailImageObjectKey())
+                : meeting.getCategory().getDefaultImageUrl();
+        return MeetingSummaryResponse.from(meeting, thumbnailImageUrl);
     }
 
     private Page<MeetingResponse> toResponsePage(Page<Meeting> meetings) {

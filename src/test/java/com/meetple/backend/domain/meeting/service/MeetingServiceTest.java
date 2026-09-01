@@ -21,6 +21,7 @@ import com.meetple.backend.domain.meeting.dto.request.MeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.NearbyMeetingSearchRequest;
 import com.meetple.backend.domain.meeting.dto.request.UpdateMeetingRequest;
 import com.meetple.backend.domain.meeting.dto.response.MeetingResponse;
+import com.meetple.backend.domain.meeting.dto.response.MeetingSummaryResponse;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingImage;
 import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
@@ -510,6 +511,34 @@ class MeetingServiceTest {
         assertThat(response.totalElements()).isEqualTo(1);
         assertThat(response.content()).extracting(MeetingResponse::title)
                 .containsExactly("Weekend running");
+    }
+
+    @Test
+    void getMeetingSummariesUsesThumbnailWithoutLoadingMeetingImages() {
+        Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
+        given(meetingRepository.findByStatus(MeetingStatus.RECRUITING, PageRequest.of(0, 10)))
+                .willReturn(new PageImpl<>(List.of(meeting), PageRequest.of(0, 10), 1));
+
+        ReflectionTestUtils.setField(meeting, "thumbnailImageObjectKey", "images/meeting/10/thumbnail.png");
+        given(imageService.createFileUrl("images/meeting/10/thumbnail.png"))
+                .willReturn("https://cdn.meetple.com/images/meeting/10/thumbnail.png");
+
+        PageResponse<MeetingSummaryResponse> response = meetingService.getMeetingSummaries(
+                "RECRUITING",
+                PageRequest.of(0, 10)
+        );
+
+        assertThat(response.page()).isZero();
+        assertThat(response.size()).isEqualTo(10);
+        assertThat(response.totalElements()).isEqualTo(1);
+        assertThat(response.content()).extracting(MeetingSummaryResponse::title)
+                .containsExactly("Weekend running");
+        assertThat(response.content()).singleElement().satisfies(summary -> {
+            assertThat(summary.thumbnailImageUrl())
+                    .isEqualTo("https://cdn.meetple.com/images/meeting/10/thumbnail.png");
+            assertThat(summary.hostNickname()).isEqualTo("host");
+        });
+        verify(meetingImageRepository, never()).findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(any());
     }
 
     @Test

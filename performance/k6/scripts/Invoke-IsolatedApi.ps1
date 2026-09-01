@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('categories', 'meeting-list', 'meeting-detail', 'member-me')]
+    [ValidateSet('categories', 'meeting-list', 'meeting-list-summary', 'meeting-detail', 'member-me')]
     [string] $Endpoint,
     [Parameter(Mandatory = $true)]
     [ValidateSet(200, 300, 400)]
