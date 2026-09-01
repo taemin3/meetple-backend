@@ -24,7 +24,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@SpringBootTest
+@SpringBootTest(properties = "meetple.performance.auth-probe.enabled=true")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class SecurityConfigTest {
@@ -110,6 +110,21 @@ class SecurityConfigTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.code").value(ErrorStatus.UNAUTHORIZED.getCode()));
+    }
+
+    @Test
+    void authProbeWithoutTokenReturnsUnauthorizedApiResponse() throws Exception {
+        mockMvc.perform(get("/api/v1/performance/auth-probe"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.UNAUTHORIZED.getCode()));
+    }
+
+    @Test
+    void authProbeWithActiveSessionReturnsNoContent() throws Exception {
+        mockMvc.perform(get("/api/v1/performance/auth-probe")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNoContent());
     }
 
     @Test
