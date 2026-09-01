@@ -17,6 +17,7 @@ import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.repository.MeetingImageRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
+import com.meetple.backend.domain.meeting.repository.MeetingSummaryProjection;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
@@ -129,9 +130,9 @@ public class MeetingService {
         validateSort(pageable);
         MeetingStatus meetingStatus = parseStatus(status);
 
-        Page<Meeting> meetings = (meetingStatus == null
-                ? meetingRepository.findAll(pageable)
-                : meetingRepository.findByStatus(meetingStatus, pageable));
+        Page<MeetingSummaryProjection> meetings = (meetingStatus == null
+                ? meetingRepository.findAllSummaries(pageable)
+                : meetingRepository.findSummariesByStatus(meetingStatus, pageable));
 
         return PageResponse.from(meetings.map(this::toSummaryResponse));
     }
@@ -331,10 +332,10 @@ public class MeetingService {
         return toResponse(meeting, images);
     }
 
-    private MeetingSummaryResponse toSummaryResponse(Meeting meeting) {
-        String thumbnailImageUrl = StringUtils.hasText(meeting.getThumbnailImageObjectKey())
-                ? imageService.createFileUrl(meeting.getThumbnailImageObjectKey())
-                : meeting.getCategory().getDefaultImageUrl();
+    private MeetingSummaryResponse toSummaryResponse(MeetingSummaryProjection meeting) {
+        String thumbnailImageUrl = StringUtils.hasText(meeting.thumbnailImageObjectKey())
+                ? imageService.createFileUrl(meeting.thumbnailImageObjectKey())
+                : meeting.categoryDefaultImageUrl();
         return MeetingSummaryResponse.from(meeting, thumbnailImageUrl);
     }
 

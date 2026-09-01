@@ -30,6 +30,7 @@ import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.meeting.repository.MeetingImageRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
+import com.meetple.backend.domain.meeting.repository.MeetingSummaryProjection;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.notification.service.NotificationService;
@@ -515,11 +516,14 @@ class MeetingServiceTest {
 
     @Test
     void getMeetingSummariesUsesThumbnailWithoutLoadingMeetingImages() {
-        Meeting meeting = meeting(10L, member(1L, "host@meetple.com", "host"), category(1L, "exercise"));
-        given(meetingRepository.findByStatus(MeetingStatus.RECRUITING, PageRequest.of(0, 10)))
-                .willReturn(new PageImpl<>(List.of(meeting), PageRequest.of(0, 10), 1));
-
-        ReflectionTestUtils.setField(meeting, "thumbnailImageObjectKey", "images/meeting/10/thumbnail.png");
+        MeetingSummaryProjection meeting = meetingSummaryProjection(
+                "images/meeting/10/thumbnail.png",
+                "https://cdn.meetple.com/categories/exercise.png"
+        );
+        given(meetingRepository.findSummariesByStatus(
+                MeetingStatus.RECRUITING,
+                PageRequest.of(0, 10)
+        )).willReturn(new PageImpl<>(List.of(meeting), PageRequest.of(0, 10), 1));
         given(imageService.createFileUrl("images/meeting/10/thumbnail.png"))
                 .willReturn("https://cdn.meetple.com/images/meeting/10/thumbnail.png");
 
@@ -539,6 +543,29 @@ class MeetingServiceTest {
             assertThat(summary.hostNickname()).isEqualTo("host");
         });
         verify(meetingImageRepository, never()).findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(any());
+        verify(meetingRepository, never()).findByStatus(any(), any());
+    }
+
+    @Test
+    void getMeetingSummariesWithoutStatusUsesProjectionAndCategoryDefaultImage() {
+        MeetingSummaryProjection meeting = meetingSummaryProjection(
+                null,
+                "https://cdn.meetple.com/categories/exercise.png"
+        );
+        given(meetingRepository.findAllSummaries(PageRequest.of(0, 10)))
+                .willReturn(new PageImpl<>(List.of(meeting), PageRequest.of(0, 10), 1));
+
+        PageResponse<MeetingSummaryResponse> response = meetingService.getMeetingSummaries(
+                null,
+                PageRequest.of(0, 10)
+        );
+
+        assertThat(response.content()).singleElement().satisfies(summary ->
+                assertThat(summary.thumbnailImageUrl())
+                        .isEqualTo("https://cdn.meetple.com/categories/exercise.png")
+        );
+        verify(imageService, never()).createFileUrl(any());
+        verify(meetingRepository, never()).findAll(any(PageRequest.class));
     }
 
     @Test
@@ -678,6 +705,30 @@ class MeetingServiceTest {
                 category,
                 new BigDecimal("37.521900"),
                 new BigDecimal("126.924500")
+        );
+    }
+
+    private MeetingSummaryProjection meetingSummaryProjection(
+            String thumbnailImageObjectKey,
+            String categoryDefaultImageUrl
+    ) {
+        return new MeetingSummaryProjection(
+                10L,
+                1L,
+                "host",
+                1L,
+                "exercise",
+                "Weekend running",
+                "Yeouido Park",
+                "330 Yeouidong-ro, Yeongdeungpo-gu, Seoul",
+                new BigDecimal("37.521900"),
+                new BigDecimal("126.924500"),
+                LocalDateTime.of(2026, 6, 1, 10, 0),
+                10,
+                1,
+                MeetingStatus.RECRUITING,
+                thumbnailImageObjectKey,
+                categoryDefaultImageUrl
         );
     }
 

@@ -20,11 +20,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.hibernate.Hibernate;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -73,6 +76,56 @@ class MeetingRepositoryTest {
         assertThat(meeting.getCreatedAt()).isNotNull();
         assertThat(meeting.getUpdatedAt()).isNotNull();
         assertThat(meetingRepository.findByHostId(host.getId())).hasSize(1);
+    }
+
+    @Test
+    void findSummariesByStatusDoesNotMaterializeEntities() {
+        Member host = memberRepository.save(Member.createUser(
+                "summary-host@meetple.com",
+                "encoded-password",
+                "summary-host",
+                "Seoul"
+        ));
+        Category category = categoryRepository.save(Category.create(
+                "summary-exercise",
+                "https://cdn.meetple.com/categories/exercise.png"
+        ));
+        Meeting meeting = createMeeting(host, category);
+        meeting.changeThumbnailImageObjectKey("images/meeting/summary/thumbnail.png");
+        meetingRepository.save(meeting);
+        entityManager.flush();
+        entityManager.clear();
+
+        Statistics statistics = entityManager.getEntityManagerFactory()
+                .unwrap(SessionFactory.class)
+                .getStatistics();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+
+        Page<MeetingSummaryProjection> result = meetingRepository.findSummariesByStatus(
+                MeetingStatus.RECRUITING,
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "meetingDate"))
+        );
+        Page<MeetingSummaryProjection> allResult = meetingRepository.findAllSummaries(
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "meetingDate"))
+        );
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(allResult.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent()).singleElement().satisfies(summary -> {
+            assertThat(summary.id()).isEqualTo(meeting.getId());
+            assertThat(summary.hostId()).isEqualTo(host.getId());
+            assertThat(summary.hostNickname()).isEqualTo("summary-host");
+            assertThat(summary.categoryId()).isEqualTo(category.getId());
+            assertThat(summary.categoryName()).isEqualTo("summary-exercise");
+            assertThat(summary.title()).isEqualTo("주말 러닝 모임");
+            assertThat(summary.thumbnailImageObjectKey())
+                    .isEqualTo("images/meeting/summary/thumbnail.png");
+            assertThat(summary.categoryDefaultImageUrl())
+                    .isEqualTo("https://cdn.meetple.com/categories/exercise.png");
+        });
+        assertThat(statistics.getEntityLoadCount()).isZero();
+        assertThat(statistics.getEntityFetchCount()).isZero();
     }
 
     @Test
