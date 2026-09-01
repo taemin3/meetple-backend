@@ -68,3 +68,8 @@ management:
       repository:
         autotime:
           enabled: false
+
+  observations:
+    enable:
+      spring:
+        security: false
