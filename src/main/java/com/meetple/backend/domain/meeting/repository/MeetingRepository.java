@@ -87,6 +87,66 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
     @EntityGraph(attributePaths = {"host", "category"})
     Page<Meeting> findByStatus(MeetingStatus status, Pageable pageable);
 
+    @Query(
+            value = """
+                    select new com.meetple.backend.domain.meeting.repository.MeetingSummaryProjection(
+                        m.id,
+                        h.id,
+                        h.nickname,
+                        c.id,
+                        c.name,
+                        m.title,
+                        m.locationName,
+                        m.address,
+                        m.latitude,
+                        m.longitude,
+                        m.meetingDate,
+                        m.maxPeople,
+                        m.currentPeople,
+                        m.status,
+                        m.thumbnailImageObjectKey,
+                        c.defaultImageUrl
+                    )
+                    from Meeting m
+                    join m.host h
+                    join m.category c
+                    """,
+            countQuery = "select count(m) from Meeting m"
+    )
+    Page<MeetingSummaryProjection> findAllSummaries(Pageable pageable);
+
+    @Query(
+            value = """
+                    select new com.meetple.backend.domain.meeting.repository.MeetingSummaryProjection(
+                        m.id,
+                        h.id,
+                        h.nickname,
+                        c.id,
+                        c.name,
+                        m.title,
+                        m.locationName,
+                        m.address,
+                        m.latitude,
+                        m.longitude,
+                        m.meetingDate,
+                        m.maxPeople,
+                        m.currentPeople,
+                        m.status,
+                        m.thumbnailImageObjectKey,
+                        c.defaultImageUrl
+                    )
+                    from Meeting m
+                    join m.host h
+                    join m.category c
+                    where m.status = :status
+                    """,
+            countQuery = "select count(m) from Meeting m where m.status = :status"
+    )
+    Page<MeetingSummaryProjection> findSummariesByStatus(
+            @Param("status") MeetingStatus status,
+            Pageable pageable
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = {"host"})
     @Query("select m from Meeting m where m.id = :meetingId")

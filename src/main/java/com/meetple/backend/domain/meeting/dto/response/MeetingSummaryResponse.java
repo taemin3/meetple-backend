@@ -1,7 +1,7 @@
 package com.meetple.backend.domain.meeting.dto.response;
 
-import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
+import com.meetple.backend.domain.meeting.repository.MeetingSummaryProjection;
 import java.time.LocalDateTime;
 
 public record MeetingSummaryResponse(
@@ -22,22 +22,25 @@ public record MeetingSummaryResponse(
         String thumbnailImageUrl
 ) {
 
-    public static MeetingSummaryResponse from(Meeting meeting, String thumbnailImageUrl) {
+    public static MeetingSummaryResponse from(
+            MeetingSummaryProjection meeting,
+            String thumbnailImageUrl
+    ) {
         return new MeetingSummaryResponse(
-                meeting.getId(),
-                meeting.getHost().getId(),
-                meeting.getHost().getNickname(),
-                meeting.getCategory().getId(),
-                meeting.getCategory().getName(),
-                meeting.getTitle(),
-                meeting.getLocationName(),
-                meeting.getAddress(),
-                meeting.getLatitude().doubleValue(),
-                meeting.getLongitude().doubleValue(),
-                meeting.getMeetingDate(),
-                meeting.getMaxPeople(),
-                meeting.getCurrentPeople(),
-                meeting.getStatus(),
+                meeting.id(),
+                meeting.hostId(),
+                meeting.hostNickname(),
+                meeting.categoryId(),
+                meeting.categoryName(),
+                meeting.title(),
+                meeting.locationName(),
+                meeting.address(),
+                meeting.latitude().doubleValue(),
+                meeting.longitude().doubleValue(),
+                meeting.scheduledAt(),
+                meeting.capacity(),
+                meeting.currentPeople(),
+                meeting.status(),
                 thumbnailImageUrl
         );
     }
