@@ -38,6 +38,9 @@ class CloudWatchApplicationMetricFilterTest {
                 .tag("uri", "/api/v1/meetings/summaries")
                 .register(registry);
         Timer.builder("http.server.requests")
+                .tag("uri", "/api/v1/performance/auth-probe")
+                .register(registry);
+        Timer.builder("http.server.requests")
                 .tag("uri", "/api/v1/auth/login")
                 .register(registry);
 
@@ -46,6 +49,9 @@ class CloudWatchApplicationMetricFilterTest {
                 .timer()).isNotNull();
         assertThat(registry.find("http.server.requests")
                 .tag("uri", "/api/v1/meetings/summaries")
+                .timer()).isNotNull();
+        assertThat(registry.find("http.server.requests")
+                .tag("uri", "/api/v1/performance/auth-probe")
                 .timer()).isNotNull();
         assertThat(registry.find("http.server.requests")
                 .tag("uri", "/api/v1/auth/login")

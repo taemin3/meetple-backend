@@ -37,6 +37,14 @@ export function getCategories() {
   return request('GET', '/api/v1/categories', 'categories');
 }
 
+export function getAuthProbe(accessToken) {
+  return request('GET', '/api/v1/performance/auth-probe', 'auth_probe', {
+    headers: authHeaders(accessToken),
+    expectedStatus: 204,
+    expectsEnvelope: false,
+  });
+}
+
 export function login(email, password) {
   return request('POST', '/api/v1/auth/login', 'login', {
     body: { email, password },

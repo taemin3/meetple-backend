@@ -58,6 +58,9 @@ management:
           include: "readinessState,db,redis"
 
 meetple:
+  performance:
+    auth-probe:
+      enabled: ${MEETPLE_PERFORMANCE_AUTH_PROBE_ENABLED:false}
   observability:
     cloudwatch:
       enabled: ${MEETPLE_CLOUDWATCH_METRICS_ENABLED:false}

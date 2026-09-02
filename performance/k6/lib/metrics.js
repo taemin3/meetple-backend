@@ -10,6 +10,7 @@ export const http5xx = new Counter('http_5xx');
 const endpointTrends = Object.freeze({
   readiness: new Trend('readiness_duration', true),
   categories: new Trend('categories_duration', true),
+  auth_probe: new Trend('auth_probe_duration', true),
   login: new Trend('login_duration', true),
   token_reissue: new Trend('token_reissue_duration', true),
   member_me: new Trend('member_me_duration', true),
