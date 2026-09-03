@@ -26,7 +26,12 @@ class FreshDatabaseMigrationTest {
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(POSTGRES_IMAGE)
             .withDatabaseName("meetple")
             .withUsername("meetple")
-            .withPassword("meetple");
+            .withPassword("meetple")
+            .withCommand(
+                                "postgres",
+                                        "-c",
+                                        "shared_preload_libraries=pg_bigm,pg_stat_statements"
+            );
 
     @Test
     void migrationsCreateCompleteSchemaOnEmptyPostgresql() throws Exception {

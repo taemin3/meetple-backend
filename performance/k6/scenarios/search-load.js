@@ -9,10 +9,11 @@ import {
 
 import {
     assertCredentials,
+    assertSafeTarget,
     config,
 } from '../lib/config.js';
 
-const TARGET_RPS = Number(__ENV.TARGET_RPS || 50);
+const TARGET_RPS = config.targetRps;
 
 export const options = {
     scenarios: {
@@ -51,6 +52,7 @@ export const options = {
 };
 
 export function setup() {
+    assertSafeTarget();
     assertCredentials();
 
     const result = login(config.email, config.password);

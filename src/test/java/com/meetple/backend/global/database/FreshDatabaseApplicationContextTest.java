@@ -35,7 +35,12 @@ class FreshDatabaseApplicationContextTest {
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(POSTGRES_IMAGE)
             .withDatabaseName("meetple")
             .withUsername("meetple")
-            .withPassword("meetple");
+            .withPassword("meetple")
+            .withCommand(
+                    "postgres",
+                    "-c",
+                    "shared_preload_libraries=pg_bigm,pg_stat_statements"
+            );
 
     @DynamicPropertySource
     static void configureDatabase(DynamicPropertyRegistry registry) {
