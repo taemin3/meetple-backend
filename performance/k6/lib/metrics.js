@@ -18,6 +18,7 @@ const endpointTrends = Object.freeze({
   meeting_list: new Trend('meeting_list_duration', true),
   meeting_list_summary: new Trend('meeting_list_summary_duration', true),
   meeting_detail: new Trend('meeting_detail_duration', true),
+    meeting_search: new Trend('meeting_search_duration', true),
 });
 
 const AUTH_ERROR_CODES = new Set([10101, 10301, 10302, 12410, 12411, 12413, 12414, 12415]);

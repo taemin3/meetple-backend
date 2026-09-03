@@ -74,6 +74,7 @@ class ChatMigrationTest {
                 .locations("classpath:db/migration")
                 .baselineOnMigrate(true)
                 .baselineVersion("0")
+                .target("13")
                 .load();
 
         var result = flyway.migrate();

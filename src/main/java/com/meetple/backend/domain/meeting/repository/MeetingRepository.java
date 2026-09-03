@@ -158,40 +158,38 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
 
     @Query(
             value = """
-                    select m.id
-                    from meetings m
-                    join categories c on c.id = m.category_id
-                    where m.status = :status
-                      and m.deleted_at is null
-                      and (
-                            lower(m.title) like :keywordPattern escape '!'
-                            or lower(m.location_name) like :keywordPattern escape '!'
-                            or lower(m.address) like :keywordPattern escape '!'
-                            or lower(c.name) like :keywordPattern escape '!'
-                          )
-                      and (:categoryName is null or c.name = :categoryName)
-                    order by (:earthRadiusMeters * acos(least(1.0, greatest(-1.0,
-                            cos(radians(:latitude)) * cos(radians(m.latitude))
-                            * cos(radians(m.longitude) - radians(:longitude))
-                            + sin(radians(:latitude)) * sin(radians(m.latitude))
-                          )))) asc,
-                          m.meeting_date asc,
-                          m.id asc
-                    """,
+                select m.id
+                from meetings m
+                join categories c on c.id = m.category_id
+                where m.status = :status
+                  and m.deleted_at is null
+                  and (
+                        lower(m.title) like :keywordPattern escape '!'
+                        or lower(m.location_name) like :keywordPattern escape '!'
+                        or lower(m.address) like :keywordPattern escape '!'
+                      )
+                  and (:categoryName is null or c.name = :categoryName)
+                order by (:earthRadiusMeters * acos(least(1.0, greatest(-1.0,
+                        cos(radians(:latitude)) * cos(radians(m.latitude))
+                        * cos(radians(m.longitude) - radians(:longitude))
+                        + sin(radians(:latitude)) * sin(radians(m.latitude))
+                      )))) asc,
+                      m.meeting_date asc,
+                      m.id asc
+                """,
             countQuery = """
-                    select count(*)
-                    from meetings m
-                    join categories c on c.id = m.category_id
-                    where m.status = :status
-                      and m.deleted_at is null
-                      and (
-                            lower(m.title) like :keywordPattern escape '!'
-                            or lower(m.location_name) like :keywordPattern escape '!'
-                            or lower(m.address) like :keywordPattern escape '!'
-                            or lower(c.name) like :keywordPattern escape '!'
-                          )
-                      and (:categoryName is null or c.name = :categoryName)
-                    """,
+                select count(*)
+                from meetings m
+                join categories c on c.id = m.category_id
+                where m.status = :status
+                  and m.deleted_at is null
+                  and (
+                        lower(m.title) like :keywordPattern escape '!'
+                        or lower(m.location_name) like :keywordPattern escape '!'
+                        or lower(m.address) like :keywordPattern escape '!'
+                      )
+                  and (:categoryName is null or c.name = :categoryName)
+                """,
             nativeQuery = true
     )
     Page<Long> searchMeetingIds(

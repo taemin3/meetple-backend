@@ -27,6 +27,12 @@ resource "aws_db_parameter_group" "postgres_cdc" {
     apply_method = "pending-reboot"
   }
 
+  parameter {
+    name         = "shared_preload_libraries"
+    value        = "pg_stat_statements,pg_tle,pg_bigm"
+    apply_method = "pending-reboot"
+  }
+
   tags = {
     Name = "${local.name_prefix}-postgres-cdc"
   }

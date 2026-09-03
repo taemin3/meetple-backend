@@ -119,3 +119,25 @@ export function meetingIdFromList(result) {
   }
   return String(content[0].id);
 }
+
+export function searchMeetings(
+    accessToken,
+    keyword = '러닝',
+    page = 0,
+) {
+    const encodedKeyword = encodeURIComponent(keyword);
+
+    return request(
+        'GET',
+        `/api/v1/meetings/search` +
+        `?keyword=${encodedKeyword}` +
+        `&latitude=37.5665` +
+        `&longitude=126.9780` +
+        `&page=${page}` +
+        `&size=20`,
+        'meeting_search',
+        {
+            headers: authHeaders(accessToken),
+        },
+    );
+}
