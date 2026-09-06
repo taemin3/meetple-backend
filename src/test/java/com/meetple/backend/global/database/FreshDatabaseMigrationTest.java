@@ -18,15 +18,20 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers(disabledWithoutDocker = true)
 class FreshDatabaseMigrationTest {
 
-    private static final DockerImageName POSTGIS_IMAGE = DockerImageName
-            .parse("postgis/postgis:16-3.4")
+    private static final DockerImageName POSTGRES_IMAGE = DockerImageName
+            .parse("meetple-postgres:16-3.4-bigm")
             .asCompatibleSubstituteFor("postgres");
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(POSTGIS_IMAGE)
+    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(POSTGRES_IMAGE)
             .withDatabaseName("meetple")
             .withUsername("meetple")
-            .withPassword("meetple");
+            .withPassword("meetple")
+            .withCommand(
+                                "postgres",
+                                        "-c",
+                                        "shared_preload_libraries=pg_bigm,pg_stat_statements"
+            );
 
     @Test
     void migrationsCreateCompleteSchemaOnEmptyPostgresql() throws Exception {
@@ -37,7 +42,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(14);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(15);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
@@ -61,7 +66,7 @@ class FreshDatabaseMigrationTest {
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
-                    "7", "8", "9", "10", "11", "12", "13"
+                    "7", "8", "9", "10", "11", "12", "13", "14"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder("운동", "스터디", "취미");
             assertThat(rowCount(connection, "legal_documents")).isEqualTo(3);

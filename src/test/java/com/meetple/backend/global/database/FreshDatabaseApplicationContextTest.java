@@ -27,15 +27,20 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers(disabledWithoutDocker = true)
 class FreshDatabaseApplicationContextTest {
 
-    private static final DockerImageName POSTGIS_IMAGE = DockerImageName
-            .parse("postgis/postgis:16-3.4")
+    private static final DockerImageName POSTGRES_IMAGE = DockerImageName
+            .parse("meetple-postgres:16-3.4-bigm")
             .asCompatibleSubstituteFor("postgres");
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(POSTGIS_IMAGE)
+    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(POSTGRES_IMAGE)
             .withDatabaseName("meetple")
             .withUsername("meetple")
-            .withPassword("meetple");
+            .withPassword("meetple")
+            .withCommand(
+                    "postgres",
+                    "-c",
+                    "shared_preload_libraries=pg_bigm,pg_stat_statements"
+            );
 
     @DynamicPropertySource
     static void configureDatabase(DynamicPropertyRegistry registry) {
@@ -82,7 +87,7 @@ class FreshDatabaseApplicationContextTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE",
                 Integer.class
-        )).isEqualTo(14);
+        )).isEqualTo(15);
     }
 
     @Test

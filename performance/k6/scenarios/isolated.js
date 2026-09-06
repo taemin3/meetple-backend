@@ -65,7 +65,8 @@ export const options = {
     auth_failures: [{ threshold: 'count==0', abortOnFail: true, delayAbortEval: '1s' }],
     business_failures: [{ threshold: 'count==0', abortOnFail: true, delayAbortEval: '15s' }],
     contract_failures: [{ threshold: 'count==0', abortOnFail: true, delayAbortEval: '15s' }],
-    dropped_iterations: [{ threshold: 'count==0', abortOnFail: true, delayAbortEval: '5s' }],
+    //dropped_iterations: [{ threshold: 'count==0', abortOnFail: true, delayAbortEval: '5s' }],
+      dropped_iterations: ['count==0'],
     http_req_duration: [
       'p(95)<500',
       'p(99)<1000',

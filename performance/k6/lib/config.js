@@ -34,7 +34,7 @@ export const config = Object.freeze({
   datasetManifest: __ENV.K6_DATASET_MANIFEST ? __ENV.K6_DATASET_MANIFEST.trim() : '',
   loadVus: integer('K6_LOAD_VUS', 5, 1, 30),
   iterationSeconds: integer('K6_ITERATION_SECONDS', 5, 1, 60),
-  targetRps: integer('K6_TARGET_RPS', 25, 1, 400),
+  targetRps: integer('K6_TARGET_RPS', 25, 1, 1000),
   isolatedEndpoint: (__ENV.K6_ISOLATED_ENDPOINT || 'categories').trim(),
 });
 

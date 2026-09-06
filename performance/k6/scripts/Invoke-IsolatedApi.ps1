@@ -4,7 +4,7 @@ param(
     [ValidateSet('categories', 'meeting-list', 'meeting-list-summary', 'meeting-detail', 'member-me')]
     [string] $Endpoint,
     [Parameter(Mandatory = $true)]
-    [ValidateSet(200, 300, 400)]
+    [ValidateSet(200, 300, 400, 500)]
     [int] $TargetRps,
     [string] $DatasetId = 'meetple-k6-baseline-v1',
     [string] $BaseUrl = 'http://127.0.0.1:8080',
