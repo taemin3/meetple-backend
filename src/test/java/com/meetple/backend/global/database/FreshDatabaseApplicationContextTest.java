@@ -40,7 +40,7 @@ import org.testcontainers.utility.DockerImageName;
 class FreshDatabaseApplicationContextTest {
 
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName
-            .parse("meetple-postgres:16-3.4-bigm")
+            .parse("meetple-postgres:16-3.5-bigm")
             .asCompatibleSubstituteFor("postgres");
 
     @Container

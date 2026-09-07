@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: docker/postgres/Dockerfile
-    image: meetple-postgres:16-3.4-bigm
+    image: meetple-postgres:16-3.5-bigm
     container_name: meetple-postgres
     command:
       - postgres
