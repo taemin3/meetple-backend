@@ -3,7 +3,6 @@ package com.meetple.backend.domain.meeting.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -399,15 +398,9 @@ class MeetingServiceTest {
         given(meetingRepository.findNearbyMeetings(
                 any(),
                 any(),
-                any(),
-                any(),
-                any(),
-                anyBoolean(),
-                any(),
                 anyDouble(),
                 anyDouble(),
                 anyInt(),
-                anyDouble(),
                 any()
         )).willReturn(new PageImpl<>(List.of(nearby), PageRequest.of(0, 20), 1));
         given(meetingImageRepository.findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(any()))

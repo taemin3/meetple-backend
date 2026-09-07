@@ -141,3 +141,25 @@ export function searchMeetings(
         },
     );
 }
+
+export function getNearbyMeetings(
+    accessToken,
+    latitude,
+    longitude,
+    radiusMeters,
+    page = 0,
+) {
+    return request(
+        'GET',
+        `/api/v1/meetings/nearby` +
+        `?latitude=${latitude}` +
+        `&longitude=${longitude}` +
+        `&radiusMeters=${radiusMeters}` +
+        `&page=${page}` +
+        `&size=20`,
+        'meeting_nearby',
+        {
+            headers: authHeaders(accessToken),
+        },
+    );
+}

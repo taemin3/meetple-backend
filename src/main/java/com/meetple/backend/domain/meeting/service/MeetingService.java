@@ -65,7 +65,6 @@ public class MeetingService {
     private static final int NOTIFICATION_MESSAGE_MAX_LENGTH = 500;
     private static final long UNKNOWN_END_AUTO_COMPLETE_HOURS = 24;
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
-    private static final double METERS_PER_LATITUDE_DEGREE = 111_320.0;
     private static final Set<String> ALLOWED_SORT_PROPERTIES = Set.of(
             "id",
             "title",
@@ -137,27 +136,18 @@ public class MeetingService {
         return PageResponse.from(meetings.map(this::toSummaryResponse));
     }
 
-    public PageResponse<MeetingResponse> getNearbyMeetings(NearbyMeetingSearchRequest request, Pageable pageable) {
-        CoordinateBounds bounds = CoordinateBounds.from(
+    public PageResponse<MeetingResponse> getNearbyMeetings(
+            NearbyMeetingSearchRequest request,
+            Pageable pageable
+    ) {
+        Page<Meeting> page = meetingRepository.findNearbyMeetings(
+                MeetingStatus.RECRUITING.name(),
+                normalizeOptionalText(request.category()),
                 request.latitude(),
                 request.longitude(),
-                request.radiusMeters()
+                request.radiusMeters(),
+                withoutSort(pageable)
         );
-
-        Page<Meeting> page = meetingRepository.findNearbyMeetings(
-                        MeetingStatus.RECRUITING.name(),
-                        bounds.minLatitude(),
-                        bounds.maxLatitude(),
-                        bounds.minLongitude(),
-                        bounds.maxLongitude(),
-                        bounds.crossesAntimeridian(),
-                        normalizeOptionalText(request.category()),
-                        request.latitude(),
-                        request.longitude(),
-                        request.radiusMeters(),
-                        EARTH_RADIUS_METERS,
-                        withoutSort(pageable)
-                );
         return PageResponse.from(toResponsePage(page));
     }
 
@@ -538,43 +528,6 @@ public class MeetingService {
 
     private BigDecimal toBigDecimal(Double value) {
         return BigDecimal.valueOf(value);
-    }
-
-    private record CoordinateBounds(
-            BigDecimal minLatitude,
-            BigDecimal maxLatitude,
-            BigDecimal minLongitude,
-            BigDecimal maxLongitude,
-            boolean crossesAntimeridian
-    ) {
-
-        private static CoordinateBounds from(double latitude, double longitude, int radiusMeters) {
-            double latitudeDelta = radiusMeters / METERS_PER_LATITUDE_DEGREE;
-            double longitudeScale = Math.cos(Math.toRadians(latitude));
-            double longitudeDelta = Math.abs(longitudeScale) < 0.000001
-                    ? 180.0
-                    : radiusMeters / (METERS_PER_LATITUDE_DEGREE * longitudeScale);
-            double rawMinLongitude = longitude - Math.abs(longitudeDelta);
-            double rawMaxLongitude = longitude + Math.abs(longitudeDelta);
-            boolean crossesAntimeridian = rawMinLongitude < -180.0 || rawMaxLongitude > 180.0;
-
-            return new CoordinateBounds(
-                    BigDecimal.valueOf(Math.max(-90.0, latitude - latitudeDelta)),
-                    BigDecimal.valueOf(Math.min(90.0, latitude + latitudeDelta)),
-                    BigDecimal.valueOf(crossesAntimeridian
-                            ? normalizeLongitude(rawMinLongitude)
-                            : Math.max(-180.0, rawMinLongitude)),
-                    BigDecimal.valueOf(crossesAntimeridian
-                            ? normalizeLongitude(rawMaxLongitude)
-                            : Math.min(180.0, rawMaxLongitude)),
-                    crossesAntimeridian
-            );
-        }
-
-        private static double normalizeLongitude(double longitude) {
-            double normalized = ((longitude + 180.0) % 360.0 + 360.0) % 360.0 - 180.0;
-            return normalized == -180.0 ? 180.0 : normalized;
-        }
     }
 
     private record ImageReference(String objectKey, String fileUrl) {

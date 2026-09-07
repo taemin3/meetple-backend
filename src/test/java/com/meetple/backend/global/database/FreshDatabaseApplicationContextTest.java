@@ -5,17 +5,29 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.meetple.backend.domain.category.entity.Category;
+import com.meetple.backend.domain.category.repository.CategoryRepository;
+import com.meetple.backend.domain.meeting.entity.Meeting;
+import com.meetple.backend.domain.meeting.entity.MeetingStatus;
+import com.meetple.backend.domain.meeting.repository.MeetingRepository;
+import com.meetple.backend.domain.member.entity.Member;
+import com.meetple.backend.domain.member.repository.MemberRepository;
 import jakarta.persistence.EntityManagerFactory;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -81,13 +93,77 @@ class FreshDatabaseApplicationContextTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private MeetingRepository meetingRepository;
+
+    @Autowired
+    private MemberRepository memberRepository;
+
+    @Autowired
+    private CategoryRepository categoryRepository;
+
     @Test
     void applicationStartsAfterFlywayCreatesSchemaOnEmptyPostgresql() {
         assertThat(entityManagerFactory.isOpen()).isTrue();
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE",
                 Integer.class
-        )).isEqualTo(15);
+        )).isEqualTo(16);
+    }
+
+    @Test
+    @Transactional
+    void postgisNearbyQueryUsesGeneratedLocationAndFiltersRows() {
+        Member host = memberRepository.save(Member.createUser(
+                "postgis-nearby@meetple.test",
+                "encoded-password",
+                "postgis-host",
+                "Seoul"
+        ));
+        Category category = categoryRepository.save(Category.create("postgis-test"));
+
+        Meeting nearby = meetingRepository.save(meeting(
+                host,
+                category,
+                "Nearby meeting",
+                "37.566500",
+                "126.978000"
+        ));
+        meetingRepository.save(meeting(
+                host,
+                category,
+                "Far meeting",
+                "37.610000",
+                "126.978000"
+        ));
+        Meeting deleted = meetingRepository.save(meeting(
+                host,
+                category,
+                "Deleted nearby meeting",
+                "37.566500",
+                "126.978000"
+        ));
+        deleted.softDelete(LocalDateTime.now());
+        meetingRepository.flush();
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT ST_AsText(location::geometry) FROM meetings WHERE id = ?",
+                String.class,
+                nearby.getId()
+        )).isEqualTo("POINT(126.978 37.5665)");
+
+        Page<Meeting> result = meetingRepository.findNearbyMeetings(
+                MeetingStatus.RECRUITING.name(),
+                "postgis-test",
+                37.5665,
+                126.9780,
+                1000,
+                PageRequest.of(0, 20)
+        );
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent()).extracting(Meeting::getId)
+                .containsExactly(nearby.getId());
     }
 
     @Test
@@ -114,5 +190,27 @@ class FreshDatabaseApplicationContextTest {
             mockMvc.perform(get(path))
                     .andExpect(status().isNotFound());
         }
+    }
+
+    private Meeting meeting(
+            Member host,
+            Category category,
+            String title,
+            String latitude,
+            String longitude
+    ) {
+        return Meeting.create(
+                host,
+                category,
+                title,
+                "PostGIS integration test meeting",
+                "Test location",
+                "Seoul",
+                new BigDecimal(latitude),
+                new BigDecimal(longitude),
+                10,
+                LocalDateTime.now().plusDays(1),
+                null
+        );
     }
 }

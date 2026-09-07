@@ -155,50 +155,6 @@ class MeetingRepositoryTest {
     }
 
     @Test
-    void findNearbyMeetingsFiltersByDistanceAndAppliesPaging() {
-        Member host = memberRepository.save(Member.createUser(
-                "nearby-host@meetple.com",
-                "encoded-password",
-                "host",
-                "Seoul"
-        ));
-        Category category = categoryRepository.save(Category.create("exercise"));
-        Meeting nearby = meetingRepository.save(createMeeting(
-                host,
-                category,
-                "Nearby running",
-                new BigDecimal("37.521900"),
-                new BigDecimal("126.924500")
-        ));
-        meetingRepository.save(createMeeting(
-                host,
-                category,
-                "Far running",
-                new BigDecimal("37.540000"),
-                new BigDecimal("126.924500")
-        ));
-
-        Page<Meeting> result = meetingRepository.findNearbyMeetings(
-                MeetingStatus.RECRUITING.name(),
-                new BigDecimal("37.500000"),
-                new BigDecimal("37.550000"),
-                new BigDecimal("126.900000"),
-                new BigDecimal("126.950000"),
-                false,
-                "exercise",
-                37.5219,
-                126.9245,
-                1000,
-                6371000.0,
-                PageRequest.of(0, 1)
-        );
-
-        assertThat(result.getTotalElements()).isEqualTo(1);
-        assertThat(result.getContent()).extracting(Meeting::getId)
-                .containsExactly(nearby.getId());
-    }
-
-    @Test
     void searchMeetingsReturnsGlobalKeywordMatchesInDistanceOrder() {
         Member host = memberRepository.save(Member.createUser(
                 "search-host@meetple.com",
@@ -268,7 +224,7 @@ class MeetingRepositoryTest {
     }
 
     @Test
-    void softDeletedMeetingIsExcludedFromEntitySearchAndNearbyQueries() {
+    void softDeletedMeetingIsExcludedFromEntityAndSearchQueries() {
         Member host = memberRepository.save(Member.createUser(
                 "deleted-host@meetple.com",
                 "encoded-password",
@@ -298,20 +254,6 @@ class MeetingRepositoryTest {
                 "exercise",
                 37.5219,
                 126.9245,
-                6371000.0,
-                PageRequest.of(0, 20)
-        )).isEmpty();
-        assertThat(meetingRepository.findNearbyMeetings(
-                MeetingStatus.RECRUITING.name(),
-                new BigDecimal("37.500000"),
-                new BigDecimal("37.550000"),
-                new BigDecimal("126.900000"),
-                new BigDecimal("126.950000"),
-                false,
-                "exercise",
-                37.5219,
-                126.9245,
-                1000,
                 6371000.0,
                 PageRequest.of(0, 20)
         )).isEmpty();

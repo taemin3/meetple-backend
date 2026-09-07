@@ -3,7 +3,6 @@ package com.meetple.backend.domain.meeting.repository;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import jakarta.persistence.LockModeType;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -204,60 +203,63 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
 
     @Query(
             value = """
-                    select m.*
-                    from meetings m
-                    join categories c on c.id = m.category_id
-                    where m.status = :status
-                      and m.deleted_at is null
-                      and m.latitude between :minLatitude and :maxLatitude
-                      and (
-                            (:crossesAntimeridian = false and m.longitude between :minLongitude and :maxLongitude)
-                            or (:crossesAntimeridian = true and (m.longitude >= :minLongitude or m.longitude <= :maxLongitude))
-                          )
-                      and (:categoryName is null or c.name = :categoryName)
-                      and (:earthRadiusMeters * acos(least(1.0, greatest(-1.0,
-                            cos(radians(:latitude)) * cos(radians(m.latitude))
-                            * cos(radians(m.longitude) - radians(:longitude))
-                            + sin(radians(:latitude)) * sin(radians(m.latitude))
-                          )))) <= :radiusMeters
-                    order by (:earthRadiusMeters * acos(least(1.0, greatest(-1.0,
-                            cos(radians(:latitude)) * cos(radians(m.latitude))
-                            * cos(radians(m.longitude) - radians(:longitude))
-                            + sin(radians(:latitude)) * sin(radians(m.latitude))
-                          )))) asc
-                    """,
+                select m.*
+                from meetings m
+                join categories c on c.id = m.category_id
+                where m.status = :status
+                  and m.deleted_at is null
+                  and (:categoryName is null or c.name = :categoryName)
+                  and ST_DWithin(
+                        m.location,
+                        CAST(
+                            ST_SetSRID(
+                                ST_MakePoint(:longitude, :latitude),
+                                4326
+                            ) AS geography
+                        ),
+                        :radiusMeters,
+                        false
+                      )
+                order by ST_Distance(
+                        m.location,
+                        CAST(
+                            ST_SetSRID(
+                                ST_MakePoint(:longitude, :latitude),
+                                4326
+                            ) AS geography
+                        ),
+                        false
+                      ) asc,
+                      m.meeting_date asc,
+                      m.id asc
+                """,
             countQuery = """
-                    select count(*)
-                    from meetings m
-                    join categories c on c.id = m.category_id
-                    where m.status = :status
-                      and m.deleted_at is null
-                      and m.latitude between :minLatitude and :maxLatitude
-                      and (
-                            (:crossesAntimeridian = false and m.longitude between :minLongitude and :maxLongitude)
-                            or (:crossesAntimeridian = true and (m.longitude >= :minLongitude or m.longitude <= :maxLongitude))
-                          )
-                      and (:categoryName is null or c.name = :categoryName)
-                      and (:earthRadiusMeters * acos(least(1.0, greatest(-1.0,
-                            cos(radians(:latitude)) * cos(radians(m.latitude))
-                            * cos(radians(m.longitude) - radians(:longitude))
-                            + sin(radians(:latitude)) * sin(radians(m.latitude))
-                          )))) <= :radiusMeters
-                    """,
+                select count(*)
+                from meetings m
+                join categories c on c.id = m.category_id
+                where m.status = :status
+                  and m.deleted_at is null
+                  and (:categoryName is null or c.name = :categoryName)
+                  and ST_DWithin(
+                        m.location,
+                        CAST(
+                            ST_SetSRID(
+                                ST_MakePoint(:longitude, :latitude),
+                                4326
+                            ) AS geography
+                        ),
+                        :radiusMeters,
+                        false
+                      )
+                """,
             nativeQuery = true
     )
     Page<Meeting> findNearbyMeetings(
             @Param("status") String status,
-            @Param("minLatitude") BigDecimal minLatitude,
-            @Param("maxLatitude") BigDecimal maxLatitude,
-            @Param("minLongitude") BigDecimal minLongitude,
-            @Param("maxLongitude") BigDecimal maxLongitude,
-            @Param("crossesAntimeridian") boolean crossesAntimeridian,
             @Param("categoryName") String categoryName,
             @Param("latitude") double latitude,
             @Param("longitude") double longitude,
             @Param("radiusMeters") int radiusMeters,
-            @Param("earthRadiusMeters") double earthRadiusMeters,
             Pageable pageable
     );
 
