@@ -64,7 +64,6 @@ public class MeetingService {
     private static final String INVALID_SORT_PROPERTY_MESSAGE = "지원하지 않는 정렬 조건입니다.";
     private static final int NOTIFICATION_MESSAGE_MAX_LENGTH = 500;
     private static final long UNKNOWN_END_AUTO_COMPLETE_HOURS = 24;
-    private static final double EARTH_RADIUS_METERS = 6_371_000.0;
     private static final Set<String> ALLOWED_SORT_PROPERTIES = Set.of(
             "id",
             "title",
@@ -158,7 +157,6 @@ public class MeetingService {
                 normalizeOptionalText(request.category()),
                 request.latitude(),
                 request.longitude(),
-                EARTH_RADIUS_METERS,
                 withoutSort(pageable)
         );
         return PageResponse.from(toResponsePage(loadSearchMeetings(meetingIds)));

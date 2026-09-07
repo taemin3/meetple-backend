@@ -167,6 +167,76 @@ class FreshDatabaseApplicationContextTest {
     }
 
     @Test
+    @Transactional
+    void postgisSearchQueryReturnsGlobalKeywordMatchesInDistanceOrder() {
+        Member host = memberRepository.save(Member.createUser(
+                "postgis-search@meetple.test",
+                "encoded-password",
+                "search-host",
+                "Seoul"
+        ));
+        Category exercise = categoryRepository.save(Category.create("postgis-search-exercise"));
+        Category study = categoryRepository.save(Category.create("postgis-search-study"));
+        Meeting nearby = meetingRepository.save(meeting(
+                host,
+                exercise,
+                "Nearby 100% running",
+                "37.521900",
+                "126.924500"
+        ));
+        Meeting farAway = meetingRepository.save(meeting(
+                host,
+                exercise,
+                "Busan 100% running",
+                "35.179600",
+                "129.075600"
+        ));
+        meetingRepository.save(meeting(
+                host,
+                exercise,
+                "Nearby 1000 running",
+                "37.520000",
+                "126.924500"
+        ));
+        meetingRepository.save(meeting(
+                host,
+                study,
+                "Closer 100% running study",
+                "37.521000",
+                "126.924500"
+        ));
+        Meeting completed = meetingRepository.save(meeting(
+                host,
+                exercise,
+                "Completed 100% running",
+                "37.521500",
+                "126.924500"
+        ));
+        completed.complete();
+        Meeting deleted = meetingRepository.save(meeting(
+                host,
+                exercise,
+                "Deleted 100% running",
+                "37.521600",
+                "126.924500"
+        ));
+        deleted.softDelete(LocalDateTime.now());
+        meetingRepository.flush();
+
+        Page<Long> result = meetingRepository.searchMeetingIds(
+                MeetingStatus.RECRUITING.name(),
+                "%100!% running%",
+                "postgis-search-exercise",
+                37.5219,
+                126.9245,
+                PageRequest.of(0, 20)
+        );
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent()).containsExactly(nearby.getId(), farAway.getId());
+    }
+
+    @Test
     void productionProbesSeparateProcessHealthFromRequiredDependencies() throws Exception {
         mockMvc.perform(get("/livez"))
                 .andExpect(status().isOk())

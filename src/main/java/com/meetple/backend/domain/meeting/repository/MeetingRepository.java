@@ -168,11 +168,16 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                         or lower(m.address) like :keywordPattern escape '!'
                       )
                   and (:categoryName is null or c.name = :categoryName)
-                order by (:earthRadiusMeters * acos(least(1.0, greatest(-1.0,
-                        cos(radians(:latitude)) * cos(radians(m.latitude))
-                        * cos(radians(m.longitude) - radians(:longitude))
-                        + sin(radians(:latitude)) * sin(radians(m.latitude))
-                      )))) asc,
+                order by ST_Distance(
+                        m.location,
+                        CAST(
+                            ST_SetSRID(
+                                ST_MakePoint(:longitude, :latitude),
+                                4326
+                            ) AS geography
+                        ),
+                        false
+                      ) asc,
                       m.meeting_date asc,
                       m.id asc
                 """,
@@ -197,7 +202,6 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
             @Param("categoryName") String categoryName,
             @Param("latitude") double latitude,
             @Param("longitude") double longitude,
-            @Param("earthRadiusMeters") double earthRadiusMeters,
             Pageable pageable
     );
 

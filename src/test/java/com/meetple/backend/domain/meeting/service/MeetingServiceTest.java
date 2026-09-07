@@ -578,7 +578,6 @@ class MeetingServiceTest {
                 "exercise",
                 37.5219,
                 126.9245,
-                6_371_000.0,
                 repositoryPage
         )).willReturn(new PageImpl<>(List.of(10L), repositoryPage, 11));
         given(meetingRepository.findAllWithHostAndCategoryByIdIn(List.of(10L)))
@@ -597,7 +596,6 @@ class MeetingServiceTest {
                 "exercise",
                 37.5219,
                 126.9245,
-                6_371_000.0,
                 repositoryPage
         );
         verify(meetingRepository).findAllWithHostAndCategoryByIdIn(List.of(10L));
