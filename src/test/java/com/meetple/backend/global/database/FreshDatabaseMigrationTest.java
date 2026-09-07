@@ -42,7 +42,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(15);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(16);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
@@ -66,7 +66,7 @@ class FreshDatabaseMigrationTest {
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
-                    "7", "8", "9", "10", "11", "12", "13", "14"
+                    "7", "8", "9", "10", "11", "12", "13", "14", "15"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder("운동", "스터디", "취미");
             assertThat(rowCount(connection, "legal_documents")).isEqualTo(3);
@@ -75,6 +75,10 @@ class FreshDatabaseMigrationTest {
             assertThat(columnType(connection, "outbox_events", "payload")).isEqualTo("jsonb");
             assertThat(columnType(connection, "outbox_events", "id")).isEqualTo("uuid");
             assertThat(columnType(connection, "push_event_deliveries", "claim_id")).isEqualTo("uuid");
+            assertThat(columnType(connection, "meetings", "location")).isEqualTo("geography");
+            assertThat(columnGeneration(connection, "meetings", "location")).isEqualTo("ALWAYS");
+            assertThat(indexDefinition(connection, "idx_meetings_location_gist"))
+                    .contains("USING gist (location)");
             assertThat(columnIsNullable(connection, "members", "email_verified_at")).isTrue();
             assertThat(columnIsNullable(connection, "members", "profile_image_object_key")).isTrue();
             assertThat(columnIsNullable(connection, "meetings", "deleted_at")).isTrue();
@@ -189,6 +193,39 @@ class FreshDatabaseMigrationTest {
             try (var resultSet = statement.executeQuery()) {
                 assertThat(resultSet.next()).isTrue();
                 return "YES".equals(resultSet.getString("is_nullable"));
+            }
+        }
+    }
+
+    private String columnGeneration(Connection connection, String tableName, String columnName)
+            throws SQLException {
+        try (var statement = connection.prepareStatement("""
+                SELECT is_generated
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = ?
+                  AND column_name = ?
+                """)) {
+            statement.setString(1, tableName);
+            statement.setString(2, columnName);
+            try (var resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                return resultSet.getString("is_generated");
+            }
+        }
+    }
+
+    private String indexDefinition(Connection connection, String indexName) throws SQLException {
+        try (var statement = connection.prepareStatement("""
+                SELECT indexdef
+                FROM pg_indexes
+                WHERE schemaname = 'public'
+                  AND indexname = ?
+                """)) {
+            statement.setString(1, indexName);
+            try (var resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                return resultSet.getString("indexdef");
             }
         }
     }
