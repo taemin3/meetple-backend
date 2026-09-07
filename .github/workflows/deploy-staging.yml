@@ -10,6 +10,7 @@ on:
       - "settings.gradle"
       - "gradlew"
       - "Dockerfile"
+      - "docker/postgres/Dockerfile"
       - ".github/workflows/deploy-staging.yml"
   push:
     branches: [main]
@@ -20,6 +21,7 @@ on:
       - "settings.gradle"
       - "gradlew"
       - "Dockerfile"
+      - "docker/postgres/Dockerfile"
       - ".github/workflows/deploy-staging.yml"
   workflow_dispatch:
 
@@ -62,7 +64,7 @@ jobs:
           cache: gradle
 
       - name: Build PostgreSQL test image
-        run: docker build -t meetple-postgres:16-3.4-bigm -f docker/postgres/Dockerfile .
+        run: docker build -t meetple-postgres:16-3.5-bigm -f docker/postgres/Dockerfile .
 
       - name: Run tests
         run: ./gradlew test --no-daemon
