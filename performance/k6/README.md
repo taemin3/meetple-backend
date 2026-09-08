@@ -44,10 +44,10 @@
 ### Isolated API
 
 - 한 번에 하나의 읽기 API만 `ramping-arrival-rate`로 호출
-- 30초 ramp-up, 2분 유지, 30초 ramp-down
-- 대상: `categories`, `meeting-list`, `meeting-list-summary`, `meeting-detail`, `member-me`
-- API별 한계 비교 단계: 200 → 300 → 400 RPS
-- 예상 요청 수: 200 RPS 약 30,000개, 300 RPS 약 45,000개, 400 RPS 약 60,000개 + setup 로그인 1회
+- 20초 ramp-up, 80초 유지, 20초 ramp-down (총 2분)
+- 대상: `categories`, `meeting-list`, `meeting-list-summary`, `meeting-detail`, `meeting-search`, `meeting-nearby`, `member-me`
+- API별 비교 단계: 25 → 50 → 75 → 100 → 200 → 300 → 400 RPS
+- 예상 요청 수: 200 RPS 약 20,000개, 300 RPS 약 30,000개, 400 RPS 약 40,000개 + setup 로그인 1회
 - 각 endpoint/RPS는 별도 승인하고, 테스트 사이에 CloudWatch·ECS·RDS·Slack 복구 확인
 - 선택적으로 테스트 전후 `pg_stat_statements`를 읽어 DB QPS와 HTTP 요청당 SQL 실행 수 계산
 
@@ -61,8 +61,8 @@
 
 | 분류 | API | 이유 |
 | --- | --- | --- |
-| 1차 필수 | 카테고리, 모임 목록, 모임 상세, 내 프로필 | 홈/탐색/상세/인증 사용자 흐름이며 현재 혼합 baseline과 직접 비교 가능 |
-| 2차 후보 | 모임 검색, 주변 검색, hosted/joined/bookmarked 목록, 알림 목록, 채팅방/메시지 목록 | 실제 사용 빈도나 데이터 규모가 확보되면 별도 데이터셋과 계약으로 측정 |
+| 1차 필수 | 카테고리, 모임 목록, 검색, 주변 검색, 모임 상세, 내 프로필 | 홈/탐색/상세/인증 사용자 흐름이며 검색과 주변 검색은 전용 3만 건 데이터셋으로 비교 가능 |
+| 2차 후보 | hosted/joined/bookmarked 목록, 알림 목록, 채팅방/메시지 목록 | 실제 사용 빈도나 데이터 규모가 확보되면 별도 데이터셋과 계약으로 측정 |
 | Smoke만 | 로그인, 토큰 재발급, readiness | 인증·계약 검증에는 필요하지만 일반 읽기 트래픽과 섞으면 결과를 왜곡 |
 | 기본 부하 제외 | 이메일 인증/비밀번호 재설정, 이미지 presign/삭제, FCM 토큰, 알림 읽음, 참여·승인·북마크, 모임 생성·수정·삭제 | 외부 호출, 사용자 데이터 변경, Outbox/Kafka/FCM 등 부작용이 있음 |
 

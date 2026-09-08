@@ -19,14 +19,14 @@ export const options = {
   scenarios: {
     auth_probe: {
       executor: 'ramping-arrival-rate',
-      startRate: 1,
+      startRate: 0,
       timeUnit: '1s',
       preAllocatedVUs,
       maxVUs: preAllocatedVUs * 2,
       stages: [
-        { duration: '30s', target: requestedRps },
-        { duration: '2m', target: requestedRps },
-        { duration: '30s', target: 0 },
+        { duration: '20s', target: requestedRps },
+        { duration: '80s', target: requestedRps },
+        { duration: '20s', target: 0 },
       ],
       gracefulStop: '30s',
       exec: 'authProbeRequest',

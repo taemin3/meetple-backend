@@ -102,6 +102,10 @@ function Assert-K6Summary {
     }
 
     $summary = Get-Content -Raw -LiteralPath $SummaryPath | ConvertFrom-Json
+    if ($null -ne $summary.PSObject.Properties['setup_data']) {
+        $summary.PSObject.Properties.Remove('setup_data')
+        $summary | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $SummaryPath -Encoding utf8
+    }
     $httpRequestsMetric = $summary.metrics.PSObject.Properties['http_reqs']
     if ($null -eq $httpRequestsMetric) {
         throw 'k6 completed without sending any HTTP requests.'
