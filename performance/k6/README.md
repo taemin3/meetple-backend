@@ -34,7 +34,7 @@
 
 - `ramping-arrival-rate`로 VU 수가 아닌 전체 목표 RPS를 고정
 - 카테고리, 모임 목록, 모임 상세, 내 프로필에 요청을 25%씩 분배
-- 30초 ramp-up, 4분 유지, 30초 ramp-down
+- 20초 ramp-up, 80초 유지, 20초 ramp-down (총 2분)
 - 승인 가능한 단계: 25 → 50 → 75 → 100 → 200 → 300 → 400 RPS
 - 각 단계 사이에 k6, CloudWatch, ECS task, WAL, Slack 상태 확인
 - baseline 경고 관찰선: 전체 p95 100ms, p99 200ms

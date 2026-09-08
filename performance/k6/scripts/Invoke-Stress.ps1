@@ -46,7 +46,7 @@ $run = New-K6ResultDirectory -K6Root $k6Root -TestType "stress-$TargetRps-rps"
 $summaryPath = Join-Path $run.Path 'k6-summary.json'
 $metadataPath = Join-Path $run.Path 'run-metadata.json'
 $startedAt = [DateTime]::UtcNow
-$estimatedReadRequests = $TargetRps * 270
+$estimatedReadRequests = $TargetRps * 100
 
 $previousBaseUrl = $env:K6_BASE_URL
 $previousAllowRemote = $env:K6_ALLOW_REMOTE
@@ -67,7 +67,7 @@ try {
         baseUrl = $target.BaseUrl
         targetHost = $target.Host
         targetRps = $TargetRps
-        duration = '5m (30s ramp-up, 4m hold, 30s ramp-down)'
+        duration = '2m (20s ramp-up, 80s hold, 20s ramp-down)'
         requestDistribution = 'categories/list/detail/member profile: 25% each'
         estimatedReadRequests = $estimatedReadRequests
         setupLoginRequests = 1
