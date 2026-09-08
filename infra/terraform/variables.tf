@@ -267,7 +267,7 @@ variable "rds_replication_slot_lag_alarm_threshold_mb" {
 variable "rds_freeable_memory_alarm_threshold_mb" {
   description = "CloudWatch warning threshold for RDS freeable memory in MiB. Set from the observed baseline for the selected DB instance class."
   type        = number
-  default     = 128
+  default     = 64
 
   validation {
     condition = (
