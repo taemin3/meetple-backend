@@ -65,18 +65,13 @@ function Get-CloudWatchSeries {
     } else {
         $arguments += @('--statistics', $Statistic)
     }
-    $dimensionPayload = @(
-        foreach ($key in ($Dimensions.Keys | Sort-Object)) {
-            [ordered]@{
-                Name = $key
-                Value = [string] $Dimensions[$key]
-            }
-        }
-    )
-    $arguments += @(
-        '--dimensions',
-        (ConvertTo-Json -InputObject $dimensionPayload -Compress)
-    )
+    $arguments += '--dimensions'
+    foreach ($key in ($Dimensions.Keys | Sort-Object)) {
+        # AWS CLI's native Name=...,Value=... syntax avoids JSON quote loss when
+        # a PowerShell string array is forwarded to aws.exe on Windows. Quoting
+        # the value also keeps URI templates such as {meetingId} literal.
+        $arguments += "Name=$key,Value='$([string] $Dimensions[$key])'"
+    }
     $arguments += @('--profile', $AwsProfile, '--region', $AwsRegion, '--output', 'json')
 
     $result = Invoke-AwsJson -Arguments $arguments

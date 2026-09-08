@@ -22,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -129,6 +130,13 @@ class FreshDatabaseApplicationContextTest {
                 "37.566500",
                 "126.978000"
         ));
+        Meeting secondNearby = meetingRepository.save(meeting(
+                host,
+                category,
+                "Second nearby meeting",
+                "37.568000",
+                "126.978000"
+        ));
         meetingRepository.save(meeting(
                 host,
                 category,
@@ -152,18 +160,33 @@ class FreshDatabaseApplicationContextTest {
                 nearby.getId()
         )).isEqualTo("POINT(126.978 37.5665)");
 
-        Page<Meeting> result = meetingRepository.findNearbyMeetings(
+        Slice<Meeting> firstSlice = meetingRepository.findNearbyMeetings(
                 MeetingStatus.RECRUITING.name(),
                 "postgis-test",
                 37.5665,
                 126.9780,
                 1000,
-                PageRequest.of(0, 20)
+                PageRequest.of(0, 1)
         );
 
-        assertThat(result.getTotalElements()).isEqualTo(1);
-        assertThat(result.getContent()).extracting(Meeting::getId)
+        assertThat(firstSlice.getContent()).hasSize(1);
+        assertThat(firstSlice.hasNext()).isTrue();
+        assertThat(firstSlice.getContent()).extracting(Meeting::getId)
                 .containsExactly(nearby.getId());
+
+        Slice<Meeting> secondSlice = meetingRepository.findNearbyMeetings(
+                MeetingStatus.RECRUITING.name(),
+                "postgis-test",
+                37.5665,
+                126.9780,
+                1000,
+                PageRequest.of(1, 1)
+        );
+
+        assertThat(secondSlice.getContent()).hasSize(1);
+        assertThat(secondSlice.hasNext()).isFalse();
+        assertThat(secondSlice.getContent()).extracting(Meeting::getId)
+                .containsExactly(secondNearby.getId());
     }
 
     @Test

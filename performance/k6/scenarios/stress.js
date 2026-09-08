@@ -27,9 +27,9 @@ function arrivalScenario(execName) {
     preAllocatedVUs: preAllocatedVUsPerEndpoint,
     maxVUs: maxVUsPerEndpoint,
     stages: [
-      { duration: '30s', target: config.targetRps },
-      { duration: '4m', target: config.targetRps },
-      { duration: '30s', target: 0 },
+      { duration: '20s', target: config.targetRps },
+      { duration: '80s', target: config.targetRps },
+      { duration: '20s', target: 0 },
     ],
     gracefulStop: '30s',
     exec: execName,

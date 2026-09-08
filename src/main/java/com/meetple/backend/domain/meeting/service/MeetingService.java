@@ -26,6 +26,7 @@ import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
+import com.meetple.backend.global.response.SliceResponse;
 import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -45,6 +46,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -135,11 +137,11 @@ public class MeetingService {
         return PageResponse.from(meetings.map(this::toSummaryResponse));
     }
 
-    public PageResponse<MeetingResponse> getNearbyMeetings(
+    public SliceResponse<MeetingResponse> getNearbyMeetings(
             NearbyMeetingSearchRequest request,
             Pageable pageable
     ) {
-        Page<Meeting> page = meetingRepository.findNearbyMeetings(
+        Slice<Meeting> slice = meetingRepository.findNearbyMeetings(
                 MeetingStatus.RECRUITING.name(),
                 normalizeOptionalText(request.category()),
                 request.latitude(),
@@ -147,7 +149,7 @@ public class MeetingService {
                 request.radiusMeters(),
                 withoutSort(pageable)
         );
-        return PageResponse.from(toResponsePage(page));
+        return SliceResponse.from(toResponseSlice(slice));
     }
 
     public PageResponse<MeetingResponse> searchMeetings(MeetingSearchRequest request, Pageable pageable) {
@@ -328,6 +330,19 @@ public class MeetingService {
     }
 
     private Page<MeetingResponse> toResponsePage(Page<Meeting> meetings) {
+        Map<Long, List<ImageReference>> imagesByMeetingId = getImagesByMeetingIds(
+                meetings.getContent()
+                        .stream()
+                        .map(Meeting::getId)
+                        .toList()
+        );
+        return meetings.map(meeting -> toResponse(
+                meeting,
+                imagesByMeetingId.getOrDefault(meeting.getId(), List.of())
+        ));
+    }
+
+    private Slice<MeetingResponse> toResponseSlice(Slice<Meeting> meetings) {
         Map<Long, List<ImageReference>> imagesByMeetingId = getImagesByMeetingIds(
                 meetings.getContent()
                         .stream()
