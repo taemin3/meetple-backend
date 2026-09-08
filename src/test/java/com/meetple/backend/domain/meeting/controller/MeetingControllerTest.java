@@ -25,6 +25,7 @@ import com.meetple.backend.domain.member.entity.MemberRole;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.GlobalExceptionHandler;
 import com.meetple.backend.global.response.PageResponse;
+import com.meetple.backend.global.response.SliceResponse;
 import com.meetple.backend.global.response.SuccessStatus;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import java.time.LocalDateTime;
@@ -186,12 +187,12 @@ class MeetingControllerTest {
     }
 
     @Test
-    void getNearbyMeetingsReturnsPagedApiResponse() throws Exception {
+    void getNearbyMeetingsReturnsSliceApiResponseWithoutTotalCount() throws Exception {
         given(meetingService.getNearbyMeetings(any(), eq(PageRequest.of(0, 20))))
-                .willReturn(PageResponse.from(new org.springframework.data.domain.PageImpl<>(
+                .willReturn(SliceResponse.from(new org.springframework.data.domain.SliceImpl<>(
                         List.of(meetingResponse()),
                         PageRequest.of(0, 20),
-                        1
+                        false
                 )));
 
         mockMvc.perform(get("/api/v1/meetings/nearby")
@@ -207,7 +208,9 @@ class MeetingControllerTest {
                         .value("https://cdn.meetple.com/images/meeting/1/first.png"))
                 .andExpect(jsonPath("$.data.content[0].imageUrls[1]")
                         .value("https://cdn.meetple.com/images/meeting/1/second.png"))
-                .andExpect(jsonPath("$.data.totalElements").value(1));
+                .andExpect(jsonPath("$.data.hasNext").value(false))
+                .andExpect(jsonPath("$.data.totalElements").doesNotExist())
+                .andExpect(jsonPath("$.data.totalPages").doesNotExist());
     }
 
     @Test

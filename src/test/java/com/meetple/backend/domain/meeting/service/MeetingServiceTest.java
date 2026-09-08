@@ -36,6 +36,7 @@ import com.meetple.backend.domain.notification.service.NotificationService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.response.PageResponse;
+import com.meetple.backend.global.response.SliceResponse;
 import com.meetple.backend.global.websocket.ChatAccessRevocationReason;
 import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import java.math.BigDecimal;
@@ -51,6 +52,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -402,7 +404,7 @@ class MeetingServiceTest {
                 anyDouble(),
                 anyInt(),
                 any()
-        )).willReturn(new PageImpl<>(List.of(nearby), PageRequest.of(0, 20), 1));
+        )).willReturn(new SliceImpl<>(List.of(nearby), PageRequest.of(0, 20), true));
         given(meetingImageRepository.findByMeetingIdInOrderByMeetingIdAscSortOrderAsc(any()))
                 .willReturn(List.of(
                         MeetingImage.create(
@@ -421,12 +423,12 @@ class MeetingServiceTest {
         given(imageService.createFileUrl("images/meeting/10/second.png"))
                 .willReturn("https://cdn.meetple.com/images/meeting/10/second.png");
 
-        PageResponse<MeetingResponse> response = meetingService.getNearbyMeetings(
+        SliceResponse<MeetingResponse> response = meetingService.getNearbyMeetings(
                 new NearbyMeetingSearchRequest(37.5219, 126.9245, 1000, "exercise"),
                 PageRequest.of(0, 20)
         );
 
-        assertThat(response.totalElements()).isEqualTo(1);
+        assertThat(response.hasNext()).isTrue();
         assertThat(response.content()).extracting(MeetingResponse::id)
                 .containsExactly(10L);
         assertThat(response.content().getFirst().thumbnailImageUrl())

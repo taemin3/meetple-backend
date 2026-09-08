@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -237,28 +238,9 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                       m.meeting_date asc,
                       m.id asc
                 """,
-            countQuery = """
-                select count(*)
-                from meetings m
-                join categories c on c.id = m.category_id
-                where m.status = :status
-                  and m.deleted_at is null
-                  and (:categoryName is null or c.name = :categoryName)
-                  and ST_DWithin(
-                        m.location,
-                        CAST(
-                            ST_SetSRID(
-                                ST_MakePoint(:longitude, :latitude),
-                                4326
-                            ) AS geography
-                        ),
-                        :radiusMeters,
-                        false
-                      )
-                """,
             nativeQuery = true
     )
-    Page<Meeting> findNearbyMeetings(
+    Slice<Meeting> findNearbyMeetings(
             @Param("status") String status,
             @Param("categoryName") String categoryName,
             @Param("latitude") double latitude,

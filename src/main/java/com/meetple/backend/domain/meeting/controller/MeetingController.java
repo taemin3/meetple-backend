@@ -11,6 +11,7 @@ import com.meetple.backend.domain.meeting.service.MeetingService;
 import com.meetple.backend.global.config.OpenApiConfig;
 import com.meetple.backend.global.response.ApiResponse;
 import com.meetple.backend.global.response.PageResponse;
+import com.meetple.backend.global.response.SliceResponse;
 import com.meetple.backend.global.response.SuccessStatus;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import io.swagger.v3.oas.annotations.Operation;
@@ -93,8 +94,11 @@ public class MeetingController {
 
     @GetMapping("/nearby")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
-    @Operation(summary = "주변 모임 조회", description = "요청한 반경 안의 모집 중인 모임을 조회합니다.")
-    public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> getNearbyMeetings(
+    @Operation(
+            summary = "주변 모임 조회",
+            description = "요청한 반경 안의 모집 중인 모임을 전체 개수 집계 없이 Slice 방식으로 조회합니다."
+    )
+    public ResponseEntity<ApiResponse<SliceResponse<MeetingResponse>>> getNearbyMeetings(
             @Valid @ModelAttribute NearbyMeetingSearchRequest request,
             @PageableDefault(size = 20) Pageable pageable
     ) {
