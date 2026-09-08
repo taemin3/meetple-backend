@@ -28,7 +28,7 @@ $run = New-K6ResultDirectory -K6Root $k6Root -TestType "auth-probe-$TargetRps-rp
 $summaryPath = Join-Path $run.Path 'k6-summary.json'
 $metadataPath = Join-Path $run.Path 'run-metadata.json'
 $startedAt = [DateTime]::UtcNow
-$estimatedRequests = $TargetRps * 150
+$estimatedRequests = $TargetRps * 100
 
 $previousBaseUrl = $env:K6_BASE_URL
 $previousAllowRemote = $env:K6_ALLOW_REMOTE
@@ -48,7 +48,7 @@ try {
         baseUrl = $target.BaseUrl
         targetHost = $target.Host
         targetRps = $TargetRps
-        duration = '3m (30s ramp-up, 2m hold, 30s ramp-down)'
+        duration = '2m (20s ramp-up, 80s hold, 20s ramp-down)'
         estimatedRequests = $estimatedRequests
         setupLoginRequests = 1
         startedAtUtc = $startedAt.ToString('o')
@@ -59,7 +59,7 @@ try {
     $metadata | ConvertTo-Json | Set-Content -LiteralPath $metadataPath -Encoding utf8
 
     Write-Host "Planned authenticated probe: $TargetRps RPS, approximately $estimatedRequests probe requests plus one setup login."
-    Write-Host 'Duration: 30s ramp-up, 2m hold, 30s ramp-down.'
+    Write-Host 'Duration: 20s ramp-up, 80s hold, 20s ramp-down.'
     Write-Host 'Each probe performs JWT parsing and Redis session validation, then returns HTTP 204 without DB/JPA access.'
     Write-Host 'External effects: one Redis login session; no PostgreSQL business mutation, email, FCM, Outbox, or Kafka event.'
 

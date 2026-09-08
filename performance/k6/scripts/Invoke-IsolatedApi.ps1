@@ -1,10 +1,10 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('categories', 'meeting-list', 'meeting-list-summary', 'meeting-detail', 'member-me')]
+    [ValidateSet('categories', 'meeting-list', 'meeting-list-summary', 'meeting-detail', 'meeting-search', 'meeting-nearby', 'member-me')]
     [string] $Endpoint,
     [Parameter(Mandatory = $true)]
-    [ValidateSet(200, 300, 400, 500)]
+    [ValidateSet(25, 50, 75, 100, 200, 300, 400, 500)]
     [int] $TargetRps,
     [string] $DatasetId = 'meetple-k6-baseline-v1',
     [string] $BaseUrl = 'http://127.0.0.1:8080',
@@ -59,7 +59,7 @@ $qpsBeforePath = Join-Path $run.Path 'db-qps-before.json'
 $qpsAfterPath = Join-Path $run.Path 'db-qps-after.json'
 $qpsReportPath = Join-Path $run.Path 'db-qps.json'
 $startedAt = [DateTime]::UtcNow
-$estimatedReadRequests = $TargetRps * 150
+$estimatedReadRequests = $TargetRps * 100
 
 $previousBaseUrl = $env:K6_BASE_URL
 $previousAllowRemote = $env:K6_ALLOW_REMOTE
@@ -84,7 +84,7 @@ try {
         baseUrl = $target.BaseUrl
         targetHost = $target.Host
         targetRps = $TargetRps
-        duration = '3m (30s ramp-up, 2m hold, 30s ramp-down)'
+        duration = '2m (20s ramp-up, 80s hold, 20s ramp-down)'
         requestDistribution = "$Endpoint 100%"
         estimatedReadRequests = $estimatedReadRequests
         setupLoginRequests = 1
@@ -98,7 +98,7 @@ try {
     $metadata | ConvertTo-Json | Set-Content -LiteralPath $metadataPath -Encoding utf8
 
     Write-Host "Planned isolated test: $Endpoint at $TargetRps RPS, approximately $estimatedReadRequests read requests plus one setup login."
-    Write-Host 'Duration: 30s ramp-up, 2m hold, 30s ramp-down.'
+    Write-Host 'Duration: 20s ramp-up, 80s hold, 20s ramp-down.'
     Write-Host 'External effects: one Redis login session; no PostgreSQL business mutation, email, FCM, Outbox, or Kafka event.'
 
     $qpsBefore = $null
