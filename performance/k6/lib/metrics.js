@@ -20,6 +20,10 @@ const endpointTrends = Object.freeze({
   meeting_detail: new Trend('meeting_detail_duration', true),
   meeting_search: new Trend('meeting_search_duration', true),
   meeting_nearby: new Trend('meeting_nearby_duration', true),
+  push_retry_create: new Trend('push_retry_create_duration', true),
+  push_retry_status: new Trend('push_retry_status_duration', true),
+  push_retry_fail: new Trend('push_retry_fail_duration', true),
+  push_retry_replay: new Trend('push_retry_replay_duration', true),
 });
 
 const AUTH_ERROR_CODES = new Set([10101, 10301, 10302, 12410, 12411, 12413, 12414, 12415]);
