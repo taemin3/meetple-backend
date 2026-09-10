@@ -104,6 +104,11 @@ output "kafka_bootstrap_servers" {
   value       = "${local.event_runtime_dns_name}:9092"
 }
 
+output "kafka_ui_private_url" {
+  description = "Private Kafka UI URL reachable through an SSM remote-host tunnel when enabled."
+  value       = var.enable_kafka_ui ? "http://${local.event_runtime_dns_name}:8080" : null
+}
+
 output "redis_host" {
   description = "Private Redis hostname for future ECS application tasks."
   value       = local.event_runtime_dns_name

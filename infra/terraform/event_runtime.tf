@@ -146,7 +146,7 @@ resource "aws_ecs_task_definition" "event_runtime" {
     }
   }
 
-  container_definitions = jsonencode([
+  container_definitions = jsonencode(concat([
     {
       name              = "kafka"
       image             = var.kafka_image
@@ -381,7 +381,37 @@ resource "aws_ecs_task_definition" "event_runtime" {
         options   = local.event_runtime_log_options
       }
     },
-  ])
+    ], var.enable_kafka_ui ? [
+    {
+      name              = "kafka-ui"
+      image             = var.kafka_ui_image
+      essential         = false
+      cpu               = 128
+      memoryReservation = 256
+      memory            = 512
+      portMappings = [{
+        name          = "kafka-ui"
+        containerPort = 8080
+        hostPort      = 8080
+        protocol      = "tcp"
+      }]
+      environment = [
+        { name = "KAFKA_CLUSTERS_0_NAME", value = "meetple-staging" },
+        { name = "KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS", value = "localhost:19092" },
+        { name = "KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME", value = "meetple-connect" },
+        { name = "KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS", value = "http://localhost:8083" },
+        { name = "DYNAMIC_CONFIG_ENABLED", value = "false" },
+      ]
+      dependsOn = [
+        { containerName = "kafka", condition = "HEALTHY" },
+        { containerName = "kafka-connect", condition = "HEALTHY" },
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options   = local.event_runtime_log_options
+      }
+    }
+  ] : []))
 
   tags = {
     Name = "${local.name_prefix}-event-runtime"

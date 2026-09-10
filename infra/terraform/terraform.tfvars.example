@@ -24,6 +24,8 @@ ecs_max_size         = 2
 backend_image_tag          = "bootstrap"
 backend_desired_count      = 0
 kafka_consumer_concurrency = 1
+enable_push_retry_measurement = false
+enable_kafka_ui               = false
 
 # Native Flutter uploads do not need CORS. Add only trusted web origins when needed.
 image_upload_allowed_origins = []

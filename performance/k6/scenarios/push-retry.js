@@ -21,6 +21,7 @@ if (!Number.isInteger(vus) || vus < 1 || vus > 50) {
 }
 
 export const options = {
+  teardownTimeout: '30m',
   scenarios: {
     push_retry: {
       executor: 'shared-iterations',
