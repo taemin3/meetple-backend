@@ -20,7 +20,9 @@ Kafka UI 컨테이너는 128 CPU unit, 256 MiB memory reservation, 512 MiB hard 
 
 ## SSM 터널 접속
 
-AWS CLI 로그인을 완료하고 Terraform workspace가 `staging`인지 확인한다. 저장소 루트에서 다음 스크립트를 실행한다.
+AWS CLI 로그인과 Session Manager plugin 설치를 완료하고 Terraform workspace가 `staging`인지 확인한다. 스크립트는 PATH에 설치된 Terraform을 우선 사용한다. 이 저장소의 로컬 bundled Terraform이 있으면 fallback으로 사용하며, 둘 다 없으면 `-TerraformPath`로 실행 파일을 지정한다.
+
+저장소 루트에서 다음 스크립트를 실행한다.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\infra\terraform\open-kafka-ui-tunnel.ps1
@@ -36,6 +38,12 @@ http://localhost:18089
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\infra\terraform\open-kafka-ui-tunnel.ps1 -LocalPort 28089
+```
+
+Terraform이 PATH에 없다면 실행 파일을 직접 지정한다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\infra\terraform\open-kafka-ui-tunnel.ps1 -TerraformPath C:\HashiCorp\Terraform\terraform.exe
 ```
 
 ## Retry와 DLQ 확인

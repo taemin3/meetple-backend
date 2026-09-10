@@ -33,6 +33,7 @@
 - 10건 Push Retry 측정에서 k6의 기본 teardown 제한 60초가 4배 backoff 전체 대기시간보다 짧아 timeout이 발생했다. 제한을 30분으로 늘렸다.
 - Kafka UI 장애가 Kafka와 Debezium을 재시작시키지 않도록 non-essential container로 구성했다.
 - Kafka UI는 ALB와 public ingress에 연결하지 않는다.
+- PR 리뷰에 따라 SSM tunnel 스크립트가 PATH의 Terraform과 명시적인 `-TerraformPath`를 지원하도록 수정했다. 로컬 bundled 실행 파일은 fallback으로만 사용한다.
 
 ## 후속 작업
 

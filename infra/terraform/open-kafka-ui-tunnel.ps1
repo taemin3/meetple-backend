@@ -2,15 +2,28 @@ param(
     [ValidateRange(1024, 65535)]
     [int]$LocalPort = 18089,
 
-    [string]$Region = "ap-northeast-2"
+    [string]$Region = "ap-northeast-2",
+
+    [string]$TerraformPath
 )
 
 $ErrorActionPreference = "Stop"
 $TerraformDirectory = $PSScriptRoot
-$Terraform = Join-Path $TerraformDirectory "..\..\build\tools\terraform\terraform.exe"
 
-if (-not (Test-Path -LiteralPath $Terraform)) {
-    throw "Terraform executable was not found: $Terraform"
+if (-not [string]::IsNullOrWhiteSpace($TerraformPath)) {
+    $Terraform = (Resolve-Path -LiteralPath $TerraformPath).Path
+} else {
+    $TerraformCommand = Get-Command terraform -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -ne $TerraformCommand) {
+        $Terraform = $TerraformCommand.Source
+    } else {
+        $BundledTerraform = Join-Path $TerraformDirectory "..\..\build\tools\terraform\terraform.exe"
+        if (Test-Path -LiteralPath $BundledTerraform) {
+            $Terraform = $BundledTerraform
+        } else {
+            throw "Terraform was not found. Install it on PATH or pass -TerraformPath."
+        }
+    }
 }
 
 Push-Location $TerraformDirectory
