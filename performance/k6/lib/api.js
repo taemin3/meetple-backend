@@ -45,6 +45,42 @@ export function getAuthProbe(accessToken) {
   });
 }
 
+export function createPushRetryMeasurementEvent(accessToken, runId, index) {
+  return request(
+    'POST',
+    `/api/v1/performance/push-retry/events?runId=${encodeURIComponent(runId)}&index=${index}`,
+    'push_retry_create',
+    { headers: authHeaders(accessToken) },
+  );
+}
+
+export function getPushRetryMeasurementStatus(accessToken, runId) {
+  return request(
+    'GET',
+    `/api/v1/performance/push-retry/status?runId=${encodeURIComponent(runId)}`,
+    'push_retry_status',
+    { headers: authHeaders(accessToken) },
+  );
+}
+
+export function failPushRetryMeasurement(accessToken, runId) {
+  return request(
+    'POST',
+    `/api/v1/performance/push-retry/fail?runId=${encodeURIComponent(runId)}`,
+    'push_retry_fail',
+    { headers: authHeaders(accessToken) },
+  );
+}
+
+export function replayPushRetryMeasurement(accessToken, runId) {
+  return request(
+    'POST',
+    `/api/v1/performance/push-retry/replay?runId=${encodeURIComponent(runId)}`,
+    'push_retry_replay',
+    { headers: authHeaders(accessToken) },
+  );
+}
+
 export function login(email, password) {
   return request('POST', '/api/v1/auth/login', 'login', {
     body: { email, password },

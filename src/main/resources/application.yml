@@ -61,6 +61,8 @@ meetple:
   performance:
     auth-probe:
       enabled: ${MEETPLE_PERFORMANCE_AUTH_PROBE_ENABLED:false}
+    push-retry:
+      enabled: ${MEETPLE_PERFORMANCE_PUSH_RETRY_ENABLED:false}
   observability:
     cloudwatch:
       enabled: ${MEETPLE_CLOUDWATCH_METRICS_ENABLED:false}

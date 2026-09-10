@@ -142,6 +142,12 @@ variable "backend_desired_count" {
   }
 }
 
+variable "enable_push_retry_measurement" {
+  description = "Temporarily enable the authenticated staging Push Retry/DLQ measurement endpoints and sender."
+  type        = bool
+  default     = false
+}
+
 variable "backend_application_secret_arn" {
   description = "Existing Secrets Manager ARN containing the Spring Boot application secret JSON keys documented in README.md."
   type        = string
