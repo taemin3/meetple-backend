@@ -31,6 +31,7 @@ public class PushKafkaConsumer {
             backOff = @BackOff(
                     delayString = "${push.kafka.retry.initial-delay-ms:1000}",
                     multiplierString = "${push.kafka.retry.multiplier:4.0}",
+                    jitterString = "${push.kafka.retry.jitter-ms:250}",
                     maxDelayString = "${push.kafka.retry.max-delay-ms:300000}"
             ),
             kafkaTemplate = "kafkaTemplate",

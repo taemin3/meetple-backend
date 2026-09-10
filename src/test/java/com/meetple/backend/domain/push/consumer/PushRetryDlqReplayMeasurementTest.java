@@ -52,6 +52,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
         "spring.datasource.url=jdbc:h2:mem:meetple-push-retry-100;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
         "push.kafka.retry.initial-delay-ms=10",
         "push.kafka.retry.multiplier=4.0",
+        "push.kafka.retry.jitter-ms=0",
         "push.kafka.retry.max-delay-ms=640",
         "PUSH_KAFKA_CONSUMER_GROUP=meetple-push-retry-100-measurement",
         "logging.level.org.apache.kafka=WARN",
