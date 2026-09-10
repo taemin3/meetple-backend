@@ -76,6 +76,7 @@ push:
     retry:
       initial-delay-ms: ${PUSH_KAFKA_RETRY_INITIAL_DELAY_MS:1000}
       multiplier: ${PUSH_KAFKA_RETRY_MULTIPLIER:4.0}
+      jitter-ms: ${PUSH_KAFKA_RETRY_JITTER_MS:250}
       max-delay-ms: ${PUSH_KAFKA_RETRY_MAX_DELAY_MS:300000}
   fcm:
     enabled: ${PUSH_FCM_ENABLED:false}
