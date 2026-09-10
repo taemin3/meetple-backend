@@ -1,6 +1,12 @@
 # 100건 Push Retry / DLQ / 재처리 측정 절차
 
-이 문서는 실험 계획이다. 테스트 Sender, 이벤트 추적 로그, 입력 및 재처리 도구는 아직 이 변경에서 구현하지 않았다. 실제 측정 결과를 의미하지 않는다.
+Embedded Kafka에서 빠르게 반복하는 자동 측정은 `PushRetryDlqReplayMeasurementTest`로 제공한다. 테스트용 4배 backoff는 10 / 40 / 160 / 640ms로 축소하며, 실제 기본 설정의 시간을 측정한 결과는 아니다.
+
+```powershell
+.\gradlew.bat test --tests com.meetple.backend.domain.push.consumer.PushRetryDlqReplayMeasurementTest --info
+```
+
+테스트 출력의 `PUSH_RETRY_MEASUREMENT` 한 줄에서 100건의 실패 시도 수, DLQ 도달 시간, 재처리 시간, 성공 수와 중복 성공 수를 확인한다. 이 자동 측정은 Kafka Retry Topic과 DLQ 재발행 흐름을 검증한다. 아래 절차는 PostgreSQL Outbox와 Debezium을 포함한 로컬 전체 환경 측정을 위한 후속 절차다.
 
 ## 준비
 
