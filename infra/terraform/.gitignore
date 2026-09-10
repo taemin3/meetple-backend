@@ -6,4 +6,5 @@ crash.log
 crash.*.log
 .terraform.tfstate.lock.info
 terraform.tfvars
+*.auto.tfvars
 backend.hcl

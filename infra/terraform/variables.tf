@@ -101,6 +101,18 @@ variable "kafka_image" {
   default     = "apache/kafka:4.3.1"
 }
 
+variable "enable_kafka_ui" {
+  description = "Enable the private Kafka UI sidecar in the event runtime. Access remains limited to an SSM tunnel through an ECS instance."
+  type        = bool
+  default     = false
+}
+
+variable "kafka_ui_image" {
+  description = "Kafka UI container image used by the event runtime."
+  type        = string
+  default     = "ghcr.io/kafbat/kafka-ui:v1.5.0"
+}
+
 variable "debezium_connect_image" {
   description = "Debezium Kafka Connect container image."
   type        = string

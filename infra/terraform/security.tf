@@ -135,6 +135,17 @@ resource "aws_vpc_security_group_ingress_rule" "event_runtime_redis_from_app" {
   ip_protocol                  = "tcp"
 }
 
+resource "aws_vpc_security_group_ingress_rule" "event_runtime_kafka_ui_from_ecs_instances" {
+  count = var.enable_kafka_ui ? 1 : 0
+
+  security_group_id            = aws_security_group.event_runtime.id
+  description                  = "Private Kafka UI through an SSM tunnel on an ECS instance"
+  referenced_security_group_id = aws_security_group.ecs_instances.id
+  from_port                    = 8080
+  to_port                      = 8080
+  ip_protocol                  = "tcp"
+}
+
 resource "aws_vpc_security_group_ingress_rule" "event_runtime_kafka_self" {
   security_group_id            = aws_security_group.event_runtime.id
   description                  = "Kafka advertised listener inside the event runtime task"

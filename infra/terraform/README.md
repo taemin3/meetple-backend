@@ -181,6 +181,8 @@ GitHub Actions는 ECS service가 안정화될 때까지 대기합니다. 새 tas
 
 ## consumer와 CDC 동작
 
+Staging Kafka UI는 public endpoint 없이 Event Runtime 내부에서 선택적으로 실행할 수 있습니다. `enable_kafka_ui=true`를 적용한 뒤 SSM 터널로 접속하는 절차는 [Staging Kafka UI 접속](../../docs/operations/staging-kafka-ui.md)을 따릅니다.
+
 Spring Boot task는 다음 consumer를 명시적으로 켭니다.
 
 - FCM push consumer: `PUSH_KAFKA_CONSUMER_ENABLED=true`, `PUSH_FCM_ENABLED=true`
