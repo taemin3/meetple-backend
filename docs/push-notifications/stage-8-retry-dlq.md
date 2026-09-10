@@ -18,13 +18,13 @@
 ```text
 main topic
   -> 실패: retry-0 (1초)
-  -> 실패: retry-1 (10초)
-  -> 실패: retry-2 (100초)
-  -> 실패: retry-3 (300초)
+  -> 실패: retry-1 (4초)
+  -> 실패: retry-2 (16초)
+  -> 실패: retry-3 (64초)
   -> 실패: DLQ
 ```
 
-최초 소비를 포함해 최대 5번 처리한다. 기본 재시도 지연 합계는 411초로 전송 ledger의 5분 claim lease보다 길다. 프로세스 종료나 결과 기록 DB 오류로 claim이 남더라도 마지막 재시도는 claim 만료 뒤 실행되어 자동 복구할 수 있다. Retry Topic으로 레코드를 옮긴 뒤 원본 Topic의 offset을 진행하므로 하나의 poison event가 원본 partition의 뒤 레코드를 계속 막지 않는다.
+최초 소비를 포함해 최대 5번 처리한다. 기본 재시도 지연 합계는 85초이며, 실제 경과 시간에는 발송 처리와 큐 대기가 추가된다. 전송 ledger의 claim lease는 5분이므로 프로세스 종료나 결과 기록 DB 오류로 claim이 남으면 claim 만료 전에 재시도를 소진하고 DLQ로 이동할 수 있다. 이 경우 원인을 해결하고 claim이 만료된 뒤 DLQ를 재처리한다. 정상적으로 실패 결과를 기록한 기기는 다음 시도에서 다시 claim할 수 있다. Retry Topic으로 레코드를 옮긴 뒤 원본 Topic의 offset을 진행하므로 하나의 poison event가 원본 partition의 뒤 레코드를 계속 막지 않는다.
 
 Spring Kafka의 비차단 Retry Topic은 원본 Topic의 순서를 보장하지 않는다. Push는 PostgreSQL의 비즈니스 데이터가 원본이고, 전송 ledger가 이벤트·기기 단위 중복 발송을 막으므로 이 트레이드오프를 허용한다. Redis Pub/Sub WebSocket 채팅 전달 경로에는 이 설정을 적용하지 않는다.
 
@@ -110,11 +110,11 @@ docker compose exec -T kafka /opt/kafka/bin/kafka-topics.sh `
   --list
 ```
 
-backoff는 다음 환경 변수로 조정할 수 있다. Topic 수와 맞물리는 최대 시도 횟수는 4회로 고정한다.
+backoff는 다음 환경 변수로 조정할 수 있다. Topic 수와 맞물리는 재시도 횟수는 4회이며, 최초 시도를 포함한 최대 시도 횟수는 5회로 고정한다.
 
 ```properties
 PUSH_KAFKA_RETRY_INITIAL_DELAY_MS=1000
-PUSH_KAFKA_RETRY_MULTIPLIER=10.0
+PUSH_KAFKA_RETRY_MULTIPLIER=4.0
 PUSH_KAFKA_RETRY_MAX_DELAY_MS=300000
 ```
 
