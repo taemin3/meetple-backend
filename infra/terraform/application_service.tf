@@ -181,6 +181,7 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "MEETPLE_CLOUDWATCH_METRICS_NAMESPACE", value = local.application_metric_namespace },
       { name = "MEETPLE_CLOUDWATCH_METRICS_ENVIRONMENT", value = local.environment },
       { name = "MEETPLE_PERFORMANCE_AUTH_PROBE_ENABLED", value = "true" },
+      { name = "MEETPLE_PERFORMANCE_PUSH_RETRY_ENABLED", value = tostring(var.enable_push_retry_measurement) },
       { name = "TOMCAT_MBEAN_REGISTRY_ENABLED", value = "true" },
       { name = "MAIL_PORT", value = "587" },
       { name = "MAIL_SMTP_AUTH", value = "true" },

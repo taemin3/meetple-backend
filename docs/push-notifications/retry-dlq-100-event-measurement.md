@@ -1,6 +1,32 @@
 # 100건 Push Retry / DLQ / 재처리 측정 절차
 
-이 문서는 실험 계획이다. 테스트 Sender, 이벤트 추적 로그, 입력 및 재처리 도구는 아직 이 변경에서 구현하지 않았다. 실제 측정 결과를 의미하지 않는다.
+Embedded Kafka에서 빠르게 반복하는 자동 측정은 `PushRetryDlqReplayMeasurementTest`로 제공한다. 테스트용 4배 backoff는 10 / 40 / 160 / 640ms로 축소하며, 실제 기본 설정의 시간을 측정한 결과는 아니다.
+
+```powershell
+.\gradlew.bat test --tests com.meetple.backend.domain.push.consumer.PushRetryDlqReplayMeasurementTest --info
+```
+
+테스트 출력의 `PUSH_RETRY_MEASUREMENT` 한 줄에서 100건의 실패 시도 수, DLQ 도달 시간, 재처리 시간, 성공 수와 중복 성공 수를 확인한다. 이 자동 측정은 Kafka Retry Topic과 DLQ 재발행 흐름을 검증한다. 아래 절차는 PostgreSQL Outbox와 Debezium을 포함한 전체 환경 측정을 위한 후속 절차다.
+
+## Staging 1,000건 측정
+
+staging 전체 경로는 `MEETPLE_PERFORMANCE_PUSH_RETRY_ENABLED=true`인 단일 Backend task에서만 실행한다. 기본값은 false다. 측정 이벤트만 테스트 Sender가 처리하고 다른 이벤트는 Firebase Sender로 전달된다. 테스트 회원은 Push token이 하나 이상 등록돼 있어야 한다.
+
+```powershell
+$env:K6_EMAIL="측정 전용 계정"
+$env:K6_PASSWORD="측정 전용 비밀번호"
+$env:K6_BASE_URL="https://api.meetple.shop"
+$env:K6_ALLOW_REMOTE="true"
+$env:K6_CONFIRM_TARGET="api.meetple.shop"
+$env:K6_PUSH_EVENT_COUNT="1000"
+$env:K6_PUSH_VUS="20"
+
+k6 run .\performance\k6\scenarios\push-retry.js
+```
+
+k6는 Sender를 FAIL로 설정하고 Outbox 이벤트 1,000건을 생성한다. 이후 상태 API를 5초마다 조회해 DLQ 1,000건을 확인하고, Sender를 SUCCESS로 바꿔 같은 key/value를 원본 Topic에 재발행한다. 마지막 `PUSH_RETRY_STAGING_RESULT`에서 `createdEvents=1000`, `sendAttempts=6000`, `dltEvents=1000`, `successfulEvents=1000`, `duplicateSuccesses=0`인지 확인한다.
+
+실험 중 Backend task가 재시작되면 메모리의 run 상태가 사라지므로 결과를 폐기한다. 실험 후에는 Terraform 입력 `enable_push_retry_measurement=false`로 되돌려 배포한다. 이 결과는 실제 FCM 수신 검증이 아니다.
 
 ## 준비
 
