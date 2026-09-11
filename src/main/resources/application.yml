@@ -70,6 +70,16 @@ meetple:
       step: ${MEETPLE_CLOUDWATCH_METRICS_STEP:60s}
       environment: ${MEETPLE_CLOUDWATCH_METRICS_ENVIRONMENT:staging}
 
+outbox:
+  cleanup:
+    enabled: ${OUTBOX_CLEANUP_ENABLED:false}
+    interval-ms: ${OUTBOX_CLEANUP_INTERVAL_MS:3600000}
+    retention: ${OUTBOX_CLEANUP_RETENTION:7d}
+    heartbeat-max-age: ${OUTBOX_CLEANUP_HEARTBEAT_MAX_AGE:3m}
+    max-slot-lag-bytes: ${OUTBOX_CLEANUP_MAX_SLOT_LAG_BYTES:67108864}
+    batch-size: ${OUTBOX_CLEANUP_BATCH_SIZE:1000}
+    slot-name: ${OUTBOX_CLEANUP_SLOT_NAME:meetple_outbox}
+
 push:
   kafka:
     consumer-enabled: ${PUSH_KAFKA_CONSUMER_ENABLED:false}
