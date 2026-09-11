@@ -56,4 +56,22 @@ class AuthRequestValidationTest {
                 .extracting(ConstraintViolation::getMessage)
                 .contains("약관 확인 항목은 비어 있을 수 없습니다.");
     }
+
+    @Test
+    void signupRequestRejectsIntroductionOverThirtyCharacters() {
+        SignupRequest request = new SignupRequest(
+                "user@meetple.com",
+                "signup-verification-token",
+                "password123",
+                "tester",
+                "a".repeat(31),
+                List.of()
+        );
+
+        Set<ConstraintViolation<SignupRequest>> violations = validator.validate(request);
+
+        assertThat(violations)
+                .extracting(ConstraintViolation::getMessage)
+                .contains("한줄 소개는 30자 이하여야 합니다.");
+    }
 }

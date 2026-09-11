@@ -31,7 +31,19 @@ public record SignupRequest(
         @Size(min = 2, max = 20, message = "닉네임은 2자 이상 20자 이하여야 합니다.")
         String nickname,
 
+        @Size(max = 30, message = "한줄 소개는 30자 이하여야 합니다.")
+        String introduction,
+
         @NotEmpty(message = "필수 약관 확인 정보가 필요합니다.")
         List<@NotNull(message = "약관 확인 항목은 비어 있을 수 없습니다.") @Valid SignupLegalDocumentRequest> legalDocuments
 ) {
+    public SignupRequest(
+            String email,
+            String signupVerificationToken,
+            String password,
+            String nickname,
+            List<SignupLegalDocumentRequest> legalDocuments
+    ) {
+        this(email, signupVerificationToken, password, nickname, null, legalDocuments);
+    }
 }
