@@ -42,7 +42,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(18);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(19);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
@@ -66,14 +66,19 @@ class FreshDatabaseMigrationTest {
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
-                    "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17"
+                    "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder("운동", "스터디", "취미");
-            assertThat(rowCount(connection, "legal_documents")).isEqualTo(4);
+            assertThat(rowCount(connection, "legal_documents")).isEqualTo(5);
             assertThat(privacyPolicyVersions(connection))
-                    .containsExactly("2026-08-22", "2026-09-12");
+                    .containsExactly("2026-08-22", "2026-09-12", "2026-09-12.1");
             assertThat(latestPrivacyPolicyContent(connection))
-                    .contains("장소 검색어", "채팅 메시지 식별자", "최종 스냅샷");
+                    .contains(
+                            "장소 검색어",
+                            "채팅 메시지 식별자",
+                            "최종 스냅샷",
+                            "meetple99@gmail.com"
+                    );
             assertThat(rowCount(connection, "debezium_heartbeat")).isEqualTo(1);
 
             assertThat(columnType(connection, "outbox_events", "payload")).isEqualTo("jsonb");

@@ -19,9 +19,9 @@ public class LocalLegalDocumentInitializer implements ApplicationRunner {
 
     private static final String INITIAL_VERSION = "2026-08-22";
     private static final LocalDateTime INITIAL_EFFECTIVE_AT = LocalDateTime.of(2026, 8, 22, 0, 0);
-    private static final String CURRENT_PRIVACY_POLICY_VERSION = "2026-09-12";
+    private static final String CURRENT_PRIVACY_POLICY_VERSION = "2026-09-12.1";
     private static final LocalDateTime CURRENT_PRIVACY_POLICY_EFFECTIVE_AT =
-            LocalDateTime.of(2026, 9, 12, 0, 0);
+            LocalDateTime.of(2026, 9, 12, 0, 1);
 
     private final LegalDocumentRepository legalDocumentRepository;
 
@@ -125,7 +125,7 @@ public class LocalLegalDocumentInitializer implements ApplicationRunner {
                 보유 기간이 끝나거나 처리 목적이 달성된 개인정보는 지체 없이 파기합니다. 전자 파일은 복구하기 어려운 방식으로 삭제하고, 외부 저장소의 프로필 이미지는 삭제 작업을 예약해 제거합니다. 자동 백업은 정해진 수명주기로 삭제하고, 최종 스냅샷은 접근을 제한하여 별도 보관한 뒤 최대 1년 안에 운영자가 삭제합니다.
 
                 7. 이용자의 권리와 행사 방법
-                이용자는 앱의 프로필 메뉴에서 개인정보를 조회·수정하고 계정을 탈퇴할 수 있습니다. 앱을 이용할 수 없는 경우 https://api.meetple.shop/account-deletion 에서 이메일 인증 후 삭제를 요청할 수 있습니다. 그 밖의 열람, 정정·삭제, 처리정지 요청과 문의는 support@meetple.shop 으로 접수할 수 있으며 밋플은 관련 법령에 따라 지체 없이 처리합니다.
+                이용자는 앱의 프로필 메뉴에서 개인정보를 조회·수정하고 계정을 탈퇴할 수 있습니다. 앱을 이용할 수 없는 경우 https://api.meetple.shop/account-deletion 에서 이메일 인증 후 삭제를 요청할 수 있습니다. 그 밖의 열람, 정정·삭제, 처리정지 요청과 문의는 meetple99@gmail.com 으로 접수할 수 있으며 밋플은 관련 법령에 따라 지체 없이 처리합니다.
 
                 만 14세 미만은 밋플에 가입할 수 없습니다.
 
@@ -135,7 +135,7 @@ public class LocalLegalDocumentInitializer implements ApplicationRunner {
                 9. 개인정보 보호 문의
                 - 개인정보 처리자 및 담당부서: 밋플 운영팀
                 - 서비스명: 밋플(Meetple)
-                - 이메일: support@meetple.shop
+                - 이메일: meetple99@gmail.com
 
                 10. 방침 변경
                 이 방침의 내용이 변경되면 시행 전에 앱 또는 공개 웹페이지를 통해 알립니다. 이용자의 권리에 중대한 영향을 주는 변경은 관련 법령이 정한 방법과 기간에 따라 알립니다.
