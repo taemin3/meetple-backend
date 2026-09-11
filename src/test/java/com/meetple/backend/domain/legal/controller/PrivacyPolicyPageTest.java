@@ -35,7 +35,7 @@ class PrivacyPolicyPageTest {
 
         assertThat(page).contains(
                 "밋플 개인정보 처리방침",
-                "support@meetple.shop",
+                "meetple99@gmail.com",
                 "/account-deletion",
                 "장소 검색어",
                 "채팅 메시지 식별자",
