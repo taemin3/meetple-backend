@@ -18,6 +18,7 @@ import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.response.ErrorStatus;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -62,6 +63,23 @@ class LegalDocumentServiceTest {
         assertThat(responses)
                 .extracting(SignupLegalDocumentResponse::version)
                 .containsExactly("v2", "v3", "v1");
+    }
+
+    @Test
+    void getCurrentSignupDocumentsUsesKoreanPolicyTime() {
+        givenCurrentDocuments();
+        ZoneId seoul = ZoneId.of("Asia/Seoul");
+        LocalDateTime before = LocalDateTime.now(seoul).minusSeconds(1);
+
+        legalDocumentService.getCurrentSignupDocuments();
+
+        LocalDateTime after = LocalDateTime.now(seoul).plusSeconds(1);
+        ArgumentCaptor<LocalDateTime> cutoff = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(legalDocumentRepository)
+                .findAllByEffectiveAtLessThanEqualOrderByEffectiveAtDescIdDesc(cutoff.capture());
+        assertThat(cutoff.getValue())
+                .isAfterOrEqualTo(before)
+                .isBeforeOrEqualTo(after);
     }
 
     @Test

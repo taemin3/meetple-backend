@@ -25,6 +25,7 @@
 3. `2026-09-12` 정책 버전과 공개 웹페이지, 공개 라우팅을 추가했다.
 4. 회원 탈퇴 페이지의 임시 운영 문구를 제거하고 정책 링크를 연결했다.
 5. 공개 접근 테스트와 데스크톱·모바일 레이아웃 검사를 실행했다.
+6. PR #89 리뷰 7건을 대조해 마이그레이션 기대값, 한국 시행 시각, 이벤트 보유, FCM 이전 항목, 최종 스냅샷과 암호화 표현을 수정했다.
 
 ## 사용한 도구
 
@@ -38,6 +39,7 @@
 ```powershell
 .\gradlew.bat test --tests "com.meetple.backend.domain.legal.controller.PrivacyPolicyPageTest" --tests "com.meetple.backend.domain.member.controller.AccountDeletionPageTest"
 .\gradlew.bat test
+.\gradlew.bat test --tests "com.meetple.backend.domain.legal.service.LegalDocumentServiceTest" --tests "com.meetple.backend.domain.legal.controller.PrivacyPolicyPageTest" --tests "com.meetple.backend.global.database.FreshDatabaseMigrationTest" --tests "com.meetple.backend.global.database.FreshDatabaseApplicationContextTest"
 git diff --check
 ```
 
@@ -46,14 +48,16 @@ git diff --check
 - `V17__publish_privacy_policy.sql`: 최신 개인정보처리방침 이력 추가
 - `privacy-policy/index.html`: 공개 정책 페이지 추가
 - `PrivacyPolicyPageController.java`, `SecurityConfig.java`: 공개 라우팅과 인증 예외 추가
+- `LegalDocumentService.java`: 정책 시행 시각을 `Asia/Seoul` 기준으로 판정
 - `LocalLegalDocumentInitializer.java`: 로컬 프로필 최신 정책 제공
 - `account-deletion/index.html`: 정책 링크 연결과 임시 문구 제거
-- 정책 운영 메모와 공개 페이지 테스트 추가
+- 정책 운영 메모, 공개 페이지 테스트와 PostgreSQL migration 기대값 갱신
 
 ## 검증
 
 ```text
 대상 테스트: BUILD SUCCESSFUL, 2개 페이지 테스트 통과
+리뷰 관련 테스트: BUILD SUCCESSFUL, 단위·페이지 7개 통과, Docker 미실행으로 Testcontainers 6개 skipped
 레이아웃 검사: 1280px/390px에서 body 가로 넘침 없음, 10개 정책 섹션과 링크 확인
 git diff --check: 통과(줄바꿈 변환 경고만 존재)
 전체 테스트: 466개 중 29개 실패, 6개 skipped
@@ -68,6 +72,9 @@ git diff --check: 통과(줄바꿈 변환 경고만 존재)
 
 - 앱은 이미 약관 API의 최신 문서를 가입 화면과 프로필 화면에 표시하므로 앱 저장소 변경은 하지 않았다.
 - Google FCM은 글로벌 인프라에서 처리될 수 있으므로 미국 한 국가로 단정하지 않고 공식 Firebase 안내 범위로 기재했다.
+- 탈퇴 전 Outbox/Kafka에 복제된 닉네임·메시지 본문과 실제 FCM data payload 항목을 정책에 명시했다.
+- 자동 백업과 별개인 production 최종 스냅샷은 복구·장애 조사 목적으로 최대 1년 보관 후 수동 삭제하도록 구분했다.
+- 내부 Redis·Kafka·JDBC를 TLS로 단정하지 않고 외부 통신 암호화와 VPC 보안그룹 접근 제한으로 보호조치 범위를 좁혔다.
 - 저장소에서 실제 법적 운영자 실명을 확인할 수 없어 공개 본문에는 `밋플 운영팀`을 사용하고 배포 전 확인 항목으로 남겼다.
 
 ## 후속 작업

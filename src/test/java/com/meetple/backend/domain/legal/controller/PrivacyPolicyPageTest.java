@@ -36,7 +36,11 @@ class PrivacyPolicyPageTest {
         assertThat(page).contains(
                 "밋플 개인정보 처리방침",
                 "support@meetple.shop",
-                "/account-deletion"
+                "/account-deletion",
+                "장소 검색어",
+                "채팅 메시지 식별자",
+                "데이터베이스 최종 스냅샷",
+                "VPC 보안그룹 접근 제한"
         );
     }
 }
