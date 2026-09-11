@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.mock;
 
 import com.meetple.backend.domain.auth.config.AccountDeletionProperties;
 import com.meetple.backend.domain.auth.config.EmailVerificationProperties;
@@ -24,9 +25,13 @@ import com.meetple.backend.domain.image.service.ImageDeletionService;
 import com.meetple.backend.domain.meeting.repository.MeetingBookmarkRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
+import com.meetple.backend.domain.meeting.entity.Meeting;
+import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
+import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.notification.repository.NotificationRepository;
+import com.meetple.backend.domain.notification.service.NotificationService;
 import com.meetple.backend.domain.push.service.PushDeviceTokenService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
@@ -53,6 +58,7 @@ class AccountDeletionServiceTest {
     @Mock private ChatNotificationSettingRepository chatNotificationSettingRepository;
     @Mock private ChatReadStateRepository chatReadStateRepository;
     @Mock private NotificationRepository notificationRepository;
+    @Mock private NotificationService notificationService;
     @Mock private PushDeviceTokenService pushDeviceTokenService;
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private ImageDeletionService imageDeletionService;
@@ -75,7 +81,8 @@ class AccountDeletionServiceTest {
         service = new AccountDeletionService(
                 memberRepository, meetingRepository, participationRepository,
                 bookmarkRepository, chatMessageRepository, chatNotificationSettingRepository,
-                chatReadStateRepository, notificationRepository, pushDeviceTokenService,
+                chatReadStateRepository, notificationRepository, notificationService,
+                pushDeviceTokenService,
                 refreshTokenRepository, imageDeletionService, passwordEncoder, eventPublisher,
                 accountDeletionRepository, emailDeliveryService, secretGenerator, hasher,
                 emailProperties, new AccountDeletionProperties(Duration.ofMinutes(15))
@@ -89,9 +96,10 @@ class AccountDeletionServiceTest {
                 any(), any(Integer.class))).willReturn(true);
         given(secretGenerator.generateCode()).willReturn("123456");
         given(hasher.hashCode("missing@meetple.com", "123456")).willReturn("code-hash");
-        given(accountDeletionRepository.saveChallengeIfAllowed(any(), any(), any(), any()))
+        given(memberRepository.findByEmail("missing@meetple.com")).willReturn(Optional.empty());
+        given(accountDeletionRepository.saveChallengeIfAllowed(
+                any(), any(), any(Long.class), any(), any()))
                 .willReturn(true);
-        given(memberRepository.existsByEmail("missing@meetple.com")).willReturn(false);
 
         service.sendVerificationCode(request, "127.0.0.1");
 
@@ -130,6 +138,7 @@ class AccountDeletionServiceTest {
         verify(chatNotificationSettingRepository).deleteAllByMemberId(7L);
         verify(chatReadStateRepository).deleteAllByMemberId(7L);
         verify(notificationRepository).deleteAllByMemberId(7L);
+        verify(notificationRepository).anonymizeParticipationActorByNickname("사용자");
         verify(chatMessageRepository).anonymizeAllBySenderId(
                 7L,
                 "[탈퇴한 회원의 메시지]"
@@ -154,5 +163,69 @@ class AccountDeletionServiceTest {
         assertThat(member.isDeleted()).isFalse();
         verifyNoInteractions(bookmarkRepository, chatMessageRepository,
                 pushDeviceTokenService, refreshTokenRepository);
+    }
+
+    @Test
+    void hostedMeetingCancellationNotifiesApprovedParticipants() {
+        Member host = Member.createUser(
+                "host@meetple.com", "encoded-password", "주최자", "서울"
+        );
+        Member participantMember = Member.createUser(
+                "participant@meetple.com", "encoded-password", "참여자", "서울"
+        );
+        ReflectionTestUtils.setField(host, "id", 7L);
+        ReflectionTestUtils.setField(participantMember, "id", 8L);
+        Meeting meeting = mock(Meeting.class);
+        MeetingParticipation participation = mock(MeetingParticipation.class);
+        given(meeting.getId()).willReturn(55L);
+        given(meeting.getTitle()).willReturn("저녁 산책");
+        given(participation.getMember()).willReturn(participantMember);
+        given(memberRepository.findAnyByIdForUpdate(7L)).willReturn(Optional.of(host));
+        given(passwordEncoder.matches("password123", "encoded-password")).willReturn(true);
+        given(passwordEncoder.encode(any())).willReturn("unusable-password");
+        given(meetingRepository.findByHostIdAndStatusIn(any(), any()))
+                .willReturn(List.of(meeting));
+        given(participationRepository.findByMeetingIdAndStatus(
+                55L,
+                ParticipationStatus.APPROVED
+        )).willReturn(List.of(participation));
+        given(participationRepository.findAllByMemberIdForUpdate(7L)).willReturn(List.of());
+
+        service.deleteAuthenticated(7L, "password123");
+
+        verify(meeting).cancel("주최자 회원 탈퇴로 취소되었습니다.");
+        verify(notificationService).notify(
+                participantMember,
+                "MEETING_CANCELED",
+                "모임 취소",
+                "저녁 산책 모임이 취소되었습니다. 사유: 주최자 회원 탈퇴로 취소되었습니다.",
+                55L
+        );
+    }
+
+    @Test
+    void webDeletionUsesMemberBoundToIssuedToken() {
+        var request = new com.meetple.backend.domain.auth.dto.request.AccountDeletionCompleteRequest(
+                "user@meetple.com",
+                "deletion-token",
+                true
+        );
+        given(accountDeletionRepository.claimToken("deletion-token", "user@meetple.com"))
+                .willReturn(Optional.of(new AccountDeletionRepository.ClaimedToken(
+                        7L,
+                        Duration.ofMinutes(2)
+                )));
+        given(memberRepository.findByIdForUpdate(7L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.deleteWithVerifiedEmail(request))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(memberRepository).findByIdForUpdate(7L);
+        verify(accountDeletionRepository).restoreTokenIfNoNewerToken(
+                eq("deletion-token"),
+                eq("user@meetple.com"),
+                eq(7L),
+                any(Duration.class)
+        );
     }
 }

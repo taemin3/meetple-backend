@@ -202,11 +202,17 @@ class MemberControllerTest {
                 .andExpect(status().isUnauthorized());
 
         assertThat(memberRepository.findByEmail("user@meetple.com")).isEmpty();
-        Member deleted = memberRepository.findById(memberId).orElseThrow();
-        assertThat(deleted.isDeleted()).isTrue();
-        assertThat(deleted.getEmail()).endsWith("@deleted.invalid");
-        assertThat(deleted.getNickname()).isEqualTo("탈퇴 회원");
-        assertThat(deleted.getProfileImageObjectKey()).isNull();
+        assertThat(memberRepository.findById(memberId)).isEmpty();
+        EntityManager entityManager = entityManagerFactory.createEntityManager();
+        try {
+            Member deleted = entityManager.find(Member.class, memberId);
+            assertThat(deleted.isDeleted()).isTrue();
+            assertThat(deleted.getEmail()).endsWith("@deleted.invalid");
+            assertThat(deleted.getNickname()).isEqualTo("탈퇴 회원");
+            assertThat(deleted.getProfileImageObjectKey()).isNull();
+        } finally {
+            entityManager.close();
+        }
     }
 
     @Test

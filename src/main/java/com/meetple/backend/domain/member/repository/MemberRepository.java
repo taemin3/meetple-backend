@@ -10,6 +10,10 @@ import org.springframework.data.repository.query.Param;
 
 public interface MemberRepository extends JpaRepository<Member, Long> {
 
+    @Override
+    @Query("select m from Member m where m.id = :id and m.deletedAt is null")
+    Optional<Member> findById(@Param("id") Long id);
+
     @Query("select m from Member m where m.email = :email and m.deletedAt is null")
     Optional<Member> findByEmail(@Param("email") String email);
 

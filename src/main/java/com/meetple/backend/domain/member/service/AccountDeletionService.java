@@ -27,6 +27,7 @@ import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.notification.repository.NotificationRepository;
+import com.meetple.backend.domain.notification.service.NotificationService;
 import com.meetple.backend.domain.push.service.PushDeviceTokenService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.BaseException;
@@ -35,17 +36,24 @@ import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AccountDeletionService {
 
     private static final int BCRYPT_MAX_PASSWORD_BYTES = 72;
@@ -65,6 +73,7 @@ public class AccountDeletionService {
     private final ChatNotificationSettingRepository chatNotificationSettingRepository;
     private final ChatReadStateRepository chatReadStateRepository;
     private final NotificationRepository notificationRepository;
+    private final NotificationService notificationService;
     private final PushDeviceTokenService pushDeviceTokenService;
     private final RefreshTokenRepository refreshTokenRepository;
     private final ImageDeletionService imageDeletionService;
@@ -110,9 +119,11 @@ public class AccountDeletionService {
 
         String code = secretGenerator.generateCode();
         String codeHash = hasher.hashCode(email, code);
+        Optional<Member> targetMember = memberRepository.findByEmail(email);
         if (!accountDeletionRepository.saveChallengeIfAllowed(
                 email,
                 codeHash,
+                targetMember.map(Member::getId).orElse(0L),
                 emailProperties.codeTtl(),
                 emailProperties.resendCooldown()
         )) {
@@ -124,7 +135,7 @@ public class AccountDeletionService {
                 email,
                 code,
                 codeHash,
-                memberRepository.existsByEmail(email),
+                targetMember.isPresent(),
                 emailProperties.codeTtl()
         );
     }
@@ -162,14 +173,40 @@ public class AccountDeletionService {
     @Transactional
     public void deleteWithVerifiedEmail(AccountDeletionCompleteRequest request) {
         String email = EmailAddressNormalizer.normalize(request.email());
-        if (!accountDeletionRepository.claimToken(request.accountDeletionToken(), email)) {
-            throw new BadRequestException(ErrorStatus.ACCOUNT_DELETION_TOKEN_INVALID);
-        }
-        Member member = memberRepository.findByEmailForUpdate(email)
+        Instant claimStartedAt = Instant.now();
+        AccountDeletionRepository.ClaimedToken claimedToken = accountDeletionRepository
+                .claimToken(request.accountDeletionToken(), email)
                 .orElseThrow(() -> new BadRequestException(
                         ErrorStatus.ACCOUNT_DELETION_TOKEN_INVALID
                 ));
-        deleteMember(member);
+        Instant tokenExpiresAt = claimStartedAt.plus(claimedToken.remainingTtl());
+        boolean transactionSynchronizationActive =
+                TransactionSynchronizationManager.isSynchronizationActive();
+        if (transactionSynchronizationActive) {
+            registerRollbackRestore(request, email, claimedToken.memberId(), tokenExpiresAt);
+        }
+
+        try {
+            Member member = memberRepository.findByIdForUpdate(claimedToken.memberId())
+                    .filter(candidate -> candidate.getEmail().equals(email))
+                    .orElseThrow(() -> new BadRequestException(
+                            ErrorStatus.ACCOUNT_DELETION_TOKEN_INVALID
+                    ));
+            if (!Instant.now().isBefore(tokenExpiresAt)) {
+                throw new BadRequestException(ErrorStatus.ACCOUNT_DELETION_TOKEN_INVALID);
+            }
+            deleteMember(member);
+        } catch (RuntimeException exception) {
+            if (!transactionSynchronizationActive) {
+                restoreClaimQuietly(
+                        request.accountDeletionToken(),
+                        email,
+                        claimedToken.memberId(),
+                        tokenExpiresAt
+                );
+            }
+            throw exception;
+        }
     }
 
     private void deleteMember(Member member) {
@@ -184,6 +221,15 @@ public class AccountDeletionService {
         hostedMeetings.forEach(meeting -> eventPublisher.publishEvent(
                 ChatSessionInvalidationEvent.meetingCanceled(meeting.getId())
         ));
+        hostedMeetings.forEach(meeting -> participationRepository
+                .findByMeetingIdAndStatus(meeting.getId(), ParticipationStatus.APPROVED)
+                .forEach(participation -> notificationService.notify(
+                        participation.getMember(),
+                        "MEETING_CANCELED",
+                        "모임 취소",
+                        cancellationNotificationMessage(meeting.getTitle()),
+                        meeting.getId()
+                )));
 
         for (MeetingParticipation participation
                 : participationRepository.findAllByMemberIdForUpdate(memberId)) {
@@ -201,6 +247,7 @@ public class AccountDeletionService {
         bookmarkRepository.deleteAllByMemberId(memberId);
         chatNotificationSettingRepository.deleteAllByMemberId(memberId);
         chatReadStateRepository.deleteAllByMemberId(memberId);
+        notificationRepository.anonymizeParticipationActorByNickname(member.getNickname());
         notificationRepository.deleteAllByMemberId(memberId);
         chatMessageRepository.anonymizeAllBySenderId(memberId, DELETED_MESSAGE);
         pushDeviceTokenService.removeAllDevices(memberId);
@@ -215,6 +262,54 @@ public class AccountDeletionService {
 
         refreshTokenRepository.deleteAllByMemberId(memberId);
         eventPublisher.publishEvent(ChatSessionInvalidationEvent.member(memberId));
+    }
+
+    private void registerRollbackRestore(
+            AccountDeletionCompleteRequest request,
+            String email,
+            Long memberId,
+            Instant tokenExpiresAt
+    ) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                    restoreClaimQuietly(
+                            request.accountDeletionToken(),
+                            email,
+                            memberId,
+                            tokenExpiresAt
+                    );
+                }
+            }
+        });
+    }
+
+    private void restoreClaimQuietly(
+            String token,
+            String email,
+            Long memberId,
+            Instant tokenExpiresAt
+    ) {
+        Duration remainingTtl = Duration.between(Instant.now(), tokenExpiresAt);
+        if (remainingTtl.isZero() || remainingTtl.isNegative()) {
+            return;
+        }
+        try {
+            accountDeletionRepository.restoreTokenIfNoNewerToken(
+                    token,
+                    email,
+                    memberId,
+                    remainingTtl
+            );
+        } catch (RuntimeException restoreException) {
+            log.warn("Failed to restore account deletion token after rollback", restoreException);
+        }
+    }
+
+    private String cancellationNotificationMessage(String meetingTitle) {
+        String message = meetingTitle + " 모임이 취소되었습니다. 사유: " + HOST_WITHDRAWAL_REASON;
+        return message.length() <= 500 ? message : message.substring(0, 500);
     }
 
     private void validateVerificationResult(

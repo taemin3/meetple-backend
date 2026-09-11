@@ -2,6 +2,7 @@ package com.meetple.backend.domain.auth.repository;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -23,13 +24,17 @@ public class AccountDeletionRepository {
     private static final RedisScript<Long> SAVE_CHALLENGE = script("""
             local created = redis.call('SET', KEYS[2], '1', 'PX', ARGV[2], 'NX')
             if not created then return 0 end
+            redis.call('DEL', KEYS[1])
             redis.call('HSET', KEYS[1], 'codeHash', ARGV[1])
-            redis.call('PEXPIRE', KEYS[1], ARGV[3])
+            redis.call('HSET', KEYS[1], 'memberId', ARGV[3])
+            redis.call('PEXPIRE', KEYS[1], ARGV[4])
             return 1
             """);
     private static final RedisScript<Long> VERIFY_CODE = script("""
             local saved = redis.call('HGET', KEYS[1], 'codeHash')
             if not saved then return 0 end
+            local memberId = redis.call('HGET', KEYS[1], 'memberId')
+            if not memberId then return 0 end
             local field = 'attempts:' .. ARGV[7]
             local attempts = tonumber(redis.call('HGET', KEYS[1], field) or '0')
             if attempts >= tonumber(ARGV[2]) then return -2 end
@@ -40,17 +45,29 @@ public class AccountDeletionRepository {
             end
             local previous = redis.call('GET', KEYS[3])
             if previous then redis.call('DEL', ARGV[6] .. previous) end
-            redis.call('SET', KEYS[2], ARGV[3], 'PX', ARGV[4])
+            redis.call('SET', KEYS[2], ARGV[3] .. '|' .. memberId, 'PX', ARGV[4])
             redis.call('SET', KEYS[3], ARGV[5], 'PX', ARGV[4])
             redis.call('DEL', KEYS[1])
             return 1
             """);
-    private static final RedisScript<Long> CLAIM_TOKEN = script("""
-            local emailHash = redis.call('GET', KEYS[1])
+    private static final RedisScript<String> CLAIM_TOKEN = stringScript("""
+            local tokenValue = redis.call('GET', KEYS[1])
             local currentToken = redis.call('GET', KEYS[2])
-            if not emailHash or emailHash ~= ARGV[1]
-                    or not currentToken or currentToken ~= ARGV[2] then return 0 end
+            if not tokenValue or not currentToken or currentToken ~= ARGV[2] then return nil end
+            local separator = string.find(tokenValue, '|', 1, true)
+            if not separator or string.sub(tokenValue, 1, separator - 1) ~= ARGV[1] then return nil end
+            local remainingTtl = redis.call('PTTL', KEYS[1])
+            if remainingTtl <= 0 then return nil end
+            local memberId = string.sub(tokenValue, separator + 1)
             redis.call('DEL', KEYS[1], KEYS[2])
+            return memberId .. '|' .. remainingTtl
+            """);
+    private static final RedisScript<Long> RESTORE_TOKEN = script("""
+            if redis.call('EXISTS', KEYS[1]) == 1 or redis.call('EXISTS', KEYS[2]) == 1 then
+                return 0
+            end
+            redis.call('SET', KEYS[1], ARGV[1] .. '|' .. ARGV[2], 'PX', ARGV[4])
+            redis.call('SET', KEYS[2], ARGV[3], 'PX', ARGV[4])
             return 1
             """);
     private static final RedisScript<Long> DELETE_CHALLENGE = script("""
@@ -86,11 +103,18 @@ public class AccountDeletionRepository {
 
     private final StringRedisTemplate redis;
 
-    public boolean saveChallengeIfAllowed(String email, String codeHash, Duration ttl, Duration cooldown) {
+    public boolean saveChallengeIfAllowed(
+            String email,
+            String codeHash,
+            Long memberId,
+            Duration ttl,
+            Duration cooldown
+    ) {
         String emailHash = TokenHashUtil.sha256(email);
         return Long.valueOf(1).equals(redis.execute(SAVE_CHALLENGE,
                 List.of(CHALLENGE_PREFIX + emailHash, COOLDOWN_PREFIX + emailHash),
-                codeHash, String.valueOf(cooldown.toMillis()), String.valueOf(ttl.toMillis())));
+                codeHash, String.valueOf(cooldown.toMillis()), String.valueOf(memberId),
+                String.valueOf(ttl.toMillis())));
     }
 
     public CodeVerificationResult verifyCodeAndSaveToken(
@@ -109,12 +133,46 @@ public class AccountDeletionRepository {
         return CodeVerificationResult.from(result);
     }
 
-    public boolean claimToken(String token, String email) {
+    public Optional<ClaimedToken> claimToken(String token, String email) {
         String emailHash = TokenHashUtil.sha256(email);
         String tokenHash = TokenHashUtil.sha256(token);
-        return Long.valueOf(1).equals(redis.execute(CLAIM_TOKEN,
+        String claimed = redis.execute(CLAIM_TOKEN,
                 List.of(TOKEN_PREFIX + tokenHash, EMAIL_TOKEN_PREFIX + emailHash),
-                emailHash, tokenHash));
+                emailHash, tokenHash);
+        if (claimed == null) {
+            return Optional.empty();
+        }
+        int separator = claimed.lastIndexOf('|');
+        if (separator <= 0 || separator == claimed.length() - 1) {
+            return Optional.empty();
+        }
+        try {
+            Long memberId = Long.valueOf(claimed.substring(0, separator));
+            long remainingTtlMillis = Long.parseLong(claimed.substring(separator + 1));
+            if (remainingTtlMillis <= 0) {
+                return Optional.empty();
+            }
+            return Optional.of(new ClaimedToken(memberId, Duration.ofMillis(remainingTtlMillis)));
+        } catch (NumberFormatException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public void restoreTokenIfNoNewerToken(
+            String token,
+            String email,
+            Long memberId,
+            Duration remainingTtl
+    ) {
+        if (remainingTtl.isZero() || remainingTtl.isNegative()) {
+            return;
+        }
+        String emailHash = TokenHashUtil.sha256(email);
+        String tokenHash = TokenHashUtil.sha256(token);
+        redis.execute(RESTORE_TOKEN,
+                List.of(TOKEN_PREFIX + tokenHash, EMAIL_TOKEN_PREFIX + emailHash),
+                emailHash, String.valueOf(memberId), tokenHash,
+                String.valueOf(remainingTtl.toMillis()));
     }
 
     public boolean deleteChallengeIfMatches(String email, String codeHash) {
@@ -148,6 +206,16 @@ public class AccountDeletionRepository {
         value.setScriptText(text);
         value.setResultType(Long.class);
         return value;
+    }
+
+    private static RedisScript<String> stringScript(String text) {
+        DefaultRedisScript<String> value = new DefaultRedisScript<>();
+        value.setScriptText(text);
+        value.setResultType(String.class);
+        return value;
+    }
+
+    public record ClaimedToken(Long memberId, Duration remainingTtl) {
     }
 
     public enum CodeVerificationResult {

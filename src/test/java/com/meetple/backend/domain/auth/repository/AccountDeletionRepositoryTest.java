@@ -3,6 +3,7 @@ package com.meetple.backend.domain.auth.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
 import java.time.Duration;
 import java.util.List;
@@ -19,6 +20,32 @@ class AccountDeletionRepositoryTest {
 
     @Mock
     private StringRedisTemplate redis;
+
+    @Test
+    void saveChallengeBindsMemberAndReplacesPreviousAttempts() {
+        String emailHash = TokenHashUtil.sha256("user@meetple.com");
+        List<String> keys = List.of(
+                "account-deletion:challenge:" + emailHash,
+                "account-deletion:cooldown:" + emailHash
+        );
+        given(redis.execute(
+                ArgumentMatchers.<RedisScript<Long>>any(),
+                eq(keys),
+                eq("code-hash"),
+                eq("60000"),
+                eq("7"),
+                eq("300000")
+        )).willReturn(1L);
+        AccountDeletionRepository repository = new AccountDeletionRepository(redis);
+
+        assertThat(repository.saveChallengeIfAllowed(
+                "user@meetple.com",
+                "code-hash",
+                7L,
+                Duration.ofMinutes(5),
+                Duration.ofMinutes(1)
+        )).isTrue();
+    }
 
     @Test
     void verificationUsesPurposeSpecificHashedKeys() {
@@ -62,14 +89,45 @@ class AccountDeletionRepositoryTest {
                 "account-deletion:email-token:" + emailHash
         );
         given(redis.execute(
-                ArgumentMatchers.<RedisScript<Long>>any(),
+                ArgumentMatchers.<RedisScript<String>>any(),
                 eq(keys),
                 eq(emailHash),
                 eq(tokenHash)
-        )).willReturn(1L, 0L);
+        )).willReturn("7|120000", (String) null);
         AccountDeletionRepository repository = new AccountDeletionRepository(redis);
 
-        assertThat(repository.claimToken("deletion-token", "user@meetple.com")).isTrue();
-        assertThat(repository.claimToken("deletion-token", "user@meetple.com")).isFalse();
+        assertThat(repository.claimToken("deletion-token", "user@meetple.com"))
+                .contains(new AccountDeletionRepository.ClaimedToken(
+                        7L,
+                        Duration.ofMinutes(2)
+                ));
+        assertThat(repository.claimToken("deletion-token", "user@meetple.com")).isEmpty();
+    }
+
+    @Test
+    void restoreTokenPreservesMemberBindingWithoutRawIdentifiersInKeys() {
+        String emailHash = TokenHashUtil.sha256("user@meetple.com");
+        String tokenHash = TokenHashUtil.sha256("deletion-token");
+        List<String> keys = List.of(
+                "account-deletion:token:" + tokenHash,
+                "account-deletion:email-token:" + emailHash
+        );
+        AccountDeletionRepository repository = new AccountDeletionRepository(redis);
+
+        repository.restoreTokenIfNoNewerToken(
+                "deletion-token",
+                "user@meetple.com",
+                7L,
+                Duration.ofMinutes(2)
+        );
+
+        verify(redis).execute(
+                ArgumentMatchers.<RedisScript<Long>>any(),
+                eq(keys),
+                eq(emailHash),
+                eq("7"),
+                eq(tokenHash),
+                eq("120000")
+        );
     }
 }
