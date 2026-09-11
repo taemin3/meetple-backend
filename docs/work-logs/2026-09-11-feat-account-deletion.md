@@ -56,7 +56,8 @@ git diff --check
 
 결과:
 
-- 전체 459개 테스트 성공, 실패 0, 건너뜀 0
+- 전체 460개 테스트 성공, 실패 0, 건너뜀 0
+- 탈퇴 후 기존 Access Token의 STOMP 재접속 거부와 연결 중 세션 종료 검증
 - 신규 DB에서 V16 적용 및 `ddl-auto=validate` 애플리케이션 컨텍스트 성공
 - `git diff --check` 성공
 
