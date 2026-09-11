@@ -3,9 +3,12 @@ package com.meetple.backend.global.performance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.outbox.event.OutboxEventEnvelope;
 import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
+import com.meetple.backend.domain.outbox.repository.OutboxEventRepository;
 import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
 import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
 import com.meetple.backend.domain.push.service.PushDeviceTokenService;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -32,12 +35,14 @@ public class PushRetryMeasurementService {
     private static final String DLT = TOPIC + ".dlq";
 
     private final OutboxEventPublisher outboxEventPublisher;
+    private final OutboxEventRepository outboxEventRepository;
     private final PushDeviceTokenService pushDeviceTokenService;
     private final PushRetryMeasurementSender sender;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private final Map<String, Set<UUID>> created = new ConcurrentHashMap<>();
     private final Map<String, Map<UUID, ReplayRecord>> dltRecords = new ConcurrentHashMap<>();
+    private final Map<String, Map<UUID, MainTopicRecord>> mainTopicRecords = new ConcurrentHashMap<>();
 
     @Transactional
     public UUID create(Long memberId, String runId, int index) {
@@ -69,10 +74,8 @@ public class PushRetryMeasurementService {
             groupId = "${MEETPLE_PERFORMANCE_PUSH_RETRY_DLT_GROUP:meetple-push-retry-measurement-dlt-v1}"
     )
     public void collectDlt(ConsumerRecord<String, String> record) {
-        OutboxEventEnvelope envelope;
-        try {
-            envelope = objectMapper.readValue(record.value(), OutboxEventEnvelope.class);
-        } catch (Exception ignored) {
+        OutboxEventEnvelope envelope = readEnvelope(record.value());
+        if (envelope == null) {
             return;
         }
         if (!PushRetryMeasurementSender.EVENT_TYPE.equals(envelope.eventType())) {
@@ -82,13 +85,60 @@ public class PushRetryMeasurementService {
                 .putIfAbsent(envelope.eventId(), new ReplayRecord(record.key(), record.value()));
     }
 
+    @KafkaListener(
+            topics = TOPIC,
+            groupId = "${MEETPLE_PERFORMANCE_PUSH_RETRY_CDC_GROUP:meetple-push-retry-measurement-cdc-v1}"
+    )
+    public void collectMainTopic(ConsumerRecord<String, String> record) {
+        OutboxEventEnvelope envelope = readEnvelope(record.value());
+        if (envelope == null || !PushRetryMeasurementSender.EVENT_TYPE.equals(envelope.eventType())) {
+            return;
+        }
+
+        Instant receivedAt = Instant.now();
+        Instant occurredAt;
+        try {
+            occurredAt = Instant.parse(envelope.occurredAt());
+        } catch (Exception ignored) {
+            return;
+        }
+        long latencyMillis = Math.max(0, Duration.between(occurredAt, receivedAt).toMillis());
+        mainTopicRecords.computeIfAbsent(envelope.aggregateId(), ignored -> new ConcurrentHashMap<>())
+                .compute(envelope.eventId(), (ignored, existing) -> existing == null
+                        ? new MainTopicRecord(latencyMillis, 1)
+                        : new MainTopicRecord(existing.latencyMillis(), existing.deliveries() + 1));
+    }
+
     public RunStatus status(String runId) {
         Set<UUID> eventIds = created.getOrDefault(runId, Set.of());
         int dltCount = dltRecords.getOrDefault(runId, Map.of()).size();
+        Map<UUID, MainTopicRecord> mainRecords = mainTopicRecords.getOrDefault(runId, Map.of());
+        List<Long> latencies = mainRecords.entrySet().stream()
+                .filter(entry -> eventIds.contains(entry.getKey()))
+                .map(entry -> entry.getValue().latencyMillis())
+                .sorted()
+                .toList();
+        int duplicateMainTopicEvents = mainRecords.entrySet().stream()
+                .filter(entry -> eventIds.contains(entry.getKey()))
+                .mapToInt(entry -> Math.max(0, entry.getValue().deliveries() - 1))
+                .sum();
+        long committedOutboxEvents = outboxEventRepository
+                .countByAggregateTypeAndAggregateIdAndEventType(
+                        "push-retry-measurement",
+                        runId,
+                        PushRetryMeasurementSender.EVENT_TYPE
+                );
         return new RunStatus(
                 runId,
                 sender.mode().name(),
                 eventIds.size(),
+                committedOutboxEvents,
+                latencies.size(),
+                duplicateMainTopicEvents,
+                percentile(latencies, 0.50),
+                percentile(latencies, 0.95),
+                percentile(latencies, 0.99),
+                latencies.isEmpty() ? null : latencies.getLast(),
                 sender.attempts(eventIds),
                 dltCount,
                 sender.successes(eventIds),
@@ -112,6 +162,27 @@ public class PushRetryMeasurementService {
         return status(runId);
     }
 
+    public RunStatus success(String runId) {
+        sender.setMode(PushRetryMeasurementSender.Mode.SUCCESS);
+        return status(runId);
+    }
+
+    private OutboxEventEnvelope readEnvelope(String value) {
+        try {
+            return objectMapper.readValue(value, OutboxEventEnvelope.class);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Long percentile(List<Long> sortedValues, double percentile) {
+        if (sortedValues.isEmpty()) {
+            return null;
+        }
+        int index = (int) Math.ceil(percentile * sortedValues.size()) - 1;
+        return sortedValues.get(Math.max(0, index));
+    }
+
     private void validate(String runId, int index) {
         if (runId == null || !runId.matches("[A-Za-z0-9-]{1,64}")) {
             throw new IllegalArgumentException("runId must contain 1-64 letters, digits, or hyphens.");
@@ -124,10 +195,20 @@ public class PushRetryMeasurementService {
     private record ReplayRecord(String key, String value) {
     }
 
+    private record MainTopicRecord(long latencyMillis, int deliveries) {
+    }
+
     public record RunStatus(
             String runId,
             String mode,
             int createdEvents,
+            long committedOutboxEvents,
+            int mainTopicEvents,
+            int duplicateMainTopicEvents,
+            Long cdcLatencyP50Ms,
+            Long cdcLatencyP95Ms,
+            Long cdcLatencyP99Ms,
+            Long cdcLatencyMaxMs,
             int sendAttempts,
             int dltEvents,
             int successfulEvents,

@@ -52,6 +52,13 @@ public class PushRetryMeasurementController {
         return ApiResponse.success(SuccessStatus.OK, service.fail(runId));
     }
 
+    @PostMapping("/success")
+    public ResponseEntity<ApiResponse<PushRetryMeasurementService.RunStatus>> success(
+            @RequestParam String runId
+    ) {
+        return ApiResponse.success(SuccessStatus.OK, service.success(runId));
+    }
+
     @PostMapping("/replay")
     public ResponseEntity<ApiResponse<PushRetryMeasurementService.RunStatus>> replay(
             @RequestParam String runId
