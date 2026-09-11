@@ -73,6 +73,10 @@ public class AuthService {
 
         String encodedPassword = passwordEncoder.encode(request.password());
         Member member = Member.createUser(email, encodedPassword, request.nickname(), null);
+        member.updateProfile(
+                request.nickname(),
+                StringUtils.hasText(request.introduction()) ? request.introduction().trim() : null
+        );
         Member savedMember = saveMember(member);
         legalDocumentService.recordSignup(savedMember, legalDocuments);
         eventPublisher.publishEvent(new SignupEmailVerificationCompletedEvent(

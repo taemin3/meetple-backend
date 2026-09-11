@@ -84,7 +84,14 @@ class AuthServiceTest {
 
     @Test
     void signupEncodesPasswordAndSavesMember() {
-        SignupRequest request = validSignupRequest("password123");
+        SignupRequest request = new SignupRequest(
+                "user@meetple.com",
+                "signup-verification-token",
+                "password123",
+                "tester",
+                "  같이 산책해요  ",
+                List.of()
+        );
         given(memberRepository.existsByEmail(request.email())).willReturn(false);
         given(passwordEncoder.encode(request.password())).willReturn("encoded-password");
         given(memberRepository.saveAndFlush(any(Member.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -98,6 +105,7 @@ class AuthServiceTest {
         assertThat(savedMember.getEmail()).isEqualTo(request.email());
         assertThat(savedMember.getPassword()).isEqualTo("encoded-password");
         assertThat(savedMember.getNickname()).isEqualTo(request.nickname());
+        assertThat(savedMember.getIntroduction()).isEqualTo("같이 산책해요");
         assertThat(response.email()).isEqualTo(request.email());
         assertThat(response.nickname()).isEqualTo(request.nickname());
         verify(emailVerificationService).validateSignupToken(
