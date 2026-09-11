@@ -65,8 +65,9 @@
 
 - 로컬/배포 경로: `/account-deletion` 및 `/account-deletion/`
 - 운영 배포 후 예상 URL: `https://api.meetple.shop/account-deletion`
+- 개인정보처리방침: `/privacy-policy` 및 `https://api.meetple.shop/privacy-policy`
 - 배포 후 인증 없이 `200`, 모바일 레이아웃, 발송→확인→최종 삭제, 재사용 토큰 거부를 별도로 확인한다.
 - Play Console에서 앱을 선택한 뒤 `앱 콘텐츠(App content) → 데이터 보안(Data safety) → 계정 삭제` 질문에 위 HTTPS URL을 입력한다. 콘솔 언어·개편에 따라 메뉴 명칭은 달라질 수 있다.
-- 실제 고객지원 주소와 앱/개발자 표기, 개인정보처리방침의 보존 항목·기간을 운영 정보와 대조한 뒤 제출한다.
+- Play Console의 앱/개발자 표기와 개인정보처리방침의 개인정보 처리자 명칭을 운영 주체 정보와 최종 대조한 뒤 제출한다.
 
 이 저장소 변경만으로 실제 배포 또는 Google Play 심사가 완료되는 것은 아니다.

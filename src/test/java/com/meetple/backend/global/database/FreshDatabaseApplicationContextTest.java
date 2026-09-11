@@ -109,7 +109,17 @@ class FreshDatabaseApplicationContextTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE",
                 Integer.class
-        )).isEqualTo(17);
+        )).isEqualTo(18);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT version
+                FROM legal_documents
+                WHERE type = 'PRIVACY_POLICY'
+                ORDER BY effective_at DESC, id DESC
+                LIMIT 1
+                """,
+                String.class
+        )).isEqualTo("2026-09-12");
     }
 
     @Test

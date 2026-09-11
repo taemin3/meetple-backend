@@ -11,6 +11,7 @@ import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.response.ErrorStatus;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class LegalDocumentService {
+
+    private static final ZoneId POLICY_TIME_ZONE = ZoneId.of("Asia/Seoul");
 
     private final LegalDocumentRepository legalDocumentRepository;
     private final MemberLegalRecordRepository memberLegalRecordRepository;
@@ -75,7 +78,9 @@ public class LegalDocumentService {
     private List<LegalDocument> currentSignupDocuments() {
         Map<LegalDocumentType, LegalDocument> currentByType = new EnumMap<>(LegalDocumentType.class);
         legalDocumentRepository
-                .findAllByEffectiveAtLessThanEqualOrderByEffectiveAtDescIdDesc(LocalDateTime.now())
+                .findAllByEffectiveAtLessThanEqualOrderByEffectiveAtDescIdDesc(
+                        LocalDateTime.now(POLICY_TIME_ZONE)
+                )
                 .forEach(document -> currentByType.putIfAbsent(document.getType(), document));
 
         if (currentByType.size() != LegalDocumentType.values().length) {
