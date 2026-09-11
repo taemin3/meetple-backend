@@ -23,6 +23,7 @@ const endpointTrends = Object.freeze({
   push_retry_create: new Trend('push_retry_create_duration', true),
   push_retry_status: new Trend('push_retry_status_duration', true),
   push_retry_fail: new Trend('push_retry_fail_duration', true),
+  push_retry_success: new Trend('push_retry_success_duration', true),
   push_retry_replay: new Trend('push_retry_replay_duration', true),
 });
 

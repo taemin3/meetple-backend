@@ -5,4 +5,10 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> {
+
+    long countByAggregateTypeAndAggregateIdAndEventType(
+            String aggregateType,
+            String aggregateId,
+            String eventType
+    );
 }

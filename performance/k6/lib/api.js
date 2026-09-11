@@ -72,6 +72,15 @@ export function failPushRetryMeasurement(accessToken, runId) {
   );
 }
 
+export function succeedPushRetryMeasurement(accessToken, runId) {
+  return request(
+    'POST',
+    `/api/v1/performance/push-retry/success?runId=${encodeURIComponent(runId)}`,
+    'push_retry_success',
+    { headers: authHeaders(accessToken) },
+  );
+}
+
 export function replayPushRetryMeasurement(accessToken, runId) {
   return request(
     'POST',
