@@ -7,10 +7,18 @@ import java.util.UUID;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
+
+    @Modifying(flushAutomatically = true)
+    @Query("update ChatMessage message set message.content = :replacement where message.sender.id = :memberId")
+    int anonymizeAllBySenderId(
+            @Param("memberId") Long memberId,
+            @Param("replacement") String replacement
+    );
 
     @EntityGraph(attributePaths = "sender")
     Optional<ChatMessage> findByMeetingIdAndSenderIdAndClientMessageId(

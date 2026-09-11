@@ -57,6 +57,9 @@ public class Member extends BaseTimeEntity {
     @Column(nullable = false, length = 30)
     private MemberRole role;
 
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     private Member(String email, String password, String nickname, String region, MemberRole role) {
         this.email = email;
         this.password = password;
@@ -85,5 +88,23 @@ public class Member extends BaseTimeEntity {
 
     public void changePassword(String encodedPassword) {
         this.password = encodedPassword;
+    }
+
+    public void anonymize(String anonymizedEmail, String unusablePassword) {
+        if (deletedAt != null) {
+            throw new IllegalStateException("Member is already deleted.");
+        }
+        this.email = anonymizedEmail;
+        this.password = unusablePassword;
+        this.emailVerifiedAt = null;
+        this.nickname = "탈퇴 회원";
+        this.profileImageObjectKey = null;
+        this.introduction = null;
+        this.region = null;
+        this.deletedAt = LocalDateTime.now();
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
     }
 }

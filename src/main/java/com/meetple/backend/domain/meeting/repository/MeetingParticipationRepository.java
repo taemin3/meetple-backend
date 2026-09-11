@@ -18,6 +18,11 @@ public interface MeetingParticipationRepository extends JpaRepository<MeetingPar
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = {"meeting", "member"})
+    @Query("select p from MeetingParticipation p where p.member.id = :memberId")
+    List<MeetingParticipation> findAllByMemberIdForUpdate(@Param("memberId") Long memberId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"meeting", "member"})
     @Query("""
             select p
             from MeetingParticipation p

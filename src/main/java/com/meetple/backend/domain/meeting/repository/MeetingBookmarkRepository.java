@@ -19,6 +19,8 @@ public interface MeetingBookmarkRepository extends JpaRepository<MeetingBookmark
 
     void deleteByMeetingId(Long meetingId);
 
+    long deleteAllByMemberId(Long memberId);
+
     @EntityGraph(attributePaths = {"meeting", "meeting.host", "meeting.category"})
     @Query(
             value = """

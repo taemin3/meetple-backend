@@ -1,6 +1,7 @@
 package com.meetple.backend.domain.auth.email;
 
 import com.meetple.backend.domain.auth.repository.EmailVerificationRepository;
+import com.meetple.backend.domain.auth.repository.AccountDeletionRepository;
 import com.meetple.backend.domain.auth.repository.PasswordResetRepository;
 import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
 import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
@@ -27,6 +28,7 @@ public class EmailDeliveryService {
     private final EmailDeliveryRepository emailDeliveryRepository;
     private final EmailVerificationRepository emailVerificationRepository;
     private final PasswordResetRepository passwordResetRepository;
+    private final AccountDeletionRepository accountDeletionRepository;
     private final OutboxEventPublisher outboxEventPublisher;
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -67,6 +69,8 @@ public class EmailDeliveryService {
                             .deleteChallengeIfMatches(delivery.recipient(), delivery.codeHash());
                     case PASSWORD_RESET -> passwordResetRepository
                             .deleteChallengeIfMatches(delivery.recipient(), delivery.codeHash());
+                    case ACCOUNT_DELETION -> accountDeletionRepository
+                            .deleteChallengeIfMatches(delivery.recipient(), delivery.codeHash());
                 }
             });
         } finally {
@@ -82,6 +86,11 @@ public class EmailDeliveryService {
                             delivery.codeHash()
                     );
             case PASSWORD_RESET -> passwordResetRepository
+                    .findChallengeRemainingTtlIfMatches(
+                            delivery.recipient(),
+                            delivery.codeHash()
+                    );
+            case ACCOUNT_DELETION -> accountDeletionRepository
                     .findChallengeRemainingTtlIfMatches(
                             delivery.recipient(),
                             delivery.codeHash()

@@ -1,9 +1,11 @@
 package com.meetple.backend.domain.member.controller;
 
 import com.meetple.backend.domain.member.dto.request.UpdateProfileImageRequest;
+import com.meetple.backend.domain.auth.dto.request.AccountDeletionRequest;
 import com.meetple.backend.domain.member.dto.request.UpdateProfileRequest;
 import com.meetple.backend.domain.member.dto.response.MemberProfileResponse;
 import com.meetple.backend.domain.member.service.MemberService;
+import com.meetple.backend.domain.member.service.AccountDeletionService;
 import com.meetple.backend.global.config.OpenApiConfig;
 import com.meetple.backend.global.response.ApiResponse;
 import com.meetple.backend.global.response.SuccessStatus;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MemberController {
 
     private final MemberService memberService;
+    private final AccountDeletionService accountDeletionService;
 
     @GetMapping("/me")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
@@ -82,5 +85,22 @@ public class MemberController {
                 SuccessStatus.OK,
                 memberService.deleteMyProfileImage(authenticatedMember.id())
         );
+    }
+
+    @DeleteMapping("/me")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(
+            summary = "회원 탈퇴",
+            description = "현재 비밀번호를 확인하고 개인정보를 익명화한 뒤 모든 로그인 세션을 종료합니다."
+    )
+    public ResponseEntity<ApiResponse<Void>> deleteMyAccount(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @Valid @RequestBody AccountDeletionRequest request
+    ) {
+        accountDeletionService.deleteAuthenticated(
+                authenticatedMember.id(),
+                request.currentPassword()
+        );
+        return ApiResponse.successOnly(SuccessStatus.OK);
     }
 }

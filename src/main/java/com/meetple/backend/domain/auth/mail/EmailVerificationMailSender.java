@@ -5,4 +5,6 @@ public interface EmailVerificationMailSender {
     void sendVerificationCode(String recipient, String code);
 
     void sendPasswordResetCode(String recipient, String code);
+
+    void sendAccountDeletionCode(String recipient, String code);
 }

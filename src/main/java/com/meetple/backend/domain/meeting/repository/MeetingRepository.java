@@ -21,6 +21,10 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
 
     List<Meeting> findByHostId(Long hostId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"host"})
+    List<Meeting> findByHostIdAndStatusIn(Long hostId, List<MeetingStatus> statuses);
+
     @EntityGraph(attributePaths = {"host", "category"})
     Page<Meeting> findByHostId(Long hostId, Pageable pageable);
 

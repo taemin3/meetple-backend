@@ -37,6 +37,16 @@ public class SmtpEmailVerificationMailSender implements EmailVerificationMailSen
         );
     }
 
+    @Override
+    public void sendAccountDeletionCode(String recipient, String code) {
+        send(
+                recipient,
+                "[밋플] 계정 삭제 인증번호 안내",
+                "밋플 계정 삭제 요청을 위한 인증번호입니다.",
+                code
+        );
+    }
+
     private void send(
             String recipient,
             String subject,

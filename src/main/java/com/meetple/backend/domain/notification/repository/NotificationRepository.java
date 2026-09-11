@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
+    long deleteAllByMemberId(Long memberId);
+
     @EntityGraph(attributePaths = "member")
     Page<Notification> findByMemberId(Long memberId, Pageable pageable);
 
