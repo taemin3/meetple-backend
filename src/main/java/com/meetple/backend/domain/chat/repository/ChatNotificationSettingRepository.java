@@ -11,6 +11,8 @@ import org.springframework.data.repository.query.Param;
 public interface ChatNotificationSettingRepository
         extends JpaRepository<ChatNotificationSetting, Long> {
 
+    long deleteAllByMemberId(Long memberId);
+
     Optional<ChatNotificationSetting> findByMeetingIdAndMemberId(
             Long meetingId,
             Long memberId

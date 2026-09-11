@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -44,16 +45,26 @@ class MemberControllerTest {
     @Autowired
     private EntityManagerFactory entityManagerFactory;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     private String accessToken;
     private String profileImageUrl;
     private String profileImageObjectKey;
+    private Long memberId;
 
     @BeforeEach
     void setUp() {
         memberRepository.deleteAll();
 
-        Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", "Seoul");
+        Member member = Member.createUser(
+                "user@meetple.com",
+                passwordEncoder.encode("password123"),
+                "tester",
+                "Seoul"
+        );
         Member savedMember = memberRepository.save(member);
+        memberId = savedMember.getId();
         profileImageObjectKey = "images/profile/" + savedMember.getId()
                 + "/550e8400-e29b-41d4-a716-446655440000.png";
         profileImageUrl = "https://cdn.meetple.com/" + profileImageObjectKey;
@@ -173,6 +184,61 @@ class MemberControllerTest {
 
         Member savedMember = memberRepository.findByEmail("user@meetple.com").orElseThrow();
         assertThat(savedMember.getProfileImageObjectKey()).isNull();
+    }
+
+    @Test
+    void deleteMyAccountAnonymizesMemberAndRejectsExistingAccessToken() throws Exception {
+        mockMvc.perform(delete("/api/v1/users/me")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"currentPassword":"password123"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        mockMvc.perform(get("/api/v1/users/me")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isUnauthorized());
+
+        assertThat(memberRepository.findByEmail("user@meetple.com")).isEmpty();
+        assertThat(memberRepository.findById(memberId)).isEmpty();
+        EntityManager entityManager = entityManagerFactory.createEntityManager();
+        try {
+            Member deleted = entityManager.find(Member.class, memberId);
+            assertThat(deleted.isDeleted()).isTrue();
+            assertThat(deleted.getEmail()).endsWith("@deleted.invalid");
+            assertThat(deleted.getNickname()).isEqualTo("탈퇴 회원");
+            assertThat(deleted.getProfileImageObjectKey()).isNull();
+        } finally {
+            entityManager.close();
+        }
+    }
+
+    @Test
+    void deleteMyAccountRejectsWrongPasswordWithoutEndingSession() throws Exception {
+        mockMvc.perform(delete("/api/v1/users/me")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"currentPassword":"wrong-password"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(10009));
+
+        mockMvc.perform(get("/api/v1/users/me")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void deleteMyAccountRequiresAuthentication() throws Exception {
+        mockMvc.perform(delete("/api/v1/users/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"currentPassword":"password123"}
+                                """))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

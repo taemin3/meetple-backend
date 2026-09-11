@@ -84,7 +84,7 @@ public class MeetingParticipationService {
                         meeting.getHost(),
                         "PARTICIPATION_APPLIED",
                         "새 참여 신청",
-                        member.getNickname() + "님이 " + meeting.getTitle() + " 모임에 참여를 신청했습니다.",
+                        "새로운 회원이 " + meeting.getTitle() + " 모임에 참여를 신청했습니다.",
                         meetingId
                 );
                 return toResponse(participation);
@@ -104,7 +104,7 @@ public class MeetingParticipationService {
                     meeting.getHost(),
                     "PARTICIPATION_APPLIED",
                     "새 참여 신청",
-                    member.getNickname() + "님이 " + meeting.getTitle() + " 모임에 참여를 신청했습니다.",
+                    "새로운 회원이 " + meeting.getTitle() + " 모임에 참여를 신청했습니다.",
                     meetingId
             );
             return toResponse(saved);
@@ -188,7 +188,7 @@ public class MeetingParticipationService {
                 meeting.getHost(),
                 "PARTICIPATION_CANCELED",
                 "참여 취소",
-                participation.getMember().getNickname() + "님이 " + meeting.getTitle() + " 참여를 취소했습니다.",
+                "참여자가 " + meeting.getTitle() + " 참여를 취소했습니다.",
                 meetingId
         );
         if (wasApproved) {

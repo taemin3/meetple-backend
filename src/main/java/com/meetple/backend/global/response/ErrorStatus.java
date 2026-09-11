@@ -18,6 +18,8 @@ public enum ErrorStatus {
     LEGAL_DOCUMENT_VERSION_INVALID(HttpStatus.BAD_REQUEST, "최신 약관을 다시 확인해주세요.", 10006),
     SIGNUP_EMAIL_VERIFICATION_INVALID(HttpStatus.BAD_REQUEST, "이메일 인증이 만료되었거나 올바르지 않습니다.", 10007),
     PASSWORD_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "비밀번호 재설정 인증이 만료되었거나 올바르지 않습니다.", 10008),
+    ACCOUNT_DELETION_PASSWORD_INVALID(HttpStatus.BAD_REQUEST, "현재 비밀번호가 올바르지 않습니다.", 10009),
+    ACCOUNT_DELETION_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "계정 삭제 인증이 만료되었거나 올바르지 않습니다.", 10010),
 
     // 401 UNAUTHORIZED
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다.", 10101),
@@ -39,6 +41,7 @@ public enum ErrorStatus {
     CONFLICT(HttpStatus.CONFLICT, "충돌이 발생했습니다.",10901),
     OPTIMISTIC_LOCK_CONFLICT(HttpStatus.CONFLICT, "리소스가 갱신되었습니다. 다시 시도해 주세요.",10902),
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 가입된 이메일입니다.",10903),
+    ACCOUNT_ALREADY_DELETED(HttpStatus.CONFLICT, "이미 탈퇴한 계정입니다.",10904),
 
     // 429 TOO_MANY_REQUESTS
     EMAIL_VERIFICATION_SEND_TOO_SOON(HttpStatus.TOO_MANY_REQUESTS, "인증번호 재전송은 잠시 후 시도해주세요.", 12901),

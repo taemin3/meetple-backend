@@ -125,6 +125,8 @@ auth:
     from-address: ${EMAIL_FROM_ADDRESS:noreply@meetple.local}
   password-reset:
     token-ttl: ${PASSWORD_RESET_TOKEN_TTL:15m}
+  account-deletion:
+    token-ttl: ${ACCOUNT_DELETION_TOKEN_TTL:15m}
 
 naver:
   location:

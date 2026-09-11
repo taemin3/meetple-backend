@@ -79,6 +79,38 @@ class ChatSessionInvalidationServiceTest {
     }
 
     @Test
+    void accountDeletionMemberInvalidationClosesCurrentWebSocketSession() throws Exception {
+        ChatSessionInvalidationEvent event = ChatSessionInvalidationEvent.member(1L);
+        LocalChatWebSocketSessionRegistry.SessionSnapshot session =
+                new LocalChatWebSocketSessionRegistry.SessionSnapshot(
+                        "ws-account-deletion",
+                        transportSession,
+                        1L,
+                        "login-1",
+                        "principal-1",
+                        Instant.EPOCH,
+                        List.of()
+                );
+        given(sessionRegistry.findTargets(event)).willReturn(List.of(session));
+        given(transportSession.isOpen()).willReturn(true);
+        doAnswer(invocation -> {
+            invocation.<Runnable>getArgument(0).run();
+            return null;
+        }).when(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
+
+        invalidationService.invalidateLocalSessions(event);
+
+        verify(messagingTemplate).convertAndSendToUser(
+                eq("principal-1"),
+                eq(ChatSessionInvalidationService.CONTROL_DESTINATION),
+                eq(ChatAccessRevokedMessage.from(event)),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>any()
+        );
+        verify(transportSession).close(CloseStatus.POLICY_VIOLATION);
+        verify(sessionRegistry).remove("ws-account-deletion");
+    }
+
+    @Test
     void throttlesDeduplicationCleanupAfterThreshold() throws Exception {
         ChatSessionInvalidationService service = new ChatSessionInvalidationService(
                 new LocalChatWebSocketSessionRegistry(),

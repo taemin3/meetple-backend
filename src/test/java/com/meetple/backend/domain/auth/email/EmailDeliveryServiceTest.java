@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.auth.repository.EmailVerificationRepository;
+import com.meetple.backend.domain.auth.repository.AccountDeletionRepository;
 import com.meetple.backend.domain.auth.repository.PasswordResetRepository;
 import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
 import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
@@ -37,6 +38,8 @@ class EmailDeliveryServiceTest {
     @Mock
     private PasswordResetRepository passwordResetRepository;
     @Mock
+    private AccountDeletionRepository accountDeletionRepository;
+    @Mock
     private OutboxEventPublisher outboxEventPublisher;
 
     private EmailDeliveryService service;
@@ -47,6 +50,7 @@ class EmailDeliveryServiceTest {
                 emailDeliveryRepository,
                 emailVerificationRepository,
                 passwordResetRepository,
+                accountDeletionRepository,
                 outboxEventPublisher
         );
     }

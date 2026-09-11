@@ -89,6 +89,10 @@ public class EmailDeliveryEventProcessor {
                     delivery.recipient(),
                     delivery.code()
             );
+            case ACCOUNT_DELETION -> mailSender.sendAccountDeletionCode(
+                    delivery.recipient(),
+                    delivery.code()
+            );
         }
     }
 

@@ -42,7 +42,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(16);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(17);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
@@ -66,7 +66,7 @@ class FreshDatabaseMigrationTest {
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
-                    "7", "8", "9", "10", "11", "12", "13", "14", "15"
+                    "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder("운동", "스터디", "취미");
             assertThat(rowCount(connection, "legal_documents")).isEqualTo(3);
@@ -81,6 +81,7 @@ class FreshDatabaseMigrationTest {
                     .contains("USING gist (location)");
             assertThat(columnIsNullable(connection, "members", "email_verified_at")).isTrue();
             assertThat(columnIsNullable(connection, "members", "profile_image_object_key")).isTrue();
+            assertThat(columnIsNullable(connection, "members", "deleted_at")).isTrue();
             assertThat(columnIsNullable(connection, "meetings", "deleted_at")).isTrue();
             assertThat(columnIsNullable(connection, "meetings", "thumbnail_image_object_key")).isTrue();
             assertThat(columnIsNullable(connection, "meeting_images", "image_url")).isTrue();

@@ -96,4 +96,8 @@ public class MeetingParticipation extends BaseTimeEntity {
         this.reviewedAt = null;
         this.canceledAt = null;
     }
+
+    public void erasePersonalMessage() {
+        this.message = null;
+    }
 }

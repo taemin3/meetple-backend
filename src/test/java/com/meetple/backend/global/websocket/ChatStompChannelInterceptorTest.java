@@ -118,7 +118,7 @@ class ChatStompChannelInterceptorTest {
     }
 
     @Test
-    void connectRemovesPendingAuthenticationWhenTokenSessionIsInvalid() {
+    void connectRejectsExistingAccessTokenAfterAccountDeletionRemovesLoginSession() {
         Authentication authentication = authentication(1L);
         given(jwtTokenProvider.authenticateAccessToken(ACCESS_TOKEN))
                 .willReturn(authenticatedAccessToken(authentication));
