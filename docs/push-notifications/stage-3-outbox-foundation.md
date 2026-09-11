@@ -75,6 +75,22 @@ outbox_events INSERT
 
 `outbox_events` 마이그레이션 적용 후 Connector를 등록한다.
 
+## Outbox 정리
+
+Outbox 행은 7일 동안 보관하고 1시간마다 최대 1,000건씩 삭제한다. 정리 작업은 PostgreSQL transaction advisory lock을 획득한 한 인스턴스만 실행한다. 최근 3분 안에 Debezium heartbeat가 갱신됐고 `meetple_outbox` replication slot이 활성·정상 상태이며 WAL lag가 설정한 한도 이하일 때만 삭제한다. 조건을 만족하지 않으면 아직 Kafka로 전달되지 않은 이벤트를 보호하기 위해 해당 실행을 건너뛴다. 기본 처리 한도는 하루 24,000건이며 실제 생성량이 이를 넘으면 실행 주기나 배치 크기를 조정한다.
+
+Debezium Outbox Event Router는 Outbox 테이블의 `DELETE` 변경을 자동으로 필터링한다. 따라서 보존 기간이 지난 행을 삭제해도 기존 이벤트가 비즈니스 Topic으로 다시 발행되지 않는다.
+
+```properties
+OUTBOX_CLEANUP_ENABLED=true
+OUTBOX_CLEANUP_INTERVAL_MS=3600000
+OUTBOX_CLEANUP_RETENTION=7d
+OUTBOX_CLEANUP_HEARTBEAT_MAX_AGE=3m
+OUTBOX_CLEANUP_MAX_SLOT_LAG_BYTES=67108864
+OUTBOX_CLEANUP_BATCH_SIZE=1000
+OUTBOX_CLEANUP_SLOT_NAME=meetple_outbox
+```
+
 ```powershell
 Invoke-RestMethod `
   -Method Post `

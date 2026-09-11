@@ -55,3 +55,5 @@ Kafka UI의 `Topics`에서 다음 토픽을 확인한다.
 - DLQ: `meetple.push.notification.v1.dlq`
 
 `Messages`에서 측정 실행의 `runId`를 검색하면 같은 이벤트가 Main, Retry, DLQ를 통과한 기록과 Kafka header의 원본 topic, partition, offset, 예외 정보를 확인할 수 있다. DLQ 재처리가 성공해도 Kafka record는 삭제되지 않으며 retention이 끝날 때까지 남는다.
+
+Push Main Topic과 Retry Topic의 retention은 1일이고, 운영자가 장애 원인을 확인하고 재처리할 시간이 필요한 DLQ는 14일이다. Kafka UI의 `Settings`에서 Main·Retry는 `retention.ms=86400000`, DLQ는 `retention.ms=1209600000`인지 확인한다.
