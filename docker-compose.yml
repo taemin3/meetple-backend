@@ -85,14 +85,27 @@ services:
           --if-not-exists \
           --topic meetple.push.notification.v1 \
           --partitions "$${KAFKA_PUSH_TOPIC_PARTITIONS}" \
-          --replication-factor 1
+          --replication-factor 1 \
+          --config retention.ms=86400000
         /opt/kafka/bin/kafka-topics.sh \
           --bootstrap-server kafka:29092 \
           --create \
           --if-not-exists \
           --topic meetple.push.chat.v1 \
           --partitions "$${KAFKA_PUSH_TOPIC_PARTITIONS}" \
-          --replication-factor 1
+          --replication-factor 1 \
+          --config retention.ms=86400000
+        for topic in \
+          meetple.push.notification.v1 \
+          meetple.push.chat.v1
+        do
+          /opt/kafka/bin/kafka-configs.sh \
+            --bootstrap-server kafka:29092 \
+            --entity-type topics \
+            --entity-name "$${topic}" \
+            --alter \
+            --add-config retention.ms=86400000
+        done
         /opt/kafka/bin/kafka-topics.sh \
           --bootstrap-server kafka:29092 \
           --create \
@@ -137,6 +150,22 @@ services:
             --partitions "$${KAFKA_PUSH_TOPIC_PARTITIONS}" \
             --replication-factor 1
           case "$${topic}" in
+            meetple.push.*.dlq)
+              /opt/kafka/bin/kafka-configs.sh \
+                --bootstrap-server kafka:29092 \
+                --entity-type topics \
+                --entity-name "$${topic}" \
+                --alter \
+                --add-config retention.ms=1209600000
+              ;;
+            meetple.push.*)
+              /opt/kafka/bin/kafka-configs.sh \
+                --bootstrap-server kafka:29092 \
+                --entity-type topics \
+                --entity-name "$${topic}" \
+                --alter \
+                --add-config retention.ms=86400000
+              ;;
             meetple.email.delivery.v1.*)
               /opt/kafka/bin/kafka-configs.sh \
                 --bootstrap-server kafka:29092 \

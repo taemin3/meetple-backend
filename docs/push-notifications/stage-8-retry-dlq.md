@@ -50,6 +50,8 @@ meetple.push.chat.v1.dlq
 
 Retry Topic과 DLQ의 partition 수는 원본 Topic과 같아야 한다. 로컬 환경은 `KAFKA_PUSH_TOPIC_PARTITIONS` 값을 모든 Topic에 동일하게 적용한다.
 
+Push Main Topic과 Retry Topic은 1일(`retention.ms=86400000`) 동안 보관한다. DLQ는 장애 원인을 확인하고 재처리할 운영 시간을 확보하기 위해 14일(`retention.ms=1209600000`) 동안 보관한다. Consumer가 읽은 레코드도 즉시 삭제되지 않으며 각 Topic의 retention과 log segment 정리 주기에 따라 제거된다.
+
 ## 오류 분류
 
 다음 계약 오류는 재시도해도 결과가 바뀌지 않으므로 `NonRetryablePushEventException`으로 분류하고 바로 DLQ로 보낸다.

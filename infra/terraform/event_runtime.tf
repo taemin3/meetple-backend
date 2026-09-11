@@ -30,8 +30,11 @@ locals {
     "meetple-outbox.public.debezium_heartbeat",
   ]
 
-  kafka_email_topics     = [for topic in local.kafka_topics : topic if startswith(topic, "meetple.email.delivery.v1")]
-  kafka_heartbeat_topics = [for topic in local.kafka_topics : topic if startswith(topic, "__debezium-heartbeat.") || endswith(topic, ".debezium_heartbeat")]
+  kafka_email_topics           = [for topic in local.kafka_topics : topic if startswith(topic, "meetple.email.delivery.v1")]
+  kafka_heartbeat_topics       = [for topic in local.kafka_topics : topic if startswith(topic, "__debezium-heartbeat.") || endswith(topic, ".debezium_heartbeat")]
+  kafka_push_dlq_topics        = [for topic in local.kafka_topics : topic if startswith(topic, "meetple.push.") && endswith(topic, ".dlq")]
+  kafka_push_main_retry_topics = [for topic in local.kafka_topics : topic if startswith(topic, "meetple.push.") && !endswith(topic, ".dlq")]
+  kafka_one_day_topics         = distinct(concat(local.kafka_email_topics, local.kafka_heartbeat_topics, local.kafka_push_main_retry_topics))
   debezium_connector_config = jsondecode(
     file("${path.module}/../../docker/debezium/connectors/meetple-outbox-connector.json")
   ).config
@@ -214,14 +217,18 @@ resource "aws_ecs_task_definition" "event_runtime" {
             /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --create --if-not-exists --topic "$topic" --partitions "$KAFKA_TOPIC_PARTITIONS" --replication-factor 1
           fi
         done
-        for topic in $KAFKA_SHORT_RETENTION_TOPICS; do
+        for topic in $KAFKA_ONE_DAY_RETENTION_TOPICS; do
           /opt/kafka/bin/kafka-configs.sh --bootstrap-server localhost:19092 --entity-type topics --entity-name "$topic" --alter --add-config retention.ms=86400000
+        done
+        for topic in $KAFKA_FOURTEEN_DAY_RETENTION_TOPICS; do
+          /opt/kafka/bin/kafka-configs.sh --bootstrap-server localhost:19092 --entity-type topics --entity-name "$topic" --alter --add-config retention.ms=1209600000
         done
       SCRIPT
       ]
       environment = [
         { name = "KAFKA_TOPICS", value = join(" ", local.kafka_topics) },
-        { name = "KAFKA_SHORT_RETENTION_TOPICS", value = join(" ", concat(local.kafka_email_topics, local.kafka_heartbeat_topics)) },
+        { name = "KAFKA_ONE_DAY_RETENTION_TOPICS", value = join(" ", local.kafka_one_day_topics) },
+        { name = "KAFKA_FOURTEEN_DAY_RETENTION_TOPICS", value = join(" ", local.kafka_push_dlq_topics) },
         { name = "KAFKA_TOPIC_PARTITIONS", value = tostring(var.kafka_topic_partitions) },
         { name = "KAFKA_HEAP_OPTS", value = "-Xms64m -Xmx256m" },
       ]
