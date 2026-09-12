@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ChatSendMeasurementController {
 
     private final ChatSendMeasurementRecorder recorder;
+    private final ChatRealtimeMeasurementRecorder realtimeRecorder;
 
     @GetMapping("/report")
     public ResponseEntity<ApiResponse<ChatSendMeasurementRecorder.RunReport>> report(
@@ -31,9 +32,17 @@ public class ChatSendMeasurementController {
         return ApiResponse.success(SuccessStatus.OK, recorder.report(runId));
     }
 
+    @GetMapping("/realtime-report")
+    public ResponseEntity<ApiResponse<ChatRealtimeMeasurementRecorder.RunReport>> realtimeReport(
+            @RequestParam String runId
+    ) {
+        return ApiResponse.success(SuccessStatus.OK, realtimeRecorder.report(runId));
+    }
+
     @PostMapping("/reset")
     public ResponseEntity<ApiResponse<Void>> reset(@RequestParam String runId) {
         recorder.reset(runId);
+        realtimeRecorder.reset(runId);
         return ApiResponse.successOnly(SuccessStatus.OK);
     }
 }

@@ -1,8 +1,11 @@
 package com.meetple.backend.global.websocket;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meetple.backend.domain.auth.repository.AccessTokenValidationRepository;
 import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
 import com.meetple.backend.global.exception.BaseException;
+import com.meetple.backend.global.performance.ChatRealtimeMeasurementRecorder;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.security.AuthenticatedAccessToken;
 import com.meetple.backend.global.security.AuthenticatedMember;
@@ -11,12 +14,14 @@ import com.meetple.backend.global.security.JwtTokenSession;
 import io.jsonwebtoken.JwtException;
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHandler;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.support.MessageHeaderAccessor;
@@ -24,6 +29,7 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.ExecutorChannelInterceptor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
@@ -32,12 +38,13 @@ import org.springframework.util.StringUtils;
 
 @Component
 @RequiredArgsConstructor
-public class ChatStompChannelInterceptor implements ChannelInterceptor {
+public class ChatStompChannelInterceptor implements ChannelInterceptor, ExecutorChannelInterceptor {
 
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String ACCESS_TOKEN_SESSION_ATTRIBUTE = "chatAccessToken";
     private static final String USER_ERROR_DESTINATION = "/user/queue/chat/errors";
     private static final String USER_CONTROL_DESTINATION = "/user/queue/chat/control";
+    private static final String ROOM_TOPIC_PREFIX = "/topic/chat/rooms/";
     private static final Pattern ROOM_SUBSCRIPTION_PATTERN =
             Pattern.compile("^/topic/chat/rooms/(\\d+)$");
     private static final Pattern MESSAGE_SEND_PATTERN =
@@ -47,6 +54,8 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
     private final AccessTokenValidationRepository accessTokenValidationRepository;
     private final ChatAccessPolicy chatAccessPolicy;
     private final LocalChatWebSocketSessionRegistry sessionRegistry;
+    private final ChatRealtimeMeasurementRecorder measurementRecorder;
+    private final ObjectMapper objectMapper;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -55,11 +64,11 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
                 StompHeaderAccessor.class
         );
         if (accessor == null) {
-            return authorizeOutboundMessageIfNecessary(message);
+            return measureOutboundMessageIfNecessary(message);
         }
         StompCommand command = accessor.getCommand();
         if (command == null) {
-            return authorizeOutboundMessageIfNecessary(message);
+            return measureOutboundMessageIfNecessary(message);
         }
 
         if (command == StompCommand.CONNECT || command == StompCommand.STOMP) {
@@ -86,21 +95,60 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
         }
 
         if (command == StompCommand.MESSAGE) {
-            return authorizeOutboundMessage(message, accessor);
+            return measureOutboundMessage(message, accessor);
         }
 
-        if (command == StompCommand.SUBSCRIBE || command == StompCommand.SEND) {
-            AuthenticatedMember member = validateAuthenticatedSession(accessor);
-            if (command == StompCommand.SUBSCRIBE) {
-                Long roomId = subscriptionRoomId(accessor.getDestination());
-                if (roomId != null) {
-                    beginSubscription(accessor, member.id(), roomId);
-                }
-            } else {
+        if (command == StompCommand.SEND) {
+            MeasuredPayload payload = measuredPayload(message);
+            try (ChatRealtimeMeasurementRecorder.Timer ignored = measurementRecorder.startInbound(
+                    payload == null ? null : payload.clientMessageId(),
+                    payload == null ? null : payload.content()
+            )) {
+                validateAuthenticatedSession(accessor);
                 authorizeSendDestination(accessor.getDestination());
+            }
+            if (payload != null) {
+                measurementRecorder.markInboundEnqueued(payload.clientMessageId());
+            }
+        } else if (command == StompCommand.SUBSCRIBE) {
+            AuthenticatedMember member = validateAuthenticatedSession(accessor);
+            Long roomId = subscriptionRoomId(accessor.getDestination());
+            if (roomId != null) {
+                beginSubscription(accessor, member.id(), roomId);
             }
         }
 
+        return message;
+    }
+
+    @Override
+    public Message<?> beforeHandle(
+            Message<?> message,
+            MessageChannel channel,
+            MessageHandler handler
+    ) {
+        MeasuredPayload payload = measuredPayload(message);
+        if (payload == null) {
+            return message;
+        }
+        StompHeaderAccessor stompAccessor = MessageHeaderAccessor.getAccessor(
+                message,
+                StompHeaderAccessor.class
+        );
+        StompCommand command = stompAccessor == null ? null : stompAccessor.getCommand();
+        String destination = SimpMessageHeaderAccessor.getDestination(message.getHeaders());
+        if (command == StompCommand.SEND
+                || (command == null && destination != null
+                && destination.startsWith("/app/"))) {
+            measurementRecorder.markInboundDequeued(payload.clientMessageId());
+        } else if (command == StompCommand.MESSAGE
+                || (command == null && destination != null
+                && destination.startsWith(ROOM_TOPIC_PREFIX))) {
+            measurementRecorder.markOutboundDequeued(
+                    payload.clientMessageId(),
+                    deliveryKey(message)
+            );
+        }
         return message;
     }
 
@@ -253,7 +301,7 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
         }
     }
 
-    private Message<?> authorizeOutboundMessageIfNecessary(Message<?> message) {
+    private Message<?> measureOutboundMessageIfNecessary(Message<?> message) {
         SimpMessageHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(
                 message,
                 SimpMessageHeaderAccessor.class
@@ -261,7 +309,69 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
         if (accessor == null || accessor.getMessageType() != SimpMessageType.MESSAGE) {
             return message;
         }
-        return authorizeOutboundMessage(message, accessor);
+        return measureOutboundMessage(message, accessor);
+    }
+
+    private Message<?> measureOutboundMessage(
+            Message<?> message,
+            SimpMessageHeaderAccessor accessor
+    ) {
+        MeasuredPayload payload = measuredPayload(message);
+        Message<?> result;
+        try (ChatRealtimeMeasurementRecorder.Timer ignored = measurementRecorder.start(
+                payload == null ? null : payload.clientMessageId(),
+                ChatRealtimeMeasurementRecorder.OUTBOUND_AUTH
+        )) {
+            result = authorizeOutboundMessage(message, accessor);
+        }
+        if (result != null && payload != null) {
+            measurementRecorder.markOutboundEnqueued(
+                    payload.clientMessageId(),
+                    deliveryKey(result)
+            );
+        }
+        return result;
+    }
+
+    private MeasuredPayload measuredPayload(Message<?> message) {
+        if (!measurementRecorder.isEnabled()) {
+            return null;
+        }
+        try {
+            JsonNode root;
+            if (message.getPayload() instanceof byte[] bytes) {
+                if (bytes.length == 0) {
+                    return null;
+                }
+                root = objectMapper.readTree(bytes);
+            } else if (message.getPayload() instanceof String text) {
+                root = objectMapper.readTree(text);
+            } else {
+                return null;
+            }
+            JsonNode data = root.has("data") ? root.get("data") : root;
+            JsonNode clientMessageId = data.get("clientMessageId");
+            if (clientMessageId == null || !clientMessageId.isTextual()) {
+                return null;
+            }
+            JsonNode content = data.get("content");
+            return new MeasuredPayload(
+                    UUID.fromString(clientMessageId.textValue()),
+                    content != null && content.isTextual() ? content.textValue() : null
+            );
+        } catch (RuntimeException | java.io.IOException ignored) {
+            return null;
+        }
+    }
+
+    private String deliveryKey(Message<?> message) {
+        Object sessionId = message.getHeaders().get(
+                SimpMessageHeaderAccessor.SESSION_ID_HEADER
+        );
+        Object subscriptionId = message.getHeaders().get(
+                SimpMessageHeaderAccessor.SUBSCRIPTION_ID_HEADER
+        );
+        return String.valueOf(sessionId) + '|' + subscriptionId;
     }
 
     private Long extractRoomId(String destination, Pattern pattern) {
@@ -324,5 +434,8 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
             return new BadCredentialsException(ErrorStatus.INVALID_TOKEN.getMessage());
         }
         return new BadCredentialsException(ErrorStatus.INVALID_TOKEN.getMessage(), cause);
+    }
+
+    private record MeasuredPayload(UUID clientMessageId, String content) {
     }
 }

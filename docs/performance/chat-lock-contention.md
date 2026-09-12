@@ -36,10 +36,22 @@ repository 시간에는 Hikari 커넥션 획득과 ORM/SQL 실행이 함께 포�
 - `serviceBody`: 서비스 진입부터 반환 직전
 - `transactionCommit`: 서비스 진입부터 실제 `afterCommit`
 
+고부하 공통 적체를 분리하기 위해 realtime report도 함께 수집한다.
+
+- `inboundAuth`: STOMP SEND의 Redis 토큰 상태 검증
+- `inboundQueue`: inbound channel 등록부터 handler 실행 직전까지의 대기
+- `localFanOut`: 커밋 후 `SimpMessagingTemplate.convertAndSend()` 호출
+- `redisPublish`: 커밋 후 Redis Pub/Sub 발행
+- `outboundAuth`: 구독자별 Redis 토큰 및 모임·참여 권한 재검증
+- `outboundQueue`: 구독자별 outbound channel 대기
+
+`outboundAuth.count`는 입력 메시지 수가 아니라 실제 구독자 전달 시도 수다. 10명이 구독한 3,000건 실행에서는 정상적으로 약 30,000 표본이 예상된다. JSON 결과의 `serverRealtime.phaseMicros`에 p50/p95/p99/max가 저장된다.
+
 인증된 요청으로 조회/메모리 초기화한다.
 
 ```text
 GET /api/v1/performance/chat-send/report?runId=<runId>
+GET /api/v1/performance/chat-send/realtime-report?runId=<runId>
 POST /api/v1/performance/chat-send/reset?runId=<runId>
 ```
 

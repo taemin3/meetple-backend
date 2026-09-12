@@ -1,5 +1,6 @@
 package com.meetple.backend.global.websocket;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -13,20 +14,24 @@ import com.meetple.backend.domain.auth.repository.AccessTokenValidationRepositor
 import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
 import com.meetple.backend.domain.member.entity.MemberRole;
 import com.meetple.backend.global.exception.ForbiddenException;
+import com.meetple.backend.global.performance.ChatRealtimeMeasurementRecorder;
 import com.meetple.backend.global.security.AuthenticatedAccessToken;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
@@ -55,6 +60,13 @@ class ChatStompChannelInterceptorTest {
 
     @Mock
     private LocalChatWebSocketSessionRegistry sessionRegistry;
+
+    @Spy
+    private ChatRealtimeMeasurementRecorder measurementRecorder =
+            new ChatRealtimeMeasurementRecorder(true);
+
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
     private ChatStompChannelInterceptor interceptor;
@@ -238,6 +250,43 @@ class ChatStompChannelInterceptorTest {
     }
 
     @Test
+    void measuresInboundAndOutboundAuthorizationAndQueuePhasesForLoadMessage() {
+        connectSession();
+        UUID clientMessageId = UUID.randomUUID();
+        String content = "[CHAT-LOAD:measure-r1] payload";
+        String inboundJson = "{\"clientMessageId\":\"" + clientMessageId
+                + "\",\"content\":\"" + content + "\"}";
+        StompHeaderAccessor inboundAccessor = accessor(
+                StompCommand.SEND,
+                "/app/chat/rooms/10/messages",
+                authentication(1L)
+        );
+        Message<byte[]> inbound = MessageBuilder.createMessage(
+                inboundJson.getBytes(StandardCharsets.UTF_8),
+                inboundAccessor.getMessageHeaders()
+        );
+
+        interceptor.preSend(inbound, null);
+        interceptor.beforeHandle(inbound, null, null);
+
+        String outboundJson = "{\"data\":{\"clientMessageId\":\""
+                + clientMessageId + "\",\"content\":\"" + content + "\"}}";
+        Message<byte[]> outbound = outboundMessage(
+                10L,
+                outboundJson.getBytes(StandardCharsets.UTF_8)
+        );
+        Message<?> authorized = interceptor.preSend(outbound, null);
+        interceptor.beforeHandle(authorized, null, null);
+
+        ChatRealtimeMeasurementRecorder.RunReport report =
+                measurementRecorder.report("measure-r1");
+        assertThat(report.phaseMicros().get("inboundAuth").count()).isEqualTo(1);
+        assertThat(report.phaseMicros().get("inboundQueue").count()).isEqualTo(1);
+        assertThat(report.phaseMicros().get("outboundAuth").count()).isEqualTo(1);
+        assertThat(report.phaseMicros().get("outboundQueue").count()).isEqualTo(1);
+    }
+
+    @Test
     void outboundRoomMessageIsDroppedAfterParticipationAccessIsRevoked() {
         connectSession();
         given(chatAccessPolicy.getAccessibleMeeting(1L, 10L))
@@ -331,11 +380,16 @@ class ChatStompChannelInterceptorTest {
     }
 
     private Message<byte[]> outboundMessage(Long roomId) {
+        return outboundMessage(roomId, new byte[0]);
+    }
+
+    private Message<byte[]> outboundMessage(Long roomId, byte[] payload) {
         SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.create(
                 SimpMessageType.MESSAGE
         );
         accessor.setDestination("/topic/chat/rooms/" + roomId);
         accessor.setSessionId("session-1");
-        return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+        accessor.setSubscriptionId("subscription-1");
+        return MessageBuilder.createMessage(payload, accessor.getMessageHeaders());
     }
 }

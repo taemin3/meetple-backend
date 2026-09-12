@@ -41,6 +41,9 @@ await api('/api/v1/performance/chat-send/reset', tokens[0], {
   method: 'POST',
   query: { runId },
 });
+await api('/api/v1/performance/chat-send/realtime-report', tokens[0], {
+  query: { runId },
+});
 const connections = tokens.map((token, index) => new StompConnection(
   wsUrl,
   token,
@@ -161,6 +164,11 @@ const measurementReport = (await api(
   tokens[0],
   { query: { runId } },
 )).data;
+const realtimeMeasurementReport = (await api(
+  '/api/v1/performance/chat-send/realtime-report',
+  tokens[0],
+  { query: { runId } },
+)).data;
 
 const sentIds = new Set(sent.keys());
 const dbByClientId = new Map(
@@ -248,6 +256,7 @@ const result = {
     stompErrors,
   },
   server: measurementReport,
+  serverRealtime: realtimeMeasurementReport,
   runtimeMetrics: summarizeRuntimeMetrics(metricSamples),
   generatedAt: new Date().toISOString(),
 };
@@ -265,6 +274,13 @@ console.log(JSON.stringify({
   latencyP95Ms: result.delivery.clientReceiveLatencyMs.p95,
   lockLookupP95Us: measurementReport.phaseMicros?.lockLookup?.p95,
   transactionP95Us: measurementReport.phaseMicros?.transactionCommit?.p95,
+  inboundAuthP95Us: realtimeMeasurementReport.phaseMicros?.inboundAuth?.p95,
+  inboundQueueP95Us: realtimeMeasurementReport.phaseMicros?.inboundQueue?.p95,
+  outboundAuthCount: realtimeMeasurementReport.phaseMicros?.outboundAuth?.count,
+  outboundAuthP95Us: realtimeMeasurementReport.phaseMicros?.outboundAuth?.p95,
+  outboundQueueP95Us: realtimeMeasurementReport.phaseMicros?.outboundQueue?.p95,
+  localFanOutP95Us: realtimeMeasurementReport.phaseMicros?.localFanOut?.p95,
+  redisPublishP95Us: realtimeMeasurementReport.phaseMicros?.redisPublish?.p95,
 }, null, 2));
 
 await Promise.all(connections.map((connection) => connection.close()));

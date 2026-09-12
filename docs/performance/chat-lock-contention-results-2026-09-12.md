@@ -10,6 +10,8 @@
 - 100건/s의 `scheduled=attempted=3000`은 100건/s 입력에 성공했다는 뜻이며, 서버가 100건/s로 처리했다는 뜻이 아니다.
 - 다음 분석 우선순위는 STOMP client inbound/outbound executor queue, 커밋 후 로컬 fan-out 및 Redis publish 구간이다. 잠금 구조 변경은 보류한다.
 
+후속 계측은 이 후보를 분리하도록 구현했다. 새 서버를 재시작한 뒤 생성되는 결과에는 `serverRealtime.phaseMicros`가 포함되며 `inboundAuth`, `inboundQueue`, `outboundAuth`, `outboundQueue`, `localFanOut`, `redisPublish`의 표본 수와 p50/p95/p99/max를 제공한다. 기존 20·100건/s 결과는 이 계측 추가 전 실행이므로 해당 값이 없다.
+
 ## 통제 조건
 
 - 로컬 Spring Boot, PostgreSQL, Redis

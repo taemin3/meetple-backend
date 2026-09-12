@@ -1,8 +1,10 @@
 package com.meetple.backend.domain.chat.realtime;
 
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.chat.dto.response.ChatMessageResponse;
+import com.meetple.backend.global.performance.ChatRealtimeMeasurementRecorder;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,9 @@ class ChatMessageFanOutEventListenerTest {
     @Mock
     private ChatMessageFanOutRedisPublisher redisPublisher;
 
+    @Mock
+    private ChatRealtimeMeasurementRecorder measurementRecorder;
+
     @InjectMocks
     private ChatMessageFanOutEventListener listener;
 
@@ -33,6 +38,14 @@ class ChatMessageFanOutEventListenerTest {
         InOrder inOrder = inOrder(fanOutService, redisPublisher);
         inOrder.verify(fanOutService).fanOutToLocalSubscribers(event);
         inOrder.verify(redisPublisher).publish(event);
+        verify(measurementRecorder).start(
+                event.message().clientMessageId(),
+                ChatRealtimeMeasurementRecorder.LOCAL_FAN_OUT
+        );
+        verify(measurementRecorder).start(
+                event.message().clientMessageId(),
+                ChatRealtimeMeasurementRecorder.REDIS_PUBLISH
+        );
     }
 
     private ChatMessageFanOutEvent event() {
