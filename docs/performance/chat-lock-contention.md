@@ -179,6 +179,8 @@ jcmd <backend-pid> JFR.start name=chat-lock settings=profile duration=90s `
 - 로컬 PostgreSQL/Redis/backend smoke: 집중·분산 각 20/20건 전송·커밋·수신
 - 독립 fixture 20건/s × 60초: 집중·분산 각 3회, 총 7,200건 전송·커밋·수신
 - 독립 fixture 100건/s × 30초: 집중·분산 각 1회, 총 6,000건 전송·커밋·수신. 약 96~106초 p95 수신 적체 발생
+- STOMP 단계별 독립 fixture 100건/s × 30초: 집중 E2E/inbound queue/outbound queue p95 `99.78/74.25/75.03초`, 분산 `102.58/77.81/77.98초`. 양쪽 모두 outbound 인증 30,000회, Hikari active 최대 1·pending 0
+- STOMP 단계별 후속 실행과 같은 시간대의 PostgreSQL 잠금 표본은 미수집. 잠금 판단은 앞선 100건/s 실행의 집중 0/1,766, 분산 0/1,611 차단 표본과 함께 수행
 - AWS/staging, 클라우드 생성, 실제 FCM: 수행하지 않음
 
 ## 포트폴리오 문장
@@ -193,4 +195,4 @@ jcmd <backend-pid> JFR.start name=chat-lock settings=profile duration=90s `
 
 실제 측정 결과:
 
-> 10개 클라이언트의 단일 방/10개 방 채팅 부하를 조건별 3회 비교해 7,200건의 전송·DB 커밋·구독자 수신 정합성을 검증했습니다. 5,005개 PostgreSQL 표본에서 차단 관계가 관측되지 않아 모임 행 잠금을 주 병목으로 단정하지 않고, 고부하 공통 적체 후보를 STOMP 채널과 커밋 후 fan-out 경로로 좁혔습니다.
+> 10개 클라이언트의 단일 방/10개 방 채팅 부하로 7,200건의 전송·DB 커밋·수신 정합성과 5,005개 PostgreSQL 차단 표본을 검증했습니다. 100건/s 후속 실험에서 양쪽 모두 STOMP queue p95 74~78초와 구독자별 outbound 인증 30,000회를 관측해, 모임 행 잠금이 아닌 실시간 fan-out 처리 경로로 병목 범위를 좁혔습니다.
