@@ -132,6 +132,18 @@ $env:SPRING_PROFILES_ACTIVE='local'
   -SettleSeconds 120
 ```
 
+fan-out 증폭을 분리할 때는 새 독립 fixture를 사용하고 분산 조건·송신 클라이언트 수·RPS를 유지한 채 `SubscribersPerRoom`만 바꾼다. 기본값은 10이다.
+
+```powershell
+.\performance\Invoke-ChatContention.ps1 `
+  -Manifest C:\secure\chat-fanout-sub1.json `
+  -Scenario distributed -RunId chat-fanout-sub1 `
+  -Rps 100 -DurationSeconds 30 -WarmupSeconds 2 `
+  -SettleSeconds 120 -SubscribersPerRoom 1
+```
+
+결과의 `runtimeMetrics`에는 client inbound/outbound executor의 active, pool size, queued 최대·평균값도 포함된다. 구독자 수 외 조건을 바꾸지 않고 outbound 인증 표본 수, fan-out 시간, DB 저장 구간과 queue p95를 함께 비교한다.
+
 `SettleSeconds`는 전송 종료 후 DB 커밋과 전체 구독자 수신을 기다리는 상한이다. 목표 RPS에서 서버 적체가 발생하면 같은 값으로 집중/분산 조건을 비교하고, 상한 전에 모든 메시지가 관측되면 즉시 종료한다.
 
 `Inspect-ChatLoadRun.ps1`은 삭제 없이 run 메시지와 연결 Outbox ID를 조회한다.
@@ -180,6 +192,8 @@ jcmd <backend-pid> JFR.start name=chat-lock settings=profile duration=90s `
 - 독립 fixture 20건/s × 60초: 집중·분산 각 3회, 총 7,200건 전송·커밋·수신
 - 독립 fixture 100건/s × 30초: 집중·분산 각 1회, 총 6,000건 전송·커밋·수신. 약 96~106초 p95 수신 적체 발생
 - STOMP 단계별 독립 fixture 100건/s × 30초: 집중 E2E/inbound queue/outbound queue p95 `99.78/74.25/75.03초`, 분산 `102.58/77.81/77.98초`. 양쪽 모두 outbound 인증 30,000회, Hikari active 최대 1·pending 0
+- 분산 100건/s 구독자 수 대조: 10명→1명에서 E2E p95 `102.58→44.79초`, fan-out p95 `25.28→1.80ms`, DB 저장률 `26.74→49.42건/s`. transaction p95는 `23.36→23.64ms`로 유지
+- Actuator 태그별 확인: client inbound/outbound executor 모두 core 1·실제 pool size 1·무제한 큐. 동기 `AFTER_COMMIT` fan-out과 구독자별 Redis 토큰·DB 접근 권한 확인이 단일 worker 처리량을 초과시켜 큐 적체 발생
 - STOMP 단계별 후속 실행과 같은 시간대의 PostgreSQL 잠금 표본은 미수집. 잠금 판단은 앞선 100건/s 실행의 집중 0/1,766, 분산 0/1,611 차단 표본과 함께 수행
 - AWS/staging, 클라우드 생성, 실제 FCM: 수행하지 않음
 
@@ -195,4 +209,4 @@ jcmd <backend-pid> JFR.start name=chat-lock settings=profile duration=90s `
 
 실제 측정 결과:
 
-> 10개 클라이언트의 단일 방/10개 방 채팅 부하로 7,200건의 전송·DB 커밋·수신 정합성과 5,005개 PostgreSQL 차단 표본을 검증했습니다. 100건/s 후속 실험에서 양쪽 모두 STOMP queue p95 74~78초와 구독자별 outbound 인증 30,000회를 관측해, 모임 행 잠금이 아닌 실시간 fan-out 처리 경로로 병목 범위를 좁혔습니다.
+> 10개 클라이언트의 단일 방/10개 방 채팅 부하로 7,200건의 전송·DB 커밋·수신 정합성과 5,005개 PostgreSQL 차단 표본을 검증했습니다. 100건/s 구독자 수 대조에서 10명→1명 시 E2E p95를 102.58초에서 44.79초로 낮추고 DB 저장률이 1.85배 증가함을 측정해, 단일 STOMP worker의 동기 fan-out과 구독자별 권한 검증 증폭을 병목 원인으로 규명했습니다.

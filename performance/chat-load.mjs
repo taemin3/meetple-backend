@@ -12,6 +12,7 @@ const durationSeconds = integerArg(args, 'duration', 60, 1, 3600);
 const warmupSeconds = integerArg(args, 'warmup-seconds', 5, 0, 300);
 const settleSeconds = integerArg(args, 'settle-seconds', 20, 1, 300);
 const messageBytes = integerArg(args, 'message-bytes', 256, 80, 1000);
+const subscribersPerRoom = integerArg(args, 'subscribers-per-room', 10, 1, 10);
 const runId = args['run-id'] || `${scenario}-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}`;
 const outputPath = args.output || `chat-load-${runId}.json`;
 
@@ -73,8 +74,10 @@ for (const connection of connections) {
     body,
   });
   connection.subscribe('/user/queue/chat/errors', `errors-${connection.index}`);
-  for (const roomId of manifest.roomIds) {
-    connection.subscribe(`/topic/chat/rooms/${roomId}`, `room-${connection.index}-${roomId}`);
+  if (connection.index < subscribersPerRoom) {
+    for (const roomId of manifest.roomIds) {
+      connection.subscribe(`/topic/chat/rooms/${roomId}`, `room-${connection.index}-${roomId}`);
+    }
   }
 }
 
@@ -96,13 +99,13 @@ if (warmupSeconds > 0) {
   const warmupDeadline = performance.now() + 10000;
   while (performance.now() < warmupDeadline) {
     const ready = [...warmupIds].every(
-      (id) => receivedByMessage.get(id)?.receivers.size === connections.length,
+      (id) => receivedByMessage.get(id)?.receivers.size === subscribersPerRoom,
     );
     if (ready) break;
     await delay(100);
   }
   const incompleteWarmup = [...warmupIds].filter(
-    (id) => receivedByMessage.get(id)?.receivers.size !== connections.length,
+    (id) => receivedByMessage.get(id)?.receivers.size !== subscribersPerRoom,
   );
   if (incompleteWarmup.length > 0 || stompErrors.length > 0) {
     throw new Error(
@@ -150,7 +153,7 @@ const sendStats = await sendScheduled({
 const settleDeadline = performance.now() + settleSeconds * 1000;
 while (performance.now() < settleDeadline) {
   const fullyObserved = [...sent.keys()].filter(
-    (id) => receivedByMessage.get(id)?.receivers.size === connections.length,
+    (id) => receivedByMessage.get(id)?.receivers.size === subscribersPerRoom,
   ).length;
   if (fullyObserved === sent.size) break;
   await delay(250);
@@ -193,10 +196,10 @@ for (const [id, sentRecord] of sent) {
   const received = receivedByMessage.get(id);
   if (!received) continue;
   duplicateReceipts += received.duplicateReceipts || 0;
-  if (received.receivers.size !== connections.length) incompleteObserverMessages++;
+  if (received.receivers.size !== subscribersPerRoom) incompleteObserverMessages++;
   const receiverTimes = [...received.receivers.values()].sort((a, b) => a - b);
   firstReceiptLatencies.push(Math.max(0, receiverTimes[0] - sentRecord.sentAt));
-  if (receiverTimes.length === connections.length) {
+  if (receiverTimes.length === subscribersPerRoom) {
     allObserverLatencies.push(Math.max(0, receiverTimes.at(-1) - sentRecord.sentAt));
   }
   for (const receivedAt of receiverTimes) {
@@ -222,7 +225,7 @@ const result = {
   conditions: {
     clients: connections.length,
     rooms: manifest.roomIds.length,
-    subscribersPerRoom: connections.length,
+    subscribersPerRoom,
     targetRps,
     durationSeconds,
     totalScheduled,
@@ -378,19 +381,29 @@ async function sendScheduled(options) {
 }
 
 async function captureRuntimeMetrics(token) {
-  const names = [
-    'hikaricp.connections.active',
-    'hikaricp.connections.pending',
-    'process.cpu.usage',
-    'system.cpu.usage',
+  const metrics = [
+    { key: 'hikaricp.connections.active', name: 'hikaricp.connections.active' },
+    { key: 'hikaricp.connections.pending', name: 'hikaricp.connections.pending' },
+    { key: 'process.cpu.usage', name: 'process.cpu.usage' },
+    { key: 'system.cpu.usage', name: 'system.cpu.usage' },
+    { key: 'executor.inbound.active', name: 'executor.active', tag: 'name:clientInboundChannelExecutor' },
+    { key: 'executor.inbound.pool.size', name: 'executor.pool.size', tag: 'name:clientInboundChannelExecutor' },
+    { key: 'executor.inbound.queued', name: 'executor.queued', tag: 'name:clientInboundChannelExecutor' },
+    { key: 'executor.outbound.active', name: 'executor.active', tag: 'name:clientOutboundChannelExecutor' },
+    { key: 'executor.outbound.pool.size', name: 'executor.pool.size', tag: 'name:clientOutboundChannelExecutor' },
+    { key: 'executor.outbound.queued', name: 'executor.queued', tag: 'name:clientOutboundChannelExecutor' },
   ];
   const values = { at: new Date().toISOString() };
-  for (const name of names) {
+  for (const metric of metrics) {
     try {
-      const body = await api(`/actuator/metrics/${name}`, token);
-      values[name] = body.measurements?.find((entry) => entry.statistic === 'VALUE')?.value ?? null;
+      const body = await api(`/actuator/metrics/${metric.name}`, token, {
+        query: metric.tag ? { tag: metric.tag } : {},
+      });
+      values[metric.key] = body.measurements?.find(
+        (entry) => entry.statistic === 'VALUE',
+      )?.value ?? null;
     } catch {
-      values[name] = null;
+      values[metric.key] = null;
     }
   }
   return values;
@@ -403,6 +416,12 @@ function summarizeRuntimeMetrics(samples) {
     'hikaricp.connections.pending',
     'process.cpu.usage',
     'system.cpu.usage',
+    'executor.inbound.active',
+    'executor.inbound.pool.size',
+    'executor.inbound.queued',
+    'executor.outbound.active',
+    'executor.outbound.pool.size',
+    'executor.outbound.queued',
   ]) {
     const values = samples.map((sample) => sample[name]).filter(Number.isFinite);
     result[name] = values.length ? { max: Math.max(...values), average: average(values) } : null;

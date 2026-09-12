@@ -15,6 +15,8 @@ param(
     [int] $WarmupSeconds = 10,
     [ValidateRange(1, 300)]
     [int] $SettleSeconds = 20,
+    [ValidateRange(1, 10)]
+    [int] $SubscribersPerRoom = 10,
     [string] $NodeExecutable = 'C:\Users\ruhok\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
 )
 
@@ -45,7 +47,7 @@ $output = Join-Path $resultRoot "$RunId.json"
 
 Write-Host 'Target: local only (validated again by chat-load.mjs)'
 Write-Host "Load: $Rps message(s)/second x $DurationSeconds second(s) = $($Rps * $DurationSeconds) scheduled messages"
-Write-Host "Condition: $Scenario; 10 clients; all 10 clients subscribed to all 10 rooms"
+Write-Host "Condition: $Scenario; 10 sending clients; $SubscribersPerRoom client(s) subscribed to all 10 rooms"
 Write-Host 'Effects: PostgreSQL chat/read-state/Outbox writes and local Redis fan-out; actual FCM remains disabled.'
 Write-Host 'Stop criteria: any process error, unsent message, STOMP error, missing DB row, or stored-but-not-received message.'
 Write-Host 'Run Capture-ChatPostgresLocks.ps1 in a second terminal for this condition.'
@@ -58,6 +60,7 @@ Write-Host 'Run Capture-ChatPostgresLocks.ps1 in a second terminal for this cond
     --duration $DurationSeconds `
     --warmup-seconds $WarmupSeconds `
     --settle-seconds $SettleSeconds `
+    --subscribers-per-room $SubscribersPerRoom `
     --output $output
 if ($LASTEXITCODE -ne 0) {
     throw "Chat load failed for $RunId with exit code $LASTEXITCODE."
