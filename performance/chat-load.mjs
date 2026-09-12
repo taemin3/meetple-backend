@@ -35,6 +35,10 @@ const wsUrl = new URL('/ws', baseUrl);
 wsUrl.protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
 
 const tokens = await Promise.all(manifest.clients.map(login));
+await api('/api/v1/performance/chat-send/reset', tokens[0], {
+  method: 'POST',
+  query: { runId },
+});
 const connections = tokens.map((token, index) => new StompConnection(
   wsUrl,
   token,
@@ -86,10 +90,6 @@ if (warmupSeconds > 0) {
 }
 
 const baselineSequences = await latestSequences(tokens[0], manifest.roomIds);
-await api('/api/v1/performance/chat-send/reset', tokens[0], {
-  method: 'POST',
-  query: { runId },
-});
 receivedByMessage.clear();
 
 const metricSamples = [];

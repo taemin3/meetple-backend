@@ -33,7 +33,12 @@ if ($DryRun) {
 }
 
 $randomBytes = [byte[]]::new(24)
-[Security.Cryptography.RandomNumberGenerator]::Fill($randomBytes)
+$randomNumberGenerator = [Security.Cryptography.RandomNumberGenerator]::Create()
+try {
+    $randomNumberGenerator.GetBytes($randomBytes)
+} finally {
+    $randomNumberGenerator.Dispose()
+}
 $password = 'Aa1!' + [Convert]::ToBase64String($randomBytes).Replace('+', 'x').Replace('/', 'y')
 $escapedPassword = $password.Replace("'", "''")
 $escapedDatasetId = $DatasetId.Replace("'", "''")
