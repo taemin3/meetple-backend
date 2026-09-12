@@ -72,6 +72,9 @@ class ChatServiceTest {
     @Mock
     private ImageService imageService;
 
+    @Mock
+    private ChatSendMeasurementRecorder measurementRecorder;
+
     @InjectMocks
     private ChatService chatService;
 

@@ -9,6 +9,7 @@ import com.meetple.backend.domain.chat.dto.response.ChatRoomSummaryResponse;
 import com.meetple.backend.domain.chat.entity.ChatMessage;
 import com.meetple.backend.domain.chat.entity.ChatReadState;
 import com.meetple.backend.domain.chat.realtime.ChatMessageFanOutEvent;
+import com.meetple.backend.domain.chat.service.ChatSendMeasurementRecorder.Observation;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
 import com.meetple.backend.domain.chat.repository.ChatReadStateRepository;
 import com.meetple.backend.domain.chat.repository.ChatUnreadCountProjection;
@@ -60,6 +61,7 @@ public class ChatService {
     private final OutboxEventPublisher outboxEventPublisher;
     private final ApplicationEventPublisher eventPublisher;
     private final ImageService imageService;
+    private final ChatSendMeasurementRecorder measurementRecorder;
 
     public PageResponse<ChatRoomSummaryResponse> getRooms(Long memberId, Pageable pageable) {
         validatePageable(pageable);
@@ -149,37 +151,56 @@ public class ChatService {
             SendChatMessageRequest request
     ) {
         validateMessageRequest(request);
+        Observation startedObservation = measurementRecorder.start(
+                request.clientMessageId(),
+                request.content()
+        );
+        Observation observation = startedObservation == null
+                ? Observation.noop()
+                : startedObservation;
 
-        Meeting meeting = getAccessibleMeetingForUpdate(memberId, meetingId);
+        Meeting meeting = getAccessibleMeetingForUpdate(memberId, meetingId, observation);
         accessPolicy.ensureCanSend(meeting);
 
-        Optional<ChatMessage> existingMessage =
-                messageRepository.findByMeetingIdAndSenderIdAndClientMessageId(
+        Optional<ChatMessage> existingMessage = observation.measure(
+                Observation.DUPLICATE_LOOKUP,
+                () -> messageRepository.findByMeetingIdAndSenderIdAndClientMessageId(
                         meetingId,
                         memberId,
                         request.clientMessageId()
-                );
+                )
+        );
         boolean created = existingMessage.isEmpty();
         ChatMessage message = existingMessage
-                .orElseGet(() -> saveMessage(memberId, meeting, request));
-        advanceReadState(
-                meeting,
-                memberId,
-                message::getSender,
-                message.getRoomSequence()
+                .orElseGet(() -> saveMessage(memberId, meeting, request, observation));
+        observation.markMessageId(message.getId());
+        observation.measure(
+                Observation.READ_STATE_UPDATE,
+                () -> advanceReadState(
+                        meeting,
+                        memberId,
+                        message::getSender,
+                        message.getRoomSequence()
+                )
         );
         ChatMessageResponse response = toMessageResponse(message);
         if (created) {
-            publishPushEvent(meeting, response);
+            publishPushEvent(meeting, response, observation);
             eventPublisher.publishEvent(ChatMessageFanOutEvent.create(response));
         }
-        return new ChatMessageSendResult(response, created);
+        ChatMessageSendResult result = new ChatMessageSendResult(response, created);
+        observation.markServiceReturned();
+        return result;
     }
 
-    private void publishPushEvent(Meeting meeting, ChatMessageResponse message) {
-        List<Long> recipientMemberIds = pushRecipientResolver.resolve(
-                meeting,
-                message.senderId()
+    private void publishPushEvent(
+            Meeting meeting,
+            ChatMessageResponse message,
+            Observation observation
+    ) {
+        List<Long> recipientMemberIds = observation.measure(
+                Observation.PUSH_RECIPIENT_LOOKUP,
+                () -> pushRecipientResolver.resolve(meeting, message.senderId())
         );
         if (recipientMemberIds.isEmpty()) {
             return;
@@ -195,16 +216,19 @@ public class ChatService {
         data.put("title", meeting.getTitle());
         data.put("body", message.content());
 
-        outboxEventPublisher.publish(new OutboxEventRequest(
-                CHAT_MESSAGE_AGGREGATE_TYPE,
-                message.id().toString(),
-                CHAT_MESSAGE_CREATED_EVENT,
-                "room:" + message.roomId(),
-                OutboxEventTopic.PUSH_CHAT,
-                PUSH_SCHEMA_VERSION,
-                "chat-message:" + message.id(),
-                data
-        ));
+        observation.measure(
+                Observation.OUTBOX_SAVE,
+                () -> outboxEventPublisher.publish(new OutboxEventRequest(
+                        CHAT_MESSAGE_AGGREGATE_TYPE,
+                        message.id().toString(),
+                        CHAT_MESSAGE_CREATED_EVENT,
+                        "room:" + message.roomId(),
+                        OutboxEventTopic.PUSH_CHAT,
+                        PUSH_SCHEMA_VERSION,
+                        "chat-message:" + message.id(),
+                        data
+                ))
+        );
     }
 
     @Transactional
@@ -213,7 +237,11 @@ public class ChatService {
             Long meetingId,
             MarkChatRoomReadRequest request
     ) {
-        Meeting meeting = getAccessibleMeetingForUpdate(memberId, meetingId);
+        Meeting meeting = getAccessibleMeetingForUpdate(
+                memberId,
+                meetingId,
+                Observation.noop()
+        );
         long latestSequence = messageRepository.findTopByMeetingIdOrderByRoomSequenceDesc(meetingId)
                 .map(ChatMessage::getRoomSequence)
                 .orElse(0L);
@@ -255,12 +283,16 @@ public class ChatService {
     private ChatMessage saveMessage(
             Long memberId,
             Meeting meeting,
-            SendChatMessageRequest request
+            SendChatMessageRequest request,
+            Observation observation
     ) {
         Member sender = getMember(memberId);
-        long nextSequence = messageRepository.findTopByMeetingIdOrderByRoomSequenceDesc(meeting.getId())
-                .map(ChatMessage::getRoomSequence)
-                .orElse(0L) + 1;
+        long nextSequence = observation.measure(
+                Observation.SEQUENCE_LOOKUP,
+                () -> messageRepository.findTopByMeetingIdOrderByRoomSequenceDesc(meeting.getId())
+                        .map(ChatMessage::getRoomSequence)
+                        .orElse(0L) + 1
+        );
         ChatMessage message = ChatMessage.create(
                 meeting,
                 sender,
@@ -268,12 +300,22 @@ public class ChatService {
                 request.clientMessageId(),
                 request.content()
         );
-        return messageRepository.saveAndFlush(message);
+        return observation.measure(
+                Observation.MESSAGE_SAVE,
+                () -> messageRepository.saveAndFlush(message)
+        );
     }
 
-    private Meeting getAccessibleMeetingForUpdate(Long memberId, Long meetingId) {
-        Meeting meeting = meetingRepository.findByIdForUpdate(meetingId)
-                .orElseThrow(() -> new NotFoundException("모임을 찾을 수 없습니다."));
+    private Meeting getAccessibleMeetingForUpdate(
+            Long memberId,
+            Long meetingId,
+            Observation observation
+    ) {
+        Meeting meeting = observation.measure(
+                Observation.LOCK_LOOKUP,
+                () -> meetingRepository.findByIdForUpdate(meetingId)
+                        .orElseThrow(() -> new NotFoundException("모임을 찾을 수 없습니다."))
+        );
         accessPolicy.ensureCanAccess(memberId, meeting);
         return meeting;
     }

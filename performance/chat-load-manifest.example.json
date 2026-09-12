@@ -1,0 +1,17 @@
+{
+  "datasetId": "chat-lock-r1-focused",
+  "baseUrl": "http://127.0.0.1:8080",
+  "clients": [
+    { "email": "chat-load-01@example.invalid", "password": "replace-me" },
+    { "email": "chat-load-02@example.invalid", "password": "replace-me" },
+    { "email": "chat-load-03@example.invalid", "password": "replace-me" },
+    { "email": "chat-load-04@example.invalid", "password": "replace-me" },
+    { "email": "chat-load-05@example.invalid", "password": "replace-me" },
+    { "email": "chat-load-06@example.invalid", "password": "replace-me" },
+    { "email": "chat-load-07@example.invalid", "password": "replace-me" },
+    { "email": "chat-load-08@example.invalid", "password": "replace-me" },
+    { "email": "chat-load-09@example.invalid", "password": "replace-me" },
+    { "email": "chat-load-10@example.invalid", "password": "replace-me" }
+  ],
+  "roomIds": ["101", "102", "103", "104", "105", "106", "107", "108", "109", "110"]
+}
