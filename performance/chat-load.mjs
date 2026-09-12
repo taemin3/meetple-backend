@@ -4,7 +4,8 @@ import { performance } from 'node:perf_hooks';
 import { StompConnection } from './stomp-connection.mjs';
 
 const args = parseArgs(process.argv.slice(2));
-const manifest = JSON.parse(await readFile(required(args, 'manifest'), 'utf8'));
+const manifestText = await readFile(required(args, 'manifest'), 'utf8');
+const manifest = JSON.parse(manifestText.replace(/^\uFEFF/, ''));
 const scenario = args.scenario || 'focused';
 const targetRps = integerArg(args, 'rps', 20, 1, 1000);
 const durationSeconds = integerArg(args, 'duration', 60, 1, 3600);

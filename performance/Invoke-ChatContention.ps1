@@ -7,6 +7,14 @@ param(
     [string] $Scenario,
     [switch] $Smoke,
     [string] $RunId,
+    [ValidateRange(1, 1000)]
+    [int] $Rps = 20,
+    [ValidateRange(1, 3600)]
+    [int] $DurationSeconds = 60,
+    [ValidateRange(0, 300)]
+    [int] $WarmupSeconds = 10,
+    [ValidateRange(1, 300)]
+    [int] $SettleSeconds = 20,
     [string] $NodeExecutable = 'C:\Users\ruhok\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
 )
 
@@ -25,16 +33,18 @@ $scriptPath = Join-Path $PSScriptRoot 'chat-load.mjs'
 $resultRoot = Join-Path $PSScriptRoot 'results\chat-contention'
 New-Item -ItemType Directory -Path $resultRoot -Force | Out-Null
 
-$rps = if ($Smoke) { 2 } else { 20 }
-$duration = if ($Smoke) { 10 } else { 60 }
-$warmup = if ($Smoke) { 2 } else { 10 }
+if ($Smoke) {
+    $Rps = 2
+    $DurationSeconds = 10
+    $WarmupSeconds = 2
+}
 if ([string]::IsNullOrWhiteSpace($RunId)) {
     $RunId = "chat-$Scenario-$(Get-Date -Format 'yyyyMMddHHmmss')"
 }
 $output = Join-Path $resultRoot "$RunId.json"
 
 Write-Host 'Target: local only (validated again by chat-load.mjs)'
-Write-Host "Load: $rps message(s)/second x $duration second(s) = $($rps * $duration) scheduled messages"
+Write-Host "Load: $Rps message(s)/second x $DurationSeconds second(s) = $($Rps * $DurationSeconds) scheduled messages"
 Write-Host "Condition: $Scenario; 10 clients; all 10 clients subscribed to all 10 rooms"
 Write-Host 'Effects: PostgreSQL chat/read-state/Outbox writes and local Redis fan-out; actual FCM remains disabled.'
 Write-Host 'Stop criteria: any process error, unsent message, STOMP error, missing DB row, or stored-but-not-received message.'
@@ -44,9 +54,10 @@ Write-Host 'Run Capture-ChatPostgresLocks.ps1 in a second terminal for this cond
     --manifest $Manifest `
     --scenario $Scenario `
     --run-id $RunId `
-    --rps $rps `
-    --duration $duration `
-    --warmup-seconds $warmup `
+    --rps $Rps `
+    --duration $DurationSeconds `
+    --warmup-seconds $WarmupSeconds `
+    --settle-seconds $SettleSeconds `
     --output $output
 if ($LASTEXITCODE -ne 0) {
     throw "Chat load failed for $RunId with exit code $LASTEXITCODE."

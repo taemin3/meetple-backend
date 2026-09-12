@@ -2,9 +2,9 @@
 
 ## 결론 상태
 
-현재 코드는 동일 모임의 메시지 전송을 `meetings` 한 행의 비관적 쓰기 잠금으로 직렬화한다. 그러나 로컬 비교 실험은 아직 실행되지 않았으므로, 이 잠금이 실제 처리량 또는 꼬리 지연의 주 병목이라는 결론은 내릴 수 없다.
+현재 코드는 동일 모임의 메시지 전송을 `meetings` 한 행의 비관적 쓰기 잠금으로 직렬화한다. 2026-09-12 로컬 비교에서는 20건/s와 100건/s 모두 PostgreSQL 잠금 대기 또는 차단 관계가 관측되지 않았고, 집중 조건만 반복적으로 느려지는 결과도 없었다. 따라서 측정한 환경에서는 이 잠금이 실제 처리량 또는 꼬리 지연의 주 병목이라는 가설이 지지되지 않았다.
 
-이번 변경은 계측과 재현 도구만 추가하며 잠금 구조를 바꾸지 않는다. 로컬 Docker daemon이 실행되지 않아 이 문서 작성 시점의 실제 수치는 모두 `[측정값]`이다.
+이번 변경은 계측과 재현 도구만 추가하며 잠금 구조를 바꾸지 않는다. 상세 결과와 원시 파일 목록은 `chat-lock-contention-results-2026-09-12.md`에 기록한다.
 
 ## 현재 코드 재검증
 
@@ -110,6 +110,18 @@ $env:SPRING_PROFILES_ACTIVE='local'
 
 기본은 조건별 20건/s × 60초 = 1,200건이다. 절대 시각 기반 전송 일정으로 `scheduled`, `attempted`, `unsent`, `scheduleLagMs`를 기록한다. 반복별 새 fixture 쌍으로 3회 실행한다.
 
+20건/s에서 잠금 대기가 관측되지 않으면 다른 조건을 바꾸지 않고 RPS만 단계적으로 높인다.
+
+```powershell
+.\performance\Invoke-ChatContention.ps1 `
+  -Manifest C:\secure\chat-focused-step50.json `
+  -Scenario focused -RunId chat-focused-step50 `
+  -Rps 50 -DurationSeconds 30 -WarmupSeconds 10 `
+  -SettleSeconds 120
+```
+
+`SettleSeconds`는 전송 종료 후 DB 커밋과 전체 구독자 수신을 기다리는 상한이다. 목표 RPS에서 서버 적체가 발생하면 같은 값으로 집중/분산 조건을 비교하고, 상한 전에 모든 메시지가 관측되면 즉시 종료한다.
+
 `Inspect-ChatLoadRun.ps1`은 삭제 없이 run 메시지와 연결 Outbox ID를 조회한다.
 
 ```powershell
@@ -129,8 +141,8 @@ $env:SPRING_PROFILES_ACTIVE='local'
 
 | 조건 | 반복 | attempted/1200 | unsent | DB committed | any/all-10 received | E2E p50/p95/p99 | lock p50/p95/p99 | tx p50/p95/p99 | Lock wait | Hikari active/pending | CPU |
 |---|---:|---:|---:|---:|---:|---|---|---|---:|---|---|
-| 집중 | 1~3 | [측정값] | [측정값] | [측정값] | [측정값] | [측정값] | [측정값] | [측정값] | [측정값] | [측정값] | [측정값] |
-| 분산 | 1~3 | [측정값] | [측정값] | [측정값] | [측정값] | [측정값] | [측정값] | [측정값] | [측정값] | [측정값] | [측정값] |
+| 집중 | 1~3 | 회차별 1200/1200 | 0 | 3,600 | 3,600/3,600 | 37.44/109.95/434.27ms | p95 2.87ms | p95 23.89ms | 0/2,511 표본 | max 1/0 | avg 3.80% |
+| 분산 | 1~3 | 회차별 1200/1200 | 0 | 3,600 | 3,600/3,600 | 36.75/117.44/319.57ms | p95 3.00ms | p95 23.24ms | 0/2,494 표본 | max 1/0 | avg 3.75% |
 
 1. 집중 조건의 lock/E2E/transaction p95·p99가 반복적으로 증가하고 같은 시간대에 Lock wait와 blocker가 관측될 때만 모임 행 경합 가설을 지지한다.
 2. 집중만 느리지만 Lock wait가 없으면 Hikari, CPU, commit flush, STOMP outbound, Redis를 추가 분리한다.
@@ -152,7 +164,9 @@ jcmd <backend-pid> JFR.start name=chat-lock settings=profile duration=90s `
 - 전체 `gradlew.bat test`: 469개 중 29개 실패, 6개 skip. 실패는 Docker/Redis 미실행으로 인한 기존 `MemberControllerTest`, `PushDeviceTokenControllerTest`, `SecurityConfigTest`의 `RedisConnectionFailureException`에 한정
 - Node.js 24 `node --check performance/chat-load.mjs`: 성공
 - `git diff --check`: 성공
-- Docker daemon 미실행: PostgreSQL/Redis/backend smoke와 비교 실험 미수행
+- 로컬 PostgreSQL/Redis/backend smoke: 집중·분산 각 20/20건 전송·커밋·수신
+- 독립 fixture 20건/s × 60초: 집중·분산 각 3회, 총 7,200건 전송·커밋·수신
+- 독립 fixture 100건/s × 30초: 집중·분산 각 1회, 총 6,000건 전송·커밋·수신. 약 96~106초 p95 수신 적체 발생
 - AWS/staging, 클라우드 생성, 실제 FCM: 수행하지 않음
 
 ## 포트폴리오 문장
@@ -165,6 +179,6 @@ jcmd <backend-pid> JFR.start name=chat-lock settings=profile duration=90s `
 
 > 10개 클라이언트의 20건/s 채팅 부하를 조건별 3회 비교해 단일 방 집중 시 잠금 대기 `[측정값]`와 E2E p99 `[측정값]ms`를 확인하고, 분산 대비 `[측정값]%` 꼬리 지연 증가 원인을 규명했습니다.
 
-증명되지 않은 경우:
+실제 측정 결과:
 
-> 단일 방/10개 방 채팅 부하에서 고유 전송·DB 커밋·구독자 수신 ID를 대조해 `[측정값]`건의 정합성을 검증했으며, 잠금 대기 증거가 없어 원인 단정을 보류하고 `[다음 후보]`를 후속 분석 대상으로 좁혔습니다.
+> 10개 클라이언트의 단일 방/10개 방 채팅 부하를 조건별 3회 비교해 7,200건의 전송·DB 커밋·구독자 수신 정합성을 검증했습니다. 5,005개 PostgreSQL 표본에서 차단 관계가 관측되지 않아 모임 행 잠금을 주 병목으로 단정하지 않고, 고부하 공통 적체 후보를 STOMP 채널과 커밋 후 fan-out 경로로 좁혔습니다.
