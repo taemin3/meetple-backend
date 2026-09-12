@@ -51,6 +51,22 @@ POST /api/v1/performance/chat-send/reset?runId=<runId>
 
 manifest는 비밀번호를 포함하므로 커밋하지 않는다. `performance/chat-load-manifest.example.json`을 로컬 보안 경로에 복사한다.
 
+로컬 fixture는 다음 명령으로 자동 생성할 수 있다. 먼저 `-DryRun`으로 변경 범위를 확인한 뒤 승인 스위치를 붙인다.
+
+```powershell
+.\performance\New-ChatLoadFixture.ps1 `
+  -DatasetId chat-focused-r1 `
+  -ManifestPath C:\secure\chat-focused-r1.json `
+  -DryRun
+
+.\performance\New-ChatLoadFixture.ps1 `
+  -DatasetId chat-focused-r1 `
+  -ManifestPath C:\secure\chat-focused-r1.json `
+  -AcknowledgeLocalDataCreation
+```
+
+이 스크립트는 현재 저장소의 로컬 PostgreSQL container에 회원 10명, 모임 10개, APPROVED 참여 90개를 만들고 무작위 테스트 비밀번호가 포함된 manifest를 출력한다. 기존 이메일/방 제목이 같은 datasetId로 발견되면 중단하며 기존 행을 수정하지 않는다.
+
 모든 조건에서 10개 연결이 10개 방을 모두 구독한다. 집중은 첫 방만, 분산은 10개 방을 round-robin으로 사용하므로 활성 방의 회원/푸시 대상/구독자 수는 10/9/10으로 같다.
 
 초기 데이터 동일성을 엄격히 유지하려면 `focused-r1`, `distributed-r1`부터 r3까지 동일하게 만든 6개 독립 fixture manifest를 쓴다. 기존 DB 전체 restore나 방 전체 자동 삭제는 사용하지 않는다.
