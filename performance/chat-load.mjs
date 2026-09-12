@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
+import { StompConnection } from './stomp-connection.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const manifest = JSON.parse(await readFile(required(args, 'manifest'), 'utf8'));
@@ -67,14 +68,15 @@ for (const connection of connections) {
     receivedAt: new Date().toISOString(),
     body,
   });
-  await connection.subscribe('/user/queue/chat/errors', `errors-${connection.index}`);
+  connection.subscribe('/user/queue/chat/errors', `errors-${connection.index}`);
   for (const roomId of manifest.roomIds) {
-    await connection.subscribe(`/topic/chat/rooms/${roomId}`, `room-${connection.index}-${roomId}`);
+    connection.subscribe(`/topic/chat/rooms/${roomId}`, `room-${connection.index}-${roomId}`);
   }
 }
 
 if (warmupSeconds > 0) {
   const warmupCount = Math.max(10, Math.ceil(targetRps * warmupSeconds));
+  const warmupIds = new Set();
   await sendScheduled({
     count: warmupCount,
     rps: Math.min(targetRps, 10),
@@ -85,8 +87,25 @@ if (warmupSeconds > 0) {
       clientMessageId: randomUUID(),
       content: `[CHAT-WARMUP:${runId}] index=${index}`,
     }),
+    onSent: (payload) => warmupIds.add(payload.clientMessageId),
   });
-  await delay(1000);
+  const warmupDeadline = performance.now() + 10000;
+  while (performance.now() < warmupDeadline) {
+    const ready = [...warmupIds].every(
+      (id) => receivedByMessage.get(id)?.receivers.size === connections.length,
+    );
+    if (ready) break;
+    await delay(100);
+  }
+  const incompleteWarmup = [...warmupIds].filter(
+    (id) => receivedByMessage.get(id)?.receivers.size !== connections.length,
+  );
+  if (incompleteWarmup.length > 0 || stompErrors.length > 0) {
+    throw new Error(
+      `Subscription readiness failed: ${incompleteWarmup.length} warmup message(s) `
+      + `were not observed by all clients; ${stompErrors.length} STOMP error(s).`,
+    );
+  }
 }
 
 const baselineSequences = await latestSequences(tokens[0], manifest.roomIds);
@@ -419,112 +438,4 @@ function integerArg(values, name, fallback, minimum, maximum) {
     throw new Error(`--${name} must be between ${minimum} and ${maximum}.`);
   }
   return value;
-}
-
-class StompConnection {
-  constructor(url, accessToken, index) {
-    this.url = url;
-    this.accessToken = accessToken;
-    this.index = index;
-    this.receipts = new Map();
-    this.buffer = '';
-  }
-
-  connect() {
-    return new Promise((resolve, reject) => {
-      this.socket = new WebSocket(this.url);
-      const timeout = setTimeout(() => reject(new Error(`STOMP connect timeout: ${this.index}`)), 10000);
-      this.socket.addEventListener('open', () => this.frame('CONNECT', {
-        'accept-version': '1.2',
-        host: this.url.host,
-        Authorization: `Bearer ${this.accessToken}`,
-        'heart-beat': '10000,10000',
-      }));
-      this.socket.addEventListener('message', (event) => this.consume(String(event.data), resolve, reject, timeout));
-      this.socket.addEventListener('error', () => reject(new Error(`WebSocket error: ${this.index}`)));
-    });
-  }
-
-  consume(chunk, resolve, reject, timeout) {
-    this.buffer += chunk;
-    let end;
-    while ((end = this.buffer.indexOf('\0')) >= 0) {
-      const raw = this.buffer.slice(0, end).replace(/^\n+/, '');
-      this.buffer = this.buffer.slice(end + 1);
-      if (!raw.trim()) continue;
-      const separator = raw.indexOf('\n\n');
-      const headerLines = raw.slice(0, separator).split('\n');
-      const command = headerLines.shift();
-      const headers = Object.fromEntries(headerLines.map((line) => {
-        const colon = line.indexOf(':');
-        return [line.slice(0, colon), line.slice(colon + 1)];
-      }));
-      const body = raw.slice(separator + 2);
-      if (command === 'CONNECTED') {
-        clearTimeout(timeout);
-        resolve();
-      } else if (command === 'RECEIPT') {
-        this.receipts.get(headers['receipt-id'])?.();
-        this.receipts.delete(headers['receipt-id']);
-      } else if (command === 'MESSAGE') {
-        try {
-          const parsed = JSON.parse(body);
-          if (headers.destination?.includes('/queue/chat/errors')) {
-            this.onErrorMessage?.(parsed);
-          } else {
-            this.onMessage?.(parsed.data, performance.now());
-          }
-        } catch (error) {
-          this.onErrorMessage?.({ parseError: error.message, body });
-        }
-      } else if (command === 'ERROR') {
-        clearTimeout(timeout);
-        this.onErrorMessage?.({ headers, body });
-        reject(new Error(`STOMP ERROR on client ${this.index}: ${body}`));
-      }
-    }
-  }
-
-  subscribe(destination, id) {
-    const receipt = `receipt-${id}`;
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.receipts.delete(receipt);
-        reject(new Error(`SUBSCRIBE receipt timeout: ${id}`));
-      }, 10000);
-      this.receipts.set(receipt, () => {
-        clearTimeout(timeout);
-        resolve();
-      });
-      this.frame('SUBSCRIBE', { destination, id, ack: 'auto', receipt });
-    });
-  }
-
-  send(destination, body) {
-    if (this.socket.readyState !== WebSocket.OPEN) throw new Error('WebSocket is not open.');
-    const json = JSON.stringify(body);
-    this.frame('SEND', {
-      destination,
-      'content-type': 'application/json',
-      'content-length': Buffer.byteLength(json),
-    }, json);
-  }
-
-  frame(command, headers = {}, body = '') {
-    const lines = [command, ...Object.entries(headers).map(([key, value]) => `${key}:${value}`), '', body];
-    this.socket.send(`${lines.join('\n')}\0`);
-  }
-
-  close() {
-    if (!this.socket || this.socket.readyState >= WebSocket.CLOSING) return Promise.resolve();
-    return new Promise((resolve) => {
-      const timeout = setTimeout(resolve, 1000);
-      this.socket.addEventListener('close', () => {
-        clearTimeout(timeout);
-        resolve();
-      }, { once: true });
-      this.frame('DISCONNECT');
-      this.socket.close();
-    });
-  }
 }
