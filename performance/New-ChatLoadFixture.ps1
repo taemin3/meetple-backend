@@ -124,6 +124,10 @@ select
 from meetings
 where title like '$titlePrefix%';
 
+insert into chat_room_sequences (meeting_id, last_sequence)
+select id, 0
+from fixture_meetings;
+
 insert into meeting_participations (
     status, message, reviewed_at, canceled_at,
     meeting_id, member_id, created_at, updated_at

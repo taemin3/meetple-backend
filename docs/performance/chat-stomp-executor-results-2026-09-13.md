@@ -1,5 +1,7 @@
 # STOMP executor 병렬도 실험 결과 — 2026-09-13
 
+> 재현성 보충: 후속 clean bootRun에서 기존 `taskExecutor()` builder 설정이 actuator core 1로 남는 현상을 확인했다. `perf/chat-sequence-lock-scope`에서 명시적 `ThreadPoolTaskExecutor` 전달 방식과 런타임 설정 테스트를 추가했다. 아래 worker 4 결과 파일은 당시 runtime pool size 최대 4가 기록된 측정값이지만, 동일 설정 재현에는 후속 수정이 필요하다.
+
 ## 목적
 
 기본 client inbound/outbound executor의 worker 1개가 100건/s 적체의 선행 병목인지 확인하고, worker를 늘렸을 때 같은 meeting 행의 `PESSIMISTIC_WRITE` 잠금 경합이 실제로 드러나는지 측정한다.

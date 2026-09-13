@@ -13,8 +13,10 @@ import com.meetple.backend.domain.chat.dto.request.MarkChatRoomReadRequest;
 import com.meetple.backend.domain.chat.dto.request.SendChatMessageRequest;
 import com.meetple.backend.domain.chat.entity.ChatMessage;
 import com.meetple.backend.domain.chat.entity.ChatReadState;
+import com.meetple.backend.domain.chat.entity.ChatRoomSequence;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
 import com.meetple.backend.domain.chat.repository.ChatReadStateRepository;
+import com.meetple.backend.domain.chat.repository.ChatRoomSequenceRepository;
 import com.meetple.backend.domain.chat.repository.ChatUnreadCountProjection;
 import com.meetple.backend.domain.chat.realtime.ChatMessageFanOutEvent;
 import com.meetple.backend.domain.meeting.entity.Meeting;
@@ -52,6 +54,9 @@ class ChatServiceTest {
     private ChatReadStateRepository readStateRepository;
 
     @Mock
+    private ChatRoomSequenceRepository roomSequenceRepository;
+
+    @Mock
     private MeetingRepository meetingRepository;
 
     @Mock
@@ -83,15 +88,17 @@ class ChatServiceTest {
         Member host = member(1L, "host");
         Meeting meeting = meeting(10L, host);
         UUID clientMessageId = UUID.randomUUID();
-        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
+        ChatRoomSequence roomSequence = ChatRoomSequence.initialize(10L);
+        ReflectionTestUtils.setField(roomSequence, "lastSequence", 7L);
+        given(meetingRepository.findByIdForReadLock(10L)).willReturn(Optional.of(meeting));
+        given(roomSequenceRepository.findByMeetingIdForUpdate(10L))
+                .willReturn(Optional.of(roomSequence));
         given(messageRepository.findByMeetingIdAndSenderIdAndClientMessageId(
                 10L,
                 1L,
                 clientMessageId
         )).willReturn(Optional.empty());
         given(memberRepository.findById(1L)).willReturn(Optional.of(host));
-        given(messageRepository.findTopByMeetingIdOrderByRoomSequenceDesc(10L))
-                .willReturn(Optional.of(message(20L, meeting, host, 7L, UUID.randomUUID(), "previous")));
         given(messageRepository.saveAndFlush(any(ChatMessage.class)))
                 .willAnswer(invocation -> {
                     ChatMessage saved = invocation.getArgument(0);
@@ -187,7 +194,7 @@ class ChatServiceTest {
         Meeting meeting = meeting(10L, host);
         UUID clientMessageId = UUID.randomUUID();
         ChatMessage existing = message(30L, meeting, host, 3L, clientMessageId, "hello");
-        given(meetingRepository.findByIdForUpdate(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdForReadLock(10L)).willReturn(Optional.of(meeting));
         given(messageRepository.findByMeetingIdAndSenderIdAndClientMessageId(
                 10L,
                 1L,
@@ -203,6 +210,40 @@ class ChatServiceTest {
         assertThat(result.created()).isFalse();
         assertThat(result.message().id()).isEqualTo(30L);
         assertThat(result.message().sequence()).isEqualTo(3L);
+        verify(messageRepository, never()).saveAndFlush(any(ChatMessage.class));
+        verify(eventPublisher, never()).publishEvent(any());
+        verify(outboxEventPublisher, never()).publish(any());
+    }
+
+    @Test
+    void concurrentDuplicateIsDetectedAfterSequenceLockWithoutConsumingSequence() {
+        Member host = member(1L, "host");
+        Meeting meeting = meeting(10L, host);
+        UUID clientMessageId = UUID.randomUUID();
+        ChatMessage existing = message(30L, meeting, host, 3L, clientMessageId, "hello");
+        ChatRoomSequence roomSequence = ChatRoomSequence.initialize(10L);
+        ReflectionTestUtils.setField(roomSequence, "lastSequence", 3L);
+
+        given(meetingRepository.findByIdForReadLock(10L)).willReturn(Optional.of(meeting));
+        given(messageRepository.findByMeetingIdAndSenderIdAndClientMessageId(
+                10L,
+                1L,
+                clientMessageId
+        )).willReturn(Optional.empty(), Optional.of(existing));
+        given(memberRepository.findById(1L)).willReturn(Optional.of(host));
+        given(pushRecipientResolver.resolve(meeting, 1L)).willReturn(List.of(2L));
+        given(roomSequenceRepository.findByMeetingIdForUpdate(10L))
+                .willReturn(Optional.of(roomSequence));
+
+        var result = chatService.sendMessage(
+                1L,
+                10L,
+                new SendChatMessageRequest(clientMessageId, "hello")
+        );
+
+        assertThat(result.created()).isFalse();
+        assertThat(result.message().id()).isEqualTo(30L);
+        assertThat(roomSequence.getLastSequence()).isEqualTo(3L);
         verify(messageRepository, never()).saveAndFlush(any(ChatMessage.class));
         verify(eventPublisher, never()).publishEvent(any());
         verify(outboxEventPublisher, never()).publish(any());
