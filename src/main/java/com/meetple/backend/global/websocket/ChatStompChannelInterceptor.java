@@ -282,9 +282,16 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor, Executor
         }
         Long roomId = Long.valueOf(matcher.group(1));
         Instant now = Instant.now();
+
+        String subscriptionId = accessor.getSubscriptionId();
+        if (!StringUtils.hasText(subscriptionId)) {
+            return null;
+        }
+
         LocalChatWebSocketSessionRegistry.OutboundAuthorization authorization = sessionRegistry
                 .getOutboundAuthorization(
                         sessionId,
+                        subscriptionId,
                         roomId,
                         now,
                         OUTBOUND_AUTHORIZATION_REVALIDATION_TTL

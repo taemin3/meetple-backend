@@ -247,6 +247,7 @@ class ChatStompChannelInterceptorTest {
     @Test
     void outboundRoomMessageUsesFreshSubscriptionWithoutExternalRevalidation() {
         connectSession();
+        stubOutboundAuthorization(10L, false, Instant.now().plusSeconds(3600));
         Message<?> result = interceptor.preSend(outboundMessage(10L), null);
 
         assertThat(result).isNotNull();
@@ -259,6 +260,8 @@ class ChatStompChannelInterceptorTest {
     @Test
     void measuresInboundAndOutboundAuthorizationAndQueuePhasesForLoadMessage() {
         connectSession();
+        stubOutboundAuthorization(10L, false, Instant.now().plusSeconds(3600));
+        stubActiveSession();
         UUID clientMessageId = UUID.randomUUID();
         String content = "[CHAT-LOAD:measure-r1] payload";
         String inboundJson = "{\"clientMessageId\":\"" + clientMessageId
@@ -298,6 +301,7 @@ class ChatStompChannelInterceptorTest {
         connectSession();
         stubOutboundAuthorization(10L, true, Instant.now().plusSeconds(3600));
         stubOutboundAuthorization(11L, false, Instant.now().plusSeconds(3600));
+        stubActiveSession();
         given(chatAccessPolicy.getAccessibleMeeting(1L, 10L))
                 .willThrow(new ForbiddenException("채팅방 입장 권한이 없습니다."));
         Message<?> revokedRoomResult = interceptor.preSend(outboundMessage(10L), null);
@@ -379,7 +383,6 @@ class ChatStompChannelInterceptorTest {
                 chatAccessPolicy,
                 sessionRegistry
         );
-        stubOutboundAuthorization(10L, false, Instant.now().plusSeconds(3600));
     }
 
     private void stubOutboundAuthorization(
@@ -389,6 +392,7 @@ class ChatStompChannelInterceptorTest {
     ) {
         given(sessionRegistry.getOutboundAuthorization(
                 eq("session-1"),
+                eq("subscription-1"),
                 eq(roomId),
                 any(Instant.class),
                 any(Duration.class)

@@ -98,13 +98,27 @@ class LocalChatWebSocketSessionRegistryTest {
         Instant now = Instant.now();
 
         LocalChatWebSocketSessionRegistry.OutboundAuthorization fresh = registry
-                .getOutboundAuthorization("ws-1", 10L, now, Duration.ofSeconds(30))
+                .getOutboundAuthorization(
+                        "ws-1",
+                        "subscription-ws-1",
+                        10L,
+                        now,
+                        Duration.ofSeconds(30)
+                )
                 .orElseThrow();
         assertThat(fresh.requiresRevalidation()).isFalse();
+        assertThat(registry.getOutboundAuthorization(
+                "ws-1",
+                "different-subscription",
+                10L,
+                now,
+                Duration.ofSeconds(30)
+        )).isEmpty();
 
         LocalChatWebSocketSessionRegistry.OutboundAuthorization stale = registry
                 .getOutboundAuthorization(
                         "ws-1",
+                        "subscription-ws-1",
                         10L,
                         now.plusSeconds(31),
                         Duration.ofSeconds(30)
@@ -116,6 +130,7 @@ class LocalChatWebSocketSessionRegistryTest {
 
         assertThat(registry.getOutboundAuthorization(
                 "ws-1",
+                "subscription-ws-1",
                 10L,
                 now.plusSeconds(31),
                 Duration.ofSeconds(30)
@@ -132,6 +147,7 @@ class LocalChatWebSocketSessionRegistryTest {
 
         assertThat(registry.getOutboundAuthorization(
                 "ws-1",
+                "subscription-ws-1",
                 10L,
                 Instant.now(),
                 Duration.ofSeconds(30)

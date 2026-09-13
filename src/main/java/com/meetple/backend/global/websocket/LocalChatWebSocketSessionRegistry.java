@@ -78,14 +78,21 @@ public class LocalChatWebSocketSessionRegistry {
 
     public Optional<OutboundAuthorization> getOutboundAuthorization(
             String webSocketSessionId,
+            String subscriptionId,
             Long roomId,
             Instant now,
             Duration revalidationTtl
     ) {
         SessionRegistration registration = sessions.get(webSocketSessionId);
+
         return registration == null
                 ? Optional.empty()
-                : registration.outboundAuthorization(roomId, now, revalidationTtl);
+                : registration.outboundAuthorization(
+                subscriptionId,
+                roomId,
+                now,
+                revalidationTtl
+        );
     }
 
     public void markRoomAuthorizationValidated(
@@ -236,6 +243,7 @@ public class LocalChatWebSocketSessionRegistry {
         }
 
         private Optional<OutboundAuthorization> outboundAuthorization(
+                String subscriptionId,
                 Long roomId,
                 Instant now,
                 Duration revalidationTtl
@@ -243,19 +251,24 @@ public class LocalChatWebSocketSessionRegistry {
             if (memberId == null
                     || !StringUtils.hasText(loginSessionId)
                     || !StringUtils.hasText(accessToken)
-                    || accessTokenExpiresAt == null) {
+                    || accessTokenExpiresAt == null
+                    || !StringUtils.hasText(subscriptionId)) {
                 return Optional.empty();
             }
-            RoomSubscription subscription = roomsBySubscription.values().stream()
-                    .filter(value -> value.roomId().equals(roomId))
-                    .findFirst()
-                    .orElse(null);
-            if (subscription == null) {
+
+            RoomSubscription subscription =
+                    roomsBySubscription.get(subscriptionId);
+
+            if (subscription == null
+                    || !subscription.roomId().equals(roomId)) {
                 return Optional.empty();
             }
-            boolean requiresRevalidation = !subscription.validatedAt()
-                    .plus(revalidationTtl)
-                    .isAfter(now);
+
+            boolean requiresRevalidation =
+                    !subscription.validatedAt()
+                            .plus(revalidationTtl)
+                            .isAfter(now);
+
             return Optional.of(new OutboundAuthorization(
                     memberId,
                     loginSessionId,
