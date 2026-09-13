@@ -23,6 +23,8 @@ public class ChatSendMeasurementRecorder {
     private static final Pattern RUN_MARKER = Pattern.compile(
             "^\\[CHAT-LOAD:([A-Za-z0-9-]{1,64})]"
     );
+
+
     private static final int MAX_RUNS = 20;
     private static final int MAX_SAMPLES_PER_RUN = 5_000;
 
@@ -145,10 +147,23 @@ public class ChatSendMeasurementRecorder {
         public static final String PUSH_RECIPIENT_LOOKUP = "pushRecipientLookup";
         public static final String OUTBOX_SAVE = "outboxSave";
         public static final String SERVICE_BODY = "serviceBody";
+        public static final String POST_LOCK_DUPLICATE_LOOKUP =
+                "postLockDuplicateLookup";
+
+        public static final String LOCK_HELD_UNTIL_SERVICE_RETURN =
+                "lockHeldUntilServiceReturn";
+
+        public static final String SERVICE_RETURN_TO_COMMIT =
+                "serviceReturnToCommit";
+
+        private long serviceReturnedNanos;
         private static final List<String> PHASES = List.of(
                 LOCK_LOOKUP,
                 LOCK_HELD_UNTIL_COMMIT,
+                LOCK_HELD_UNTIL_SERVICE_RETURN,
+                SERVICE_RETURN_TO_COMMIT,
                 DUPLICATE_LOOKUP,
+                POST_LOCK_DUPLICATE_LOOKUP,
                 SEQUENCE_LOOKUP,
                 MESSAGE_SAVE,
                 READ_STATE_UPDATE,
@@ -220,12 +235,28 @@ public class ChatSendMeasurementRecorder {
             if (recorder == null) {
                 return;
             }
-            phaseMicros.put(SERVICE_BODY, microsSince(startedNanos));
+
+            serviceReturnedNanos = System.nanoTime();
+
+            phaseMicros.put(
+                    SERVICE_BODY,
+                    microsSince(startedNanos)
+            );
+
+            if (lockAcquiredNanos != 0L) {
+                phaseMicros.put(
+                        LOCK_HELD_UNTIL_SERVICE_RETURN,
+                        Math.max(
+                                0L,
+                                (serviceReturnedNanos - lockAcquiredNanos) / 1_000L
+                        )
+                );
+            }
+
             if (noTransaction) {
                 complete("NO_TRANSACTION");
             }
         }
-
         private void noTransaction() {
             this.noTransaction = true;
         }
@@ -234,9 +265,23 @@ public class ChatSendMeasurementRecorder {
             if (recorder == null || !completed.compareAndSet(false, true)) {
                 return;
             }
-            if ("COMMITTED".equals(transactionStatus) && lockAcquiredNanos != 0L) {
-                phaseMicros.put(LOCK_HELD_UNTIL_COMMIT, microsSince(lockAcquiredNanos));
+
+            if ("COMMITTED".equals(transactionStatus)) {
+                if (lockAcquiredNanos != 0L) {
+                    phaseMicros.put(
+                            LOCK_HELD_UNTIL_COMMIT,
+                            microsSince(lockAcquiredNanos)
+                    );
+                }
+
+                if (serviceReturnedNanos != 0L) {
+                    phaseMicros.put(
+                            SERVICE_RETURN_TO_COMMIT,
+                            microsSince(serviceReturnedNanos)
+                    );
+                }
             }
+
             recorder.record(new Sample(
                     runId,
                     clientMessageId,

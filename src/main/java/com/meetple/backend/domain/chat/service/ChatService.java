@@ -190,7 +190,7 @@ public class ChatService {
             );
             observation.markLockAcquired();
             existingMessage = observation.measure(
-                    Observation.DUPLICATE_LOOKUP,
+                    Observation.POST_LOCK_DUPLICATE_LOOKUP,
                     () -> messageRepository.findByMeetingIdAndSenderIdAndClientMessageId(
                             meetingId,
                             memberId,
