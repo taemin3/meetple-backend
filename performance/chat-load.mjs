@@ -283,6 +283,10 @@ console.log(JSON.stringify({
   inboundQueueP95Us: realtimeMeasurementReport.phaseMicros?.inboundQueue?.p95,
   outboundAuthCount: realtimeMeasurementReport.phaseMicros?.outboundAuth?.count,
   outboundAuthP95Us: realtimeMeasurementReport.phaseMicros?.outboundAuth?.p95,
+  outboundAuthRefreshCount:
+    realtimeMeasurementReport.phaseMicros?.outboundAuthRefresh?.count,
+  outboundAuthRefreshP95Us:
+    realtimeMeasurementReport.phaseMicros?.outboundAuthRefresh?.p95,
   outboundQueueP95Us: realtimeMeasurementReport.phaseMicros?.outboundQueue?.p95,
   localFanOutP95Us: realtimeMeasurementReport.phaseMicros?.localFanOut?.p95,
   redisPublishP95Us: realtimeMeasurementReport.phaseMicros?.redisPublish?.p95,

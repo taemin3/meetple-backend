@@ -12,6 +12,7 @@ import com.meetple.backend.global.security.AuthenticatedMember;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
 import io.jsonwebtoken.JwtException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -45,6 +46,8 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor, Executor
     private static final String USER_ERROR_DESTINATION = "/user/queue/chat/errors";
     private static final String USER_CONTROL_DESTINATION = "/user/queue/chat/control";
     private static final String ROOM_TOPIC_PREFIX = "/topic/chat/rooms/";
+    private static final Duration OUTBOUND_AUTHORIZATION_REVALIDATION_TTL =
+            Duration.ofSeconds(30);
     private static final Pattern ROOM_SUBSCRIPTION_PATTERN =
             Pattern.compile("^/topic/chat/rooms/(\\d+)$");
     private static final Pattern MESSAGE_SEND_PATTERN =
@@ -166,7 +169,8 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor, Executor
                     tokenSession.sessionId(),
                     accessToken,
                     authentication.getName(),
-                    authenticationStartedAt
+                    authenticationStartedAt,
+                    authenticatedToken.expiresAt()
             );
             validateTokenSession(accessToken, member.id(), tokenSession);
             accessor.setUser(authentication);
@@ -276,29 +280,52 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor, Executor
         if (!StringUtils.hasText(sessionId)) {
             return null;
         }
-        LocalChatWebSocketSessionRegistry.AuthenticatedSession session = sessionRegistry
-                .getAuthenticatedSession(sessionId)
+        Long roomId = Long.valueOf(matcher.group(1));
+        Instant now = Instant.now();
+        LocalChatWebSocketSessionRegistry.OutboundAuthorization authorization = sessionRegistry
+                .getOutboundAuthorization(
+                        sessionId,
+                        roomId,
+                        now,
+                        OUTBOUND_AUTHORIZATION_REVALIDATION_TTL
+                )
                 .orElse(null);
-        if (session == null) {
+        if (authorization == null) {
             return null;
         }
 
-        try {
-            validateTokenSession(session.accessToken(), session.memberId());
-        } catch (JwtException | IllegalArgumentException exception) {
+        if (!authorization.accessTokenExpiresAt().isAfter(now)) {
             sessionRegistry.remove(sessionId);
             return null;
         }
 
-        try {
-            chatAccessPolicy.getAccessibleMeeting(
-                    session.memberId(),
-                    Long.valueOf(matcher.group(1))
-            );
+        if (!authorization.requiresRevalidation()) {
             return message;
+        }
+
+        try {
+            try (ChatRealtimeMeasurementRecorder.Timer ignored = measurementRecorder.start(
+                    measuredClientMessageId(message),
+                    ChatRealtimeMeasurementRecorder.OUTBOUND_AUTH_REFRESH
+            )) {
+                validateTokenSession(
+                        authorization.accessToken(),
+                        authorization.memberId()
+                );
+                chatAccessPolicy.getAccessibleMeeting(
+                        authorization.memberId(),
+                        roomId
+                );
+            }
+        } catch (JwtException | IllegalArgumentException exception) {
+            sessionRegistry.remove(sessionId);
+            return null;
         } catch (BaseException exception) {
+            sessionRegistry.removeRoomSubscriptions(sessionId, roomId);
             return null;
         }
+        sessionRegistry.markRoomAuthorizationValidated(sessionId, roomId, now);
+        return message;
     }
 
     private Message<?> measureOutboundMessageIfNecessary(Message<?> message) {
@@ -362,6 +389,11 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor, Executor
         } catch (RuntimeException | java.io.IOException ignored) {
             return null;
         }
+    }
+
+    private UUID measuredClientMessageId(Message<?> message) {
+        MeasuredPayload payload = measuredPayload(message);
+        return payload == null ? null : payload.clientMessageId();
     }
 
     private String deliveryKey(Message<?> message) {

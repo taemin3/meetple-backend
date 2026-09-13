@@ -20,6 +20,7 @@ public class ChatRealtimeMeasurementRecorder {
     public static final String INBOUND_AUTH = "inboundAuth";
     public static final String INBOUND_QUEUE = "inboundQueue";
     public static final String OUTBOUND_AUTH = "outboundAuth";
+    public static final String OUTBOUND_AUTH_REFRESH = "outboundAuthRefresh";
     public static final String OUTBOUND_QUEUE = "outboundQueue";
     public static final String LOCAL_FAN_OUT = "localFanOut";
     public static final String REDIS_PUBLISH = "redisPublish";
@@ -31,6 +32,7 @@ public class ChatRealtimeMeasurementRecorder {
             INBOUND_AUTH,
             INBOUND_QUEUE,
             OUTBOUND_AUTH,
+            OUTBOUND_AUTH_REFRESH,
             OUTBOUND_QUEUE,
             LOCAL_FAN_OUT,
             REDIS_PUBLISH

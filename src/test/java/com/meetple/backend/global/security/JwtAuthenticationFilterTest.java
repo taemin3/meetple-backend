@@ -55,7 +55,8 @@ class JwtAuthenticationFilterTest {
         given(jwtTokenProvider.authenticateAccessToken("access-token"))
                 .willReturn(new AuthenticatedAccessToken(
                         authentication,
-                        new JwtTokenSession(1L, "session-id")
+                        new JwtTokenSession(1L, "session-id"),
+                        java.time.Instant.now().plusSeconds(3600)
                 ));
         given(accessTokenValidationRepository.getStatus("access-token", 1L, "session-id"))
                 .willReturn(AccessTokenValidationRepository.Status.ACTIVE);
@@ -96,7 +97,8 @@ class JwtAuthenticationFilterTest {
         given(jwtTokenProvider.authenticateAccessToken("access-token"))
                 .willReturn(new AuthenticatedAccessToken(
                         authentication,
-                        new JwtTokenSession(1L, "session-id")
+                        new JwtTokenSession(1L, "session-id"),
+                        java.time.Instant.now().plusSeconds(3600)
                 ));
         given(accessTokenValidationRepository.getStatus("access-token", 1L, "session-id"))
                 .willReturn(AccessTokenValidationRepository.Status.BLACKLISTED);
@@ -122,7 +124,8 @@ class JwtAuthenticationFilterTest {
         given(jwtTokenProvider.authenticateAccessToken("access-token"))
                 .willReturn(new AuthenticatedAccessToken(
                         authentication,
-                        new JwtTokenSession(1L, "session-id")
+                        new JwtTokenSession(1L, "session-id"),
+                        java.time.Instant.now().plusSeconds(3600)
                 ));
         given(accessTokenValidationRepository.getStatus("access-token", 1L, "session-id"))
                 .willReturn(AccessTokenValidationRepository.Status.INACTIVE_SESSION);

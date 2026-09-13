@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,8 +20,9 @@ import com.meetple.backend.global.security.AuthenticatedAccessToken;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
-import java.time.Instant;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,6 +96,7 @@ class ChatStompChannelInterceptorTest {
                 eq("session-1"),
                 eq(ACCESS_TOKEN),
                 eq(authentication.getName()),
+                any(Instant.class),
                 any(Instant.class)
         );
         inOrder.verify(accessTokenValidationRepository)
@@ -149,6 +152,7 @@ class ChatStompChannelInterceptorTest {
                 eq("session-1"),
                 eq(ACCESS_TOKEN),
                 eq(authentication.getName()),
+                any(Instant.class),
                 any(Instant.class)
         );
         verify(sessionRegistry).remove("session-1");
@@ -241,12 +245,15 @@ class ChatStompChannelInterceptorTest {
     }
 
     @Test
-    void outboundRoomMessageRevalidatesTokenAndRoomAccess() {
+    void outboundRoomMessageUsesFreshSubscriptionWithoutExternalRevalidation() {
         connectSession();
         Message<?> result = interceptor.preSend(outboundMessage(10L), null);
 
         assertThat(result).isNotNull();
-        verify(chatAccessPolicy).getAccessibleMeeting(1L, 10L);
+        verify(jwtTokenProvider, never()).getAccessTokenSession(ACCESS_TOKEN);
+        verify(accessTokenValidationRepository, never())
+                .getStatus(ACCESS_TOKEN, 1L, "session-1");
+        verify(chatAccessPolicy, never()).getAccessibleMeeting(1L, 10L);
     }
 
     @Test
@@ -289,6 +296,8 @@ class ChatStompChannelInterceptorTest {
     @Test
     void outboundRoomMessageIsDroppedAfterParticipationAccessIsRevoked() {
         connectSession();
+        stubOutboundAuthorization(10L, true, Instant.now().plusSeconds(3600));
+        stubOutboundAuthorization(11L, false, Instant.now().plusSeconds(3600));
         given(chatAccessPolicy.getAccessibleMeeting(1L, 10L))
                 .willThrow(new ForbiddenException("채팅방 입장 권한이 없습니다."));
         Message<?> revokedRoomResult = interceptor.preSend(outboundMessage(10L), null);
@@ -296,17 +305,55 @@ class ChatStompChannelInterceptorTest {
 
         assertThat(revokedRoomResult).isNull();
         assertThat(otherRoomResult).isNotNull();
-        verify(chatAccessPolicy).getAccessibleMeeting(1L, 11L);
+        verify(sessionRegistry).removeRoomSubscriptions("session-1", 10L);
+        verify(chatAccessPolicy, never()).getAccessibleMeeting(1L, 11L);
     }
 
     @Test
     void outboundRoomMessageIsDroppedAfterLogout() {
         connectSession();
+        stubOutboundAuthorization(10L, true, Instant.now().plusSeconds(3600));
+        given(jwtTokenProvider.getAccessTokenSession(ACCESS_TOKEN))
+                .willReturn(new JwtTokenSession(1L, "session-1"));
         given(accessTokenValidationRepository.getStatus(ACCESS_TOKEN, 1L, "session-1"))
                 .willReturn(AccessTokenValidationRepository.Status.BLACKLISTED);
         Message<?> result = interceptor.preSend(outboundMessage(10L), null);
 
         assertThat(result).isNull();
+        verify(chatAccessPolicy, never()).getAccessibleMeeting(1L, 10L);
+        verify(sessionRegistry).remove("session-1");
+    }
+
+    @Test
+    void outboundRoomMessageRefreshesStaleSubscription() {
+        connectSession();
+        stubOutboundAuthorization(10L, true, Instant.now().plusSeconds(3600));
+        given(jwtTokenProvider.getAccessTokenSession(ACCESS_TOKEN))
+                .willReturn(new JwtTokenSession(1L, "session-1"));
+        given(accessTokenValidationRepository.getStatus(ACCESS_TOKEN, 1L, "session-1"))
+                .willReturn(AccessTokenValidationRepository.Status.ACTIVE);
+
+        Message<?> result = interceptor.preSend(outboundMessage(10L), null);
+
+        assertThat(result).isNotNull();
+        verify(chatAccessPolicy).getAccessibleMeeting(1L, 10L);
+        verify(sessionRegistry).markRoomAuthorizationValidated(
+                eq("session-1"),
+                eq(10L),
+                any(Instant.class)
+        );
+    }
+
+    @Test
+    void outboundRoomMessageDropsExpiredTokenWithoutExternalRevalidation() {
+        connectSession();
+        stubOutboundAuthorization(10L, false, Instant.now().minusSeconds(1));
+
+        Message<?> result = interceptor.preSend(outboundMessage(10L), null);
+
+        assertThat(result).isNull();
+        verify(sessionRegistry).remove("session-1");
+        verify(jwtTokenProvider, never()).getAccessTokenSession(ACCESS_TOKEN);
         verify(chatAccessPolicy, never()).getAccessibleMeeting(1L, 10L);
     }
 
@@ -321,24 +368,46 @@ class ChatStompChannelInterceptorTest {
         Authentication authentication = authentication(1L);
         given(jwtTokenProvider.authenticateAccessToken(ACCESS_TOKEN))
                 .willReturn(authenticatedAccessToken(authentication));
-        stubActiveSession();
+        given(accessTokenValidationRepository.getStatus(ACCESS_TOKEN, 1L, "session-1"))
+                .willReturn(AccessTokenValidationRepository.Status.ACTIVE);
         StompHeaderAccessor accessor = accessor(StompCommand.CONNECT, null, null);
         accessor.setNativeHeader("Authorization", "Bearer " + ACCESS_TOKEN);
         interceptor.preSend(message(accessor), null);
-        given(sessionRegistry.getAuthenticatedSession("session-1"))
-                .willReturn(Optional.of(
-                        new LocalChatWebSocketSessionRegistry.AuthenticatedSession(
-                                1L,
-                                "session-1",
-                                ACCESS_TOKEN
-                        )
-                ));
+        clearInvocations(
+                jwtTokenProvider,
+                accessTokenValidationRepository,
+                chatAccessPolicy,
+                sessionRegistry
+        );
+        stubOutboundAuthorization(10L, false, Instant.now().plusSeconds(3600));
+    }
+
+    private void stubOutboundAuthorization(
+            Long roomId,
+            boolean requiresRevalidation,
+            Instant expiresAt
+    ) {
+        given(sessionRegistry.getOutboundAuthorization(
+                eq("session-1"),
+                eq(roomId),
+                any(Instant.class),
+                any(Duration.class)
+        )).willReturn(Optional.of(
+                new LocalChatWebSocketSessionRegistry.OutboundAuthorization(
+                        1L,
+                        "session-1",
+                        ACCESS_TOKEN,
+                        expiresAt,
+                        requiresRevalidation
+                )
+        ));
     }
 
     private AuthenticatedAccessToken authenticatedAccessToken(Authentication authentication) {
         return new AuthenticatedAccessToken(
                 authentication,
-                new JwtTokenSession(1L, "session-1")
+                new JwtTokenSession(1L, "session-1"),
+                Instant.now().plusSeconds(3600)
         );
     }
 
