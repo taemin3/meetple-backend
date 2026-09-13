@@ -188,6 +188,7 @@ public class ChatService {
                                     "채팅방 순번 정보를 찾을 수 없습니다. meetingId=" + meetingId
                             ))
             );
+            observation.markLockAcquired();
             existingMessage = observation.measure(
                     Observation.DUPLICATE_LOOKUP,
                     () -> messageRepository.findByMeetingIdAndSenderIdAndClientMessageId(

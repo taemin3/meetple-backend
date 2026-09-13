@@ -2,7 +2,8 @@
 param(
     [string] $OutputPath = '.\performance\results\chat-locks.jsonl',
     [ValidateRange(0.05, 5.0)]
-    [double] $IntervalSeconds = 0.1
+    [double] $IntervalSeconds = 0.1,
+    [switch] $Quiet
 )
 
 Set-StrictMode -Version Latest
@@ -44,7 +45,15 @@ Write-Host "PostgreSQL lock sampling: every $IntervalSeconds second(s)"
 Write-Host "Output: $OutputPath"
 Write-Host 'Stop with Ctrl+C immediately after the load condition finishes.'
 
-$sql |
-    docker compose exec -T postgres sh -lc 'psql -X -q -U "$POSTGRES_USER" -d "$POSTGRES_DB"' |
-    Where-Object { $_ -match '^\s*\[' } |
-    Tee-Object -FilePath $OutputPath
+$sampler = {
+    $sql |
+        docker compose exec -T postgres sh -lc 'psql -X -q -U "$POSTGRES_USER" -d "$POSTGRES_DB"' |
+        Where-Object { $_ -match '^\s*\[' } |
+        Tee-Object -FilePath $OutputPath
+}
+
+if ($Quiet) {
+    & $sampler | Out-Null
+} else {
+    & $sampler
+}

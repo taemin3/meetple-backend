@@ -137,6 +137,7 @@ public class ChatSendMeasurementRecorder {
     public static final class Observation {
 
         public static final String LOCK_LOOKUP = "lockLookup";
+        public static final String LOCK_HELD_UNTIL_COMMIT = "lockHeldUntilCommit";
         public static final String DUPLICATE_LOOKUP = "duplicateLookup";
         public static final String SEQUENCE_LOOKUP = "sequenceLookup";
         public static final String MESSAGE_SAVE = "messageSave";
@@ -146,6 +147,7 @@ public class ChatSendMeasurementRecorder {
         public static final String SERVICE_BODY = "serviceBody";
         private static final List<String> PHASES = List.of(
                 LOCK_LOOKUP,
+                LOCK_HELD_UNTIL_COMMIT,
                 DUPLICATE_LOOKUP,
                 SEQUENCE_LOOKUP,
                 MESSAGE_SAVE,
@@ -164,6 +166,7 @@ public class ChatSendMeasurementRecorder {
         private final AtomicBoolean completed;
         private boolean noTransaction;
         private Long messageId;
+        private long lockAcquiredNanos;
 
         private Observation() {
             this.recorder = null;
@@ -207,6 +210,12 @@ public class ChatSendMeasurementRecorder {
             this.messageId = messageId;
         }
 
+        public void markLockAcquired() {
+            if (recorder != null) {
+                lockAcquiredNanos = System.nanoTime();
+            }
+        }
+
         public void markServiceReturned() {
             if (recorder == null) {
                 return;
@@ -224,6 +233,9 @@ public class ChatSendMeasurementRecorder {
         private void complete(String transactionStatus) {
             if (recorder == null || !completed.compareAndSet(false, true)) {
                 return;
+            }
+            if ("COMMITTED".equals(transactionStatus) && lockAcquiredNanos != 0L) {
+                phaseMicros.put(LOCK_HELD_UNTIL_COMMIT, microsSince(lockAcquiredNanos));
             }
             recorder.record(new Sample(
                     runId,

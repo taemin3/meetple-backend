@@ -276,6 +276,8 @@ console.log(JSON.stringify({
   received: result.delivery.receivedByAnyClient,
   latencyP95Ms: result.delivery.clientReceiveLatencyMs.p95,
   lockLookupP95Us: measurementReport.phaseMicros?.lockLookup?.p95,
+  lockHeldUntilCommitP95Us:
+    measurementReport.phaseMicros?.lockHeldUntilCommit?.p95,
   transactionP95Us: measurementReport.phaseMicros?.transactionCommit?.p95,
   inboundAuthP95Us: realtimeMeasurementReport.phaseMicros?.inboundAuth?.p95,
   inboundQueueP95Us: realtimeMeasurementReport.phaseMicros?.inboundQueue?.p95,

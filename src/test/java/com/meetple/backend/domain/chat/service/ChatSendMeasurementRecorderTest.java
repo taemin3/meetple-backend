@@ -31,6 +31,7 @@ class ChatSendMeasurementRecorderTest {
                 ChatSendMeasurementRecorder.Observation.LOCK_LOOKUP,
                 () -> "locked"
         );
+        observation.markLockAcquired();
         observation.markMessageId(42L);
         observation.markServiceReturned();
 
@@ -54,6 +55,7 @@ class ChatSendMeasurementRecorderTest {
             assertThat(sample.phaseMicros()).containsKeys("lockLookup", "serviceBody");
         });
         assertThat(report.phaseMicros().get("transactionCommit").count()).isEqualTo(1);
+        assertThat(report.phaseMicros().get("lockHeldUntilCommit").count()).isEqualTo(1);
     }
 
     @Test
