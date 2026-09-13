@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -23,6 +24,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public static final String USER_PREFIX = "/user";
 
     private static final long HEARTBEAT_INTERVAL_MILLIS = 10_000L;
+    private static final int CLIENT_CHANNEL_POOL_SIZE = 4;
+    private static final int CLIENT_INBOUND_QUEUE_CAPACITY = 1_000;
+    private static final int CLIENT_OUTBOUND_QUEUE_CAPACITY = 5_000;
 
     private final ChatStompChannelInterceptor chatStompChannelInterceptor;
     private final ChatStompErrorHandler chatStompErrorHandler;
@@ -48,12 +52,29 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.executor(channelExecutor(
+                "clientInboundChannel-",
+                CLIENT_INBOUND_QUEUE_CAPACITY
+        ));
         registration.interceptors(chatStompChannelInterceptor);
     }
 
     @Override
     public void configureClientOutboundChannel(ChannelRegistration registration) {
+        registration.executor(channelExecutor(
+                "clientOutboundChannel-",
+                CLIENT_OUTBOUND_QUEUE_CAPACITY
+        ));
         registration.interceptors(chatStompChannelInterceptor);
+    }
+
+    private ThreadPoolTaskExecutor channelExecutor(String threadNamePrefix, int queueCapacity) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(CLIENT_CHANNEL_POOL_SIZE);
+        executor.setMaxPoolSize(CLIENT_CHANNEL_POOL_SIZE);
+        executor.setQueueCapacity(queueCapacity);
+        executor.setThreadNamePrefix(threadNamePrefix);
+        return executor;
     }
 
     @Override

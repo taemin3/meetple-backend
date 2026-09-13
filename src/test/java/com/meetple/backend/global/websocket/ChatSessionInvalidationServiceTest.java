@@ -55,6 +55,7 @@ class ChatSessionInvalidationServiceTest {
                         Instant.EPOCH,
                         List.of(new LocalChatWebSocketSessionRegistry.RoomSubscription(
                                 10L,
+                                Instant.EPOCH,
                                 Instant.EPOCH
                         ))
                 );

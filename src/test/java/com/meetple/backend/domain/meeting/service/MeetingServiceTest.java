@@ -12,6 +12,8 @@ import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
+import com.meetple.backend.domain.chat.entity.ChatRoomSequence;
+import com.meetple.backend.domain.chat.repository.ChatRoomSequenceRepository;
 import com.meetple.backend.domain.image.entity.ImageUploadPurpose;
 import com.meetple.backend.domain.image.service.ImageDeletionService;
 import com.meetple.backend.domain.image.service.ImageService;
@@ -61,6 +63,9 @@ class MeetingServiceTest {
 
     @Mock
     private MeetingRepository meetingRepository;
+
+    @Mock
+    private ChatRoomSequenceRepository chatRoomSequenceRepository;
 
     @Mock
     private MeetingImageRepository meetingImageRepository;
@@ -147,6 +152,12 @@ class MeetingServiceTest {
                 "images/meeting/1/first.png",
                 "images/meeting/1/second.png"
         );
+
+        ArgumentCaptor<ChatRoomSequence> sequenceCaptor =
+                ArgumentCaptor.forClass(ChatRoomSequence.class);
+        verify(chatRoomSequenceRepository).save(sequenceCaptor.capture());
+        assertThat(sequenceCaptor.getValue().getMeetingId()).isEqualTo(10L);
+        assertThat(sequenceCaptor.getValue().getLastSequence()).isZero();
 
         ArgumentCaptor<List<MeetingImage>> imagesCaptor = ArgumentCaptor.forClass(List.class);
         verify(meetingImageRepository).saveAll(imagesCaptor.capture());

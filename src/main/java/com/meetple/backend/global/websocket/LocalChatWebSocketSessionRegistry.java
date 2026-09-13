@@ -1,5 +1,6 @@
 package com.meetple.backend.global.websocket;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +28,8 @@ public class LocalChatWebSocketSessionRegistry {
             String loginSessionId,
             String accessToken,
             String principalName,
-            Instant authenticatedAt
+            Instant authenticatedAt,
+            Instant accessTokenExpiresAt
     ) {
         SessionRegistration registration = sessions.get(webSocketSessionId);
         if (registration != null) {
@@ -36,7 +38,8 @@ public class LocalChatWebSocketSessionRegistry {
                     loginSessionId,
                     accessToken,
                     principalName,
-                    authenticatedAt
+                    authenticatedAt,
+                    accessTokenExpiresAt
             );
         }
     }
@@ -73,6 +76,43 @@ public class LocalChatWebSocketSessionRegistry {
                 : registration.authenticatedSession();
     }
 
+    public Optional<OutboundAuthorization> getOutboundAuthorization(
+            String webSocketSessionId,
+            String subscriptionId,
+            Long roomId,
+            Instant now,
+            Duration revalidationTtl
+    ) {
+        SessionRegistration registration = sessions.get(webSocketSessionId);
+
+        return registration == null
+                ? Optional.empty()
+                : registration.outboundAuthorization(
+                        subscriptionId,
+                        roomId,
+                        now,
+                        revalidationTtl
+                );
+    }
+
+    public void markRoomAuthorizationValidated(
+            String webSocketSessionId,
+            Long roomId,
+            Instant validatedAt
+    ) {
+        SessionRegistration registration = sessions.get(webSocketSessionId);
+        if (registration != null) {
+            registration.markRoomAuthorizationValidated(roomId, validatedAt);
+        }
+    }
+
+    public void removeRoomSubscriptions(String webSocketSessionId, Long roomId) {
+        SessionRegistration registration = sessions.get(webSocketSessionId);
+        if (registration != null) {
+            registration.removeRoomSubscriptions(roomId);
+        }
+    }
+
     public List<SessionSnapshot> findTargets(ChatSessionInvalidationEvent event) {
         return sessions.values().stream()
                 .map(SessionRegistration::snapshot)
@@ -85,7 +125,17 @@ public class LocalChatWebSocketSessionRegistry {
     public record AuthenticatedSession(
             Long memberId,
             String loginSessionId,
-            String accessToken
+            String accessToken,
+            Instant accessTokenExpiresAt
+    ) {
+    }
+
+    public record OutboundAuthorization(
+            Long memberId,
+            String loginSessionId,
+            String accessToken,
+            Instant accessTokenExpiresAt,
+            boolean requiresRevalidation
     ) {
     }
 
@@ -125,7 +175,8 @@ public class LocalChatWebSocketSessionRegistry {
 
     public record RoomSubscription(
             Long roomId,
-            Instant subscribedAt
+            Instant subscribedAt,
+            Instant validatedAt
     ) {
     }
 
@@ -139,6 +190,7 @@ public class LocalChatWebSocketSessionRegistry {
         private volatile String accessToken;
         private volatile String principalName;
         private volatile Instant authenticatedAt;
+        private volatile Instant accessTokenExpiresAt;
 
         private SessionRegistration(WebSocketSession transportSession) {
             this.transportSession = transportSession;
@@ -149,13 +201,15 @@ public class LocalChatWebSocketSessionRegistry {
                 String loginSessionId,
                 String accessToken,
                 String principalName,
-                Instant authenticatedAt
+                Instant authenticatedAt,
+                Instant accessTokenExpiresAt
         ) {
             this.memberId = memberId;
             this.loginSessionId = loginSessionId;
             this.accessToken = accessToken;
             this.principalName = principalName;
             this.authenticatedAt = authenticatedAt;
+            this.accessTokenExpiresAt = accessTokenExpiresAt;
         }
 
         private void subscribe(
@@ -165,7 +219,7 @@ public class LocalChatWebSocketSessionRegistry {
         ) {
             roomsBySubscription.put(
                     subscriptionId,
-                    new RoomSubscription(roomId, subscribedAt)
+                    new RoomSubscription(roomId, subscribedAt, subscribedAt)
             );
         }
 
@@ -176,14 +230,70 @@ public class LocalChatWebSocketSessionRegistry {
         private Optional<AuthenticatedSession> authenticatedSession() {
             if (memberId == null
                     || !StringUtils.hasText(loginSessionId)
-                    || !StringUtils.hasText(accessToken)) {
+                    || !StringUtils.hasText(accessToken)
+                    || accessTokenExpiresAt == null) {
                 return Optional.empty();
             }
             return Optional.of(new AuthenticatedSession(
                     memberId,
                     loginSessionId,
-                    accessToken
+                    accessToken,
+                    accessTokenExpiresAt
             ));
+        }
+
+        private Optional<OutboundAuthorization> outboundAuthorization(
+                String subscriptionId,
+                Long roomId,
+                Instant now,
+                Duration revalidationTtl
+        ) {
+            if (memberId == null
+                    || !StringUtils.hasText(loginSessionId)
+                    || !StringUtils.hasText(accessToken)
+                    || accessTokenExpiresAt == null
+                    || !StringUtils.hasText(subscriptionId)) {
+                return Optional.empty();
+            }
+
+            RoomSubscription subscription =
+                    roomsBySubscription.get(subscriptionId);
+
+            if (subscription == null
+                    || !subscription.roomId().equals(roomId)) {
+                return Optional.empty();
+            }
+
+            boolean requiresRevalidation =
+                    !subscription.validatedAt()
+                            .plus(revalidationTtl)
+                            .isAfter(now);
+
+            return Optional.of(new OutboundAuthorization(
+                    memberId,
+                    loginSessionId,
+                    accessToken,
+                    accessTokenExpiresAt,
+                    requiresRevalidation
+            ));
+        }
+
+        private void markRoomAuthorizationValidated(Long roomId, Instant validatedAt) {
+            roomsBySubscription.replaceAll((subscriptionId, subscription) ->
+                    subscription.roomId().equals(roomId)
+                            ? new RoomSubscription(
+                                    subscription.roomId(),
+                                    subscription.subscribedAt(),
+                                    validatedAt
+                            )
+                            : subscription
+            );
+        }
+
+        private void removeRoomSubscriptions(Long roomId) {
+            roomsBySubscription.entrySet().removeIf(
+                    entry -> entry.getValue().roomId().equals(roomId)
+            );
         }
 
         private Optional<SessionSnapshot> snapshot() {

@@ -156,6 +156,11 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
     @Query("select m from Meeting m where m.id = :meetingId")
     Optional<Meeting> findByIdForUpdate(@Param("meetingId") Long meetingId);
 
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @EntityGraph(attributePaths = {"host"})
+    @Query("select m from Meeting m where m.id = :meetingId")
+    Optional<Meeting> findByIdForReadLock(@Param("meetingId") Long meetingId);
+
     @EntityGraph(attributePaths = {"host", "category"})
     @Query("select m from Meeting m where m.id in :meetingIds")
     List<Meeting> findAllWithHostAndCategoryByIdIn(@Param("meetingIds") Collection<Long> meetingIds);

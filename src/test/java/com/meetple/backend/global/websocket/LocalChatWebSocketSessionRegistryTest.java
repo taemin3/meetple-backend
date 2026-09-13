@@ -3,6 +3,7 @@ package com.meetple.backend.global.websocket;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -91,6 +92,68 @@ class LocalChatWebSocketSessionRegistryTest {
                 .containsExactly("ws-1");
     }
 
+    @Test
+    void outboundAuthorizationUsesFreshSubscriptionAndRefreshesAfterTtl() {
+        register("ws-1", 1L, "login-1", 10L);
+        Instant now = Instant.now();
+
+        LocalChatWebSocketSessionRegistry.OutboundAuthorization fresh = registry
+                .getOutboundAuthorization(
+                        "ws-1",
+                        "subscription-ws-1",
+                        10L,
+                        now,
+                        Duration.ofSeconds(30)
+                )
+                .orElseThrow();
+        assertThat(fresh.requiresRevalidation()).isFalse();
+        assertThat(registry.getOutboundAuthorization(
+                "ws-1",
+                "different-subscription",
+                10L,
+                now,
+                Duration.ofSeconds(30)
+        )).isEmpty();
+
+        LocalChatWebSocketSessionRegistry.OutboundAuthorization stale = registry
+                .getOutboundAuthorization(
+                        "ws-1",
+                        "subscription-ws-1",
+                        10L,
+                        now.plusSeconds(31),
+                        Duration.ofSeconds(30)
+                )
+                .orElseThrow();
+        assertThat(stale.requiresRevalidation()).isTrue();
+
+        registry.markRoomAuthorizationValidated("ws-1", 10L, now.plusSeconds(31));
+
+        assertThat(registry.getOutboundAuthorization(
+                "ws-1",
+                "subscription-ws-1",
+                10L,
+                now.plusSeconds(31),
+                Duration.ofSeconds(30)
+        )).get().extracting(
+                LocalChatWebSocketSessionRegistry.OutboundAuthorization::requiresRevalidation
+        ).isEqualTo(false);
+    }
+
+    @Test
+    void removingRoomSubscriptionsStopsOutboundAuthorization() {
+        register("ws-1", 1L, "login-1", 10L);
+
+        registry.removeRoomSubscriptions("ws-1", 10L);
+
+        assertThat(registry.getOutboundAuthorization(
+                "ws-1",
+                "subscription-ws-1",
+                10L,
+                Instant.now(),
+                Duration.ofSeconds(30)
+        )).isEmpty();
+    }
+
     private void register(
             String webSocketSessionId,
             Long memberId,
@@ -106,7 +169,8 @@ class LocalChatWebSocketSessionRegistryTest {
                 loginSessionId,
                 "access-token-" + webSocketSessionId,
                 "principal-" + memberId,
-                Instant.now()
+                Instant.now(),
+                Instant.now().plusSeconds(3600)
         );
         registry.subscribe(
                 webSocketSessionId,

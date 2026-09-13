@@ -87,7 +87,11 @@ public class JwtTokenProvider {
                 null,
                 List.of(new SimpleGrantedAuthority(ROLE_PREFIX + role.name()))
         );
-        return new AuthenticatedAccessToken(authentication, tokenSession);
+        return new AuthenticatedAccessToken(
+                authentication,
+                tokenSession,
+                claims.getExpiration().toInstant()
+        );
     }
 
     public Long getRefreshTokenMemberId(String token) {
