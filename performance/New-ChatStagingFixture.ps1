@@ -175,7 +175,7 @@ select
     '$escapedPasswordHash',
     clock_timestamp(),
     'chat-load-' || lpad(index::text, 2, '0'),
-    'synthetic staging chat load fixture',
+    'synthetic chat load fixture',
     '서울',
     'USER',
     null,
@@ -236,7 +236,7 @@ insert into meeting_participations (
 )
 select
     'APPROVED',
-    'synthetic staging chat load fixture',
+    'synthetic chat load fixture',
     clock_timestamp(),
     null,
     meeting.id,
