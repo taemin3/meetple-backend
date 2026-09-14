@@ -9,6 +9,7 @@ import com.meetple.backend.global.security.AuthenticatedMember;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
 import io.jsonwebtoken.JwtException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -38,6 +39,8 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
     private static final String ACCESS_TOKEN_SESSION_ATTRIBUTE = "chatAccessToken";
     private static final String USER_ERROR_DESTINATION = "/user/queue/chat/errors";
     private static final String USER_CONTROL_DESTINATION = "/user/queue/chat/control";
+    private static final Duration OUTBOUND_AUTHORIZATION_REVALIDATION_TTL =
+            Duration.ofSeconds(30);
     private static final Pattern ROOM_SUBSCRIPTION_PATTERN =
             Pattern.compile("^/topic/chat/rooms/(\\d+)$");
     private static final Pattern MESSAGE_SEND_PATTERN =
@@ -89,15 +92,14 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
             return authorizeOutboundMessage(message, accessor);
         }
 
-        if (command == StompCommand.SUBSCRIBE || command == StompCommand.SEND) {
+        if (command == StompCommand.SEND) {
+            validateAuthenticatedSession(accessor);
+            authorizeSendDestination(accessor.getDestination());
+        } else if (command == StompCommand.SUBSCRIBE) {
             AuthenticatedMember member = validateAuthenticatedSession(accessor);
-            if (command == StompCommand.SUBSCRIBE) {
-                Long roomId = subscriptionRoomId(accessor.getDestination());
-                if (roomId != null) {
-                    beginSubscription(accessor, member.id(), roomId);
-                }
-            } else {
-                authorizeSendDestination(accessor.getDestination());
+            Long roomId = subscriptionRoomId(accessor.getDestination());
+            if (roomId != null) {
+                beginSubscription(accessor, member.id(), roomId);
             }
         }
 
@@ -118,7 +120,8 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
                     tokenSession.sessionId(),
                     accessToken,
                     authentication.getName(),
-                    authenticationStartedAt
+                    authenticationStartedAt,
+                    authenticatedToken.expiresAt()
             );
             validateTokenSession(accessToken, member.id(), tokenSession);
             accessor.setUser(authentication);
@@ -228,29 +231,54 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
         if (!StringUtils.hasText(sessionId)) {
             return null;
         }
-        LocalChatWebSocketSessionRegistry.AuthenticatedSession session = sessionRegistry
-                .getAuthenticatedSession(sessionId)
-                .orElse(null);
-        if (session == null) {
+        Long roomId = Long.valueOf(matcher.group(1));
+        Instant now = Instant.now();
+
+        String subscriptionId = accessor.getSubscriptionId();
+        if (!StringUtils.hasText(subscriptionId)) {
             return null;
         }
 
-        try {
-            validateTokenSession(session.accessToken(), session.memberId());
-        } catch (JwtException | IllegalArgumentException exception) {
+        LocalChatWebSocketSessionRegistry.OutboundAuthorization authorization = sessionRegistry
+                .getOutboundAuthorization(
+                        sessionId,
+                        subscriptionId,
+                        roomId,
+                        now,
+                        OUTBOUND_AUTHORIZATION_REVALIDATION_TTL
+                )
+                .orElse(null);
+        if (authorization == null) {
+            return null;
+        }
+
+        if (!authorization.accessTokenExpiresAt().isAfter(now)) {
             sessionRegistry.remove(sessionId);
             return null;
         }
 
-        try {
-            chatAccessPolicy.getAccessibleMeeting(
-                    session.memberId(),
-                    Long.valueOf(matcher.group(1))
-            );
+        if (!authorization.requiresRevalidation()) {
             return message;
+        }
+
+        try {
+            validateTokenSession(
+                    authorization.accessToken(),
+                    authorization.memberId()
+            );
+            chatAccessPolicy.getAccessibleMeeting(
+                    authorization.memberId(),
+                    roomId
+            );
+        } catch (JwtException | IllegalArgumentException exception) {
+            sessionRegistry.remove(sessionId);
+            return null;
         } catch (BaseException exception) {
+            sessionRegistry.removeRoomSubscriptions(sessionId, roomId);
             return null;
         }
+        sessionRegistry.markRoomAuthorizationValidated(sessionId, roomId, now);
+        return message;
     }
 
     private Message<?> authorizeOutboundMessageIfNecessary(Message<?> message) {

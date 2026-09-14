@@ -12,6 +12,8 @@ import com.meetple.backend.domain.auth.repository.AccessTokenValidationRepositor
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
+import com.meetple.backend.domain.chat.entity.ChatRoomSequence;
+import com.meetple.backend.domain.chat.repository.ChatRoomSequenceRepository;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
@@ -73,6 +75,9 @@ class ChatWebSocketIntegrationTest {
     @Autowired
     private ChatMessageRepository messageRepository;
 
+    @Autowired
+    private ChatRoomSequenceRepository roomSequenceRepository;
+
     @MockitoBean
     private AccessTokenValidationRepository accessTokenValidationRepository;
 
@@ -91,6 +96,7 @@ class ChatWebSocketIntegrationTest {
         participant = memberRepository.save(member("participant-" + suffix));
         Category category = categoryRepository.save(Category.create("category-" + suffix));
         meeting = meetingRepository.save(meeting(host, category));
+        roomSequenceRepository.save(ChatRoomSequence.initialize(meeting.getId()));
         MeetingParticipation participation = MeetingParticipation.apply(
                 meeting,
                 participant,

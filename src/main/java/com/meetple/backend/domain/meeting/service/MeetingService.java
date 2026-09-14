@@ -2,6 +2,8 @@ package com.meetple.backend.domain.meeting.service;
 
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
+import com.meetple.backend.domain.chat.entity.ChatRoomSequence;
+import com.meetple.backend.domain.chat.repository.ChatRoomSequenceRepository;
 import com.meetple.backend.domain.image.entity.ImageUploadPurpose;
 import com.meetple.backend.domain.image.service.ImageDeletionService;
 import com.meetple.backend.domain.image.service.ImageService;
@@ -78,6 +80,7 @@ public class MeetingService {
     );
 
     private final MeetingRepository meetingRepository;
+    private final ChatRoomSequenceRepository chatRoomSequenceRepository;
     private final MeetingImageRepository meetingImageRepository;
     private final MemberRepository memberRepository;
     private final CategoryRepository categoryRepository;
@@ -110,6 +113,7 @@ public class MeetingService {
         );
 
         Meeting savedMeeting = meetingRepository.save(meeting);
+        chatRoomSequenceRepository.save(ChatRoomSequence.initialize(savedMeeting.getId()));
         saveMeetingImages(savedMeeting, images);
 
         return toResponse(savedMeeting, images);

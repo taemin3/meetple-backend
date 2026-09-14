@@ -7,6 +7,8 @@ import com.meetple.backend.domain.category.repository.CategoryRepository;
 import com.meetple.backend.domain.chat.dto.request.SendChatMessageRequest;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
 import com.meetple.backend.domain.chat.repository.ChatReadStateRepository;
+import com.meetple.backend.domain.chat.entity.ChatRoomSequence;
+import com.meetple.backend.domain.chat.repository.ChatRoomSequenceRepository;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
@@ -40,6 +42,9 @@ class ChatServiceIntegrationTest {
     private ChatReadStateRepository readStateRepository;
 
     @Autowired
+    private ChatRoomSequenceRepository roomSequenceRepository;
+
+    @Autowired
     private MeetingParticipationRepository participationRepository;
 
     @Autowired
@@ -65,6 +70,7 @@ class ChatServiceIntegrationTest {
         outboxEventRepository.deleteAll();
         readStateRepository.deleteAll();
         messageRepository.deleteAll();
+        roomSequenceRepository.deleteAll();
         participationRepository.deleteAll();
         meetingRepository.deleteAll();
         categoryRepository.deleteAll();
@@ -136,6 +142,7 @@ class ChatServiceIntegrationTest {
                 LocalDateTime.now().plusDays(1),
                 null
         ));
+        roomSequenceRepository.save(ChatRoomSequence.initialize(meeting.getId()));
         MeetingParticipation participation = MeetingParticipation.apply(
                 meeting,
                 participant,

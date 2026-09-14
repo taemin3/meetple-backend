@@ -8,9 +8,11 @@ import com.meetple.backend.domain.chat.dto.response.ChatReadStateResponse;
 import com.meetple.backend.domain.chat.dto.response.ChatRoomSummaryResponse;
 import com.meetple.backend.domain.chat.entity.ChatMessage;
 import com.meetple.backend.domain.chat.entity.ChatReadState;
+import com.meetple.backend.domain.chat.entity.ChatRoomSequence;
 import com.meetple.backend.domain.chat.realtime.ChatMessageFanOutEvent;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
 import com.meetple.backend.domain.chat.repository.ChatReadStateRepository;
+import com.meetple.backend.domain.chat.repository.ChatRoomSequenceRepository;
 import com.meetple.backend.domain.chat.repository.ChatUnreadCountProjection;
 import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.entity.Meeting;
@@ -53,6 +55,7 @@ public class ChatService {
 
     private final ChatMessageRepository messageRepository;
     private final ChatReadStateRepository readStateRepository;
+    private final ChatRoomSequenceRepository roomSequenceRepository;
     private final MeetingRepository meetingRepository;
     private final MemberRepository memberRepository;
     private final ChatAccessPolicy accessPolicy;
@@ -149,8 +152,7 @@ public class ChatService {
             SendChatMessageRequest request
     ) {
         validateMessageRequest(request);
-
-        Meeting meeting = getAccessibleMeetingForUpdate(memberId, meetingId);
+        Meeting meeting = getAccessibleMeetingForReadLock(memberId, meetingId);
         accessPolicy.ensureCanSend(meeting);
 
         Optional<ChatMessage> existingMessage =
@@ -160,8 +162,31 @@ public class ChatService {
                         request.clientMessageId()
                 );
         boolean created = existingMessage.isEmpty();
-        ChatMessage message = existingMessage
-                .orElseGet(() -> saveMessage(memberId, meeting, request));
+        ChatMessage message;
+        if (created) {
+            Member sender = getMember(memberId);
+            List<Long> recipientMemberIds = pushRecipientResolver.resolve(meeting, memberId);
+            ChatRoomSequence roomSequence = roomSequenceRepository.findByMeetingIdForUpdate(
+                    meetingId
+            )
+                    .orElseThrow(() -> new IllegalStateException(
+                            "채팅방 순번 정보를 찾을 수 없습니다. meetingId=" + meetingId
+                    ));
+            existingMessage = messageRepository.findByMeetingIdAndSenderIdAndClientMessageId(
+                    meetingId,
+                    memberId,
+                    request.clientMessageId()
+            );
+            if (existingMessage.isPresent()) {
+                created = false;
+                message = existingMessage.get();
+            } else {
+                message = saveMessage(sender, meeting, roomSequence, request);
+                publishPushEvent(meeting, message, recipientMemberIds);
+            }
+        } else {
+            message = existingMessage.get();
+        }
         advanceReadState(
                 meeting,
                 memberId,
@@ -170,39 +195,40 @@ public class ChatService {
         );
         ChatMessageResponse response = toMessageResponse(message);
         if (created) {
-            publishPushEvent(meeting, response);
             eventPublisher.publishEvent(ChatMessageFanOutEvent.create(response));
         }
         return new ChatMessageSendResult(response, created);
     }
 
-    private void publishPushEvent(Meeting meeting, ChatMessageResponse message) {
-        List<Long> recipientMemberIds = pushRecipientResolver.resolve(
-                meeting,
-                message.senderId()
-        );
+    private void publishPushEvent(
+            Meeting meeting,
+            ChatMessage message,
+            List<Long> recipientMemberIds
+    ) {
         if (recipientMemberIds.isEmpty()) {
             return;
         }
 
+        ChatMessageResponse response = toMessageResponse(message);
+
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("recipientMemberIds", recipientMemberIds);
-        data.put("senderMemberId", message.senderId());
-        data.put("senderNickname", message.senderNickname());
-        data.put("roomId", message.roomId());
-        data.put("chatMessageId", message.id());
-        data.put("roomSequence", message.sequence());
+        data.put("senderMemberId", response.senderId());
+        data.put("senderNickname", response.senderNickname());
+        data.put("roomId", response.roomId());
+        data.put("chatMessageId", response.id());
+        data.put("roomSequence", response.sequence());
         data.put("title", meeting.getTitle());
-        data.put("body", message.content());
+        data.put("body", response.content());
 
         outboxEventPublisher.publish(new OutboxEventRequest(
                 CHAT_MESSAGE_AGGREGATE_TYPE,
-                message.id().toString(),
+                response.id().toString(),
                 CHAT_MESSAGE_CREATED_EVENT,
-                "room:" + message.roomId(),
+                "room:" + response.roomId(),
                 OutboxEventTopic.PUSH_CHAT,
                 PUSH_SCHEMA_VERSION,
-                "chat-message:" + message.id(),
+                "chat-message:" + response.id(),
                 data
         ));
     }
@@ -253,14 +279,12 @@ public class ChatService {
     }
 
     private ChatMessage saveMessage(
-            Long memberId,
+            Member sender,
             Meeting meeting,
+            ChatRoomSequence roomSequence,
             SendChatMessageRequest request
     ) {
-        Member sender = getMember(memberId);
-        long nextSequence = messageRepository.findTopByMeetingIdOrderByRoomSequenceDesc(meeting.getId())
-                .map(ChatMessage::getRoomSequence)
-                .orElse(0L) + 1;
+        long nextSequence = roomSequence.next();
         ChatMessage message = ChatMessage.create(
                 meeting,
                 sender,
@@ -271,8 +295,18 @@ public class ChatService {
         return messageRepository.saveAndFlush(message);
     }
 
-    private Meeting getAccessibleMeetingForUpdate(Long memberId, Long meetingId) {
+    private Meeting getAccessibleMeetingForUpdate(
+            Long memberId,
+            Long meetingId
+    ) {
         Meeting meeting = meetingRepository.findByIdForUpdate(meetingId)
+                .orElseThrow(() -> new NotFoundException("모임을 찾을 수 없습니다."));
+        accessPolicy.ensureCanAccess(memberId, meeting);
+        return meeting;
+    }
+
+    private Meeting getAccessibleMeetingForReadLock(Long memberId, Long meetingId) {
+        Meeting meeting = meetingRepository.findByIdForReadLock(meetingId)
                 .orElseThrow(() -> new NotFoundException("모임을 찾을 수 없습니다."));
         accessPolicy.ensureCanAccess(memberId, meeting);
         return meeting;
