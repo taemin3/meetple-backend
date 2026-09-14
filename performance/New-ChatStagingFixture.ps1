@@ -14,6 +14,7 @@ param(
     [string] $AwsProfile = 'meetple-deploy',
     [string] $AwsRegion = 'ap-northeast-2',
     [switch] $AcknowledgeStagingDataCreation,
+    [switch] $ValidateLocalHashing,
     [switch] $DryRun
 )
 
@@ -39,7 +40,7 @@ if ($DryRun) {
     Write-Host 'Dry run complete. No database row or manifest was created.'
     exit 0
 }
-if (-not $AcknowledgeStagingDataCreation) {
+if (-not $AcknowledgeStagingDataCreation -and -not $ValidateLocalHashing) {
     throw 'Pass -AcknowledgeStagingDataCreation after reviewing the printed staging mutation plan.'
 }
 
@@ -53,19 +54,90 @@ try {
 $password = 'Aa1!' + [Convert]::ToBase64String($randomBytes).Replace('+', 'x').Replace('/', 'y')
 $escapedPassword = $password.Replace("'", "''")
 
-# Generate the BCrypt hash in disposable local PostgreSQL tooling. The staging
-# script never installs pgcrypto or another extension in the remote database.
-$hashSql = "create extension if not exists pgcrypto; select crypt('$escapedPassword', gen_salt('bf', 10));"
-$passwordHashOutput = @(
-    $hashSql | docker compose exec -T postgres `
-        sh -lc 'psql -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
-)
-if ($LASTEXITCODE -ne 0) {
-    throw 'Could not generate the fixture password hash. Start the local postgres service with docker compose up -d postgres.'
+# Generate the BCrypt hash locally with the Java/Spring Security dependency that
+# this repository already uses. No Docker daemon or staging DB extension is needed.
+$java = Get-Command java -ErrorAction SilentlyContinue
+$javac = Get-Command javac -ErrorAction SilentlyContinue
+if ($null -eq $java -or $null -eq $javac) {
+    throw 'Java 21 JDK commands java and javac are required.'
 }
-$passwordHash = [string]($passwordHashOutput | Select-Object -Last 1)
-if ([string]::IsNullOrWhiteSpace($passwordHash) -or -not $passwordHash.StartsWith('$2')) {
-    throw 'Local PostgreSQL did not return a BCrypt password hash.'
+$userProfileDirectory = if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+    $env:USERPROFILE
+} else {
+    [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+}
+$gradleUserHome = if (-not [string]::IsNullOrWhiteSpace($env:GRADLE_USER_HOME)) {
+    $env:GRADLE_USER_HOME
+} else {
+    Join-Path $userProfileDirectory '.gradle'
+}
+$gradleModuleCache = Join-Path $gradleUserHome 'caches\modules-2\files-2.1'
+$cryptoJar = Get-ChildItem `
+    (Join-Path $gradleModuleCache 'org.springframework.security\spring-security-crypto') `
+    -Recurse -Filter 'spring-security-crypto-*.jar' -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -notmatch '-(sources|javadoc)\.jar$' } |
+    Sort-Object LastWriteTimeUtc -Descending |
+    Select-Object -First 1
+$loggingJar = Get-ChildItem `
+    (Join-Path $gradleModuleCache 'commons-logging\commons-logging') `
+    -Recurse -Filter 'commons-logging-*.jar' -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -notmatch '-(sources|javadoc)\.jar$' } |
+    Sort-Object LastWriteTimeUtc -Descending |
+    Select-Object -First 1
+if ($null -eq $cryptoJar -or $null -eq $loggingJar) {
+    throw 'Spring Security jars were not found in the Gradle cache. Run .\gradlew.bat test once, then retry.'
+}
+
+$hashDirectory = Join-Path ([IO.Path]::GetTempPath()) `
+    ("meetple-chat-bcrypt-{0}" -f [Guid]::NewGuid().ToString('N'))
+$hashSourcePath = Join-Path $hashDirectory 'ChatFixturePasswordHash.java'
+$hashClassPath = '{0};{1}' -f $cryptoJar.FullName, $loggingJar.FullName
+$previousFixturePassword = $env:MEETPLE_CHAT_FIXTURE_PASSWORD
+try {
+    New-Item -ItemType Directory -Path $hashDirectory | Out-Null
+    [IO.File]::WriteAllText(
+        $hashSourcePath,
+        @'
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+
+public final class ChatFixturePasswordHash {
+    public static void main(String[] args) {
+        String password = System.getenv("MEETPLE_CHAT_FIXTURE_PASSWORD");
+        if (password == null || password.isBlank()) {
+            throw new IllegalStateException("Fixture password is missing");
+        }
+        System.out.println(new BCryptPasswordEncoder(10).encode(password));
+    }
+}
+'@,
+        [Text.UTF8Encoding]::new($false)
+    )
+    & $javac.Source -cp $hashClassPath $hashSourcePath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Fixture password helper compilation failed with exit code $LASTEXITCODE."
+    }
+    $env:MEETPLE_CHAT_FIXTURE_PASSWORD = $password
+    $passwordHashOutput = @(
+        & $java.Source -cp "$hashDirectory;$hashClassPath" ChatFixturePasswordHash
+    )
+    if ($LASTEXITCODE -ne 0) {
+        throw "Fixture password hashing failed with exit code $LASTEXITCODE."
+    }
+    $passwordHash = [string]($passwordHashOutput | Select-Object -Last 1)
+    if ([string]::IsNullOrWhiteSpace($passwordHash) -or -not $passwordHash.StartsWith('$2')) {
+        throw 'Spring Security did not return a BCrypt password hash.'
+    }
+} finally {
+    $env:MEETPLE_CHAT_FIXTURE_PASSWORD = $previousFixturePassword
+    Remove-Item -LiteralPath $hashSourcePath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $hashDirectory 'ChatFixturePasswordHash.class') `
+        -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $hashDirectory -Force -ErrorAction SilentlyContinue
+}
+if ($ValidateLocalHashing) {
+    Write-Host 'Java/Spring Security BCrypt prerequisite validation succeeded.'
+    Write-Host 'No staging database connection was opened and no manifest was created.'
+    exit 0
 }
 
 $connection = Get-StagingPostgresConnection `

@@ -25,6 +25,7 @@
 - 순번 잠금 획득 이후 서비스 반환과 실제 커밋까지의 시간을 분리 계측
 - staging 공개 API의 history 조회로 저장 ID를 대조하는 원격 실행 모드
 - staging 호스트 allowlist, 명시적 승인, 100 RPS/6,000건 상한과 runId 기반 정리
+- Docker 없이 Java/Spring Security로 staging fixture BCrypt 해시 생성
 
 ## 검증
 

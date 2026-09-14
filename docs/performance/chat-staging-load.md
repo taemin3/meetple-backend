@@ -13,7 +13,7 @@
 
 ## 사전 준비
 
-필요한 로컬 도구는 AWS CLI, Session Manager plugin, `psql`, Docker, Node.js 22 이상이다. 먼저 AWS 콘솔에서 대상이 `meetple-staging-cluster / meetple-staging-backend`이고 backend Task가 1개인지 확인한다. 현재 Task definition revision, image SHA, worker 환경변수와 테스트 시작 전 CloudWatch/RDS 상태를 기록한다.
+필요한 로컬 도구는 AWS CLI, Session Manager plugin, `psql`, Java 21 JDK, Node.js 22 이상이다. Spring Security jar가 로컬 Gradle cache에 없다면 먼저 `.\gradlew.bat test`를 한 번 실행한다. fixture 비밀번호 해시는 Java와 프로젝트의 Spring Security dependency로 로컬 생성하므로 Docker는 필요하지 않다. 먼저 AWS 콘솔에서 대상이 `meetple-staging-cluster / meetple-staging-backend`이고 backend Task가 1개인지 확인한다. 현재 Task definition revision, image SHA, worker 환경변수와 테스트 시작 전 CloudWatch/RDS 상태를 기록한다.
 
 터미널 1에서 staging RDS 터널을 유지한다.
 
@@ -33,6 +33,12 @@ cd C:\project\meetple\backend
   -ConfirmTarget api.meetple.shop `
   -LocalPort 15433 `
   -DryRun
+
+.\performance\New-ChatStagingFixture.ps1 `
+  -DatasetId chat-staging-baseline `
+  -ManifestPath C:\secure\chat-staging-baseline.json `
+  -ConfirmTarget api.meetple.shop `
+  -ValidateLocalHashing
 
 .\performance\New-ChatStagingFixture.ps1 `
   -DatasetId chat-staging-baseline `
