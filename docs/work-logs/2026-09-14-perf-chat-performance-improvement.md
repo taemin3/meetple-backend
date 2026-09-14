@@ -15,7 +15,8 @@
 
 - 방별 `chat_room_sequences` 순번 행과 V19 migration
 - meeting 공유 잠금과 순번 행 쓰기 잠금을 이용한 임계 구역 축소
-- STOMP inbound/outbound worker 4개와 bounded queue
+- STOMP inbound/outbound worker 기본값 4개와 bounded queue
+- staging 배포 시 inbound/outbound worker를 2/4/8로 선택할 수 있는 환경변수
 - 세션/구독 권한 로컬 캐시, JWT 만료 확인, 30초 TTL 재검증
 - 로그아웃·회원 탈퇴·참여 취소·권한 변경 invalidation 유지
 - 기능·마이그레이션·WebSocket 설정 테스트

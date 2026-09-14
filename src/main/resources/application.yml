@@ -93,6 +93,11 @@ push:
     credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}
     credentials-json: ${FIREBASE_CREDENTIALS_JSON:}
 
+chat:
+  websocket:
+    inbound-pool-size: ${CHAT_WEBSOCKET_INBOUND_POOL_SIZE:4}
+    outbound-pool-size: ${CHAT_WEBSOCKET_OUTBOUND_POOL_SIZE:4}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

@@ -24,6 +24,25 @@ on:
       - "docker/postgres/Dockerfile"
       - ".github/workflows/deploy-staging.yml"
   workflow_dispatch:
+    inputs:
+      chat_inbound_pool_size:
+        description: STOMP inbound worker count
+        required: true
+        default: "4"
+        type: choice
+        options:
+          - "2"
+          - "4"
+          - "8"
+      chat_outbound_pool_size:
+        description: STOMP outbound worker count
+        required: true
+        default: "4"
+        type: choice
+        options:
+          - "2"
+          - "4"
+          - "8"
 
 permissions:
   contents: read
@@ -139,6 +158,8 @@ jobs:
           image: ${{ steps.image.outputs.image_uri }}
           environment-variables: |
             MEETPLE_PERFORMANCE_AUTH_PROBE_ENABLED=true
+            CHAT_WEBSOCKET_INBOUND_POOL_SIZE=${{ inputs.chat_inbound_pool_size || '4' }}
+            CHAT_WEBSOCKET_OUTBOUND_POOL_SIZE=${{ inputs.chat_outbound_pool_size || '4' }}
 
       - name: Deploy task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@c465972ecbd160473f22e683363b422a5412a3de # v2

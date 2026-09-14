@@ -10,7 +10,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "chat.websocket.inbound-pool-size=2",
+        "chat.websocket.outbound-pool-size=3"
+})
 @ActiveProfiles("test")
 class WebSocketExecutorConfigurationTest {
 
@@ -23,16 +26,16 @@ class WebSocketExecutorConfigurationTest {
     private Executor outboundExecutor;
 
     @Test
-    void stompChannelsUseFourBoundedWorkers() {
-        assertExecutor(inboundExecutor, 1_000);
-        assertExecutor(outboundExecutor, 5_000);
+    void stompChannelWorkerCountsAreConfigurableAndQueuesRemainBounded() {
+        assertExecutor(inboundExecutor, 2, 1_000);
+        assertExecutor(outboundExecutor, 3, 5_000);
     }
 
-    private void assertExecutor(Executor executor, int queueCapacity) {
+    private void assertExecutor(Executor executor, int poolSize, int queueCapacity) {
         assertThat(executor).isInstanceOf(ThreadPoolTaskExecutor.class);
         ThreadPoolTaskExecutor taskExecutor = (ThreadPoolTaskExecutor) executor;
-        assertThat(taskExecutor.getCorePoolSize()).isEqualTo(4);
-        assertThat(taskExecutor.getMaxPoolSize()).isEqualTo(4);
+        assertThat(taskExecutor.getCorePoolSize()).isEqualTo(poolSize);
+        assertThat(taskExecutor.getMaxPoolSize()).isEqualTo(poolSize);
         assertThat(taskExecutor.getThreadPoolExecutor().getQueue().remainingCapacity())
                 .isEqualTo(queueCapacity);
     }

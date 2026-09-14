@@ -1,6 +1,6 @@
 package com.meetple.backend.global.websocket;
 
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
@@ -15,7 +15,6 @@ import org.springframework.web.socket.handler.WebSocketHandlerDecorator;
 
 @Configuration
 @EnableWebSocketMessageBroker
-@RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     public static final String STOMP_ENDPOINT = "/ws";
@@ -24,13 +23,34 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public static final String USER_PREFIX = "/user";
 
     private static final long HEARTBEAT_INTERVAL_MILLIS = 10_000L;
-    private static final int CLIENT_CHANNEL_POOL_SIZE = 4;
     private static final int CLIENT_INBOUND_QUEUE_CAPACITY = 1_000;
     private static final int CLIENT_OUTBOUND_QUEUE_CAPACITY = 5_000;
 
     private final ChatStompChannelInterceptor chatStompChannelInterceptor;
     private final ChatStompErrorHandler chatStompErrorHandler;
     private final LocalChatWebSocketSessionRegistry sessionRegistry;
+    private final int clientInboundPoolSize;
+    private final int clientOutboundPoolSize;
+
+    public WebSocketConfig(
+            ChatStompChannelInterceptor chatStompChannelInterceptor,
+            ChatStompErrorHandler chatStompErrorHandler,
+            LocalChatWebSocketSessionRegistry sessionRegistry,
+            @Value("${chat.websocket.inbound-pool-size}") int clientInboundPoolSize,
+            @Value("${chat.websocket.outbound-pool-size}") int clientOutboundPoolSize
+    ) {
+        this.chatStompChannelInterceptor = chatStompChannelInterceptor;
+        this.chatStompErrorHandler = chatStompErrorHandler;
+        this.sessionRegistry = sessionRegistry;
+        this.clientInboundPoolSize = requireValidPoolSize(
+                "chat.websocket.inbound-pool-size",
+                clientInboundPoolSize
+        );
+        this.clientOutboundPoolSize = requireValidPoolSize(
+                "chat.websocket.outbound-pool-size",
+                clientOutboundPoolSize
+        );
+    }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
@@ -54,6 +74,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.executor(channelExecutor(
                 "clientInboundChannel-",
+                clientInboundPoolSize,
                 CLIENT_INBOUND_QUEUE_CAPACITY
         ));
         registration.interceptors(chatStompChannelInterceptor);
@@ -63,18 +84,30 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void configureClientOutboundChannel(ChannelRegistration registration) {
         registration.executor(channelExecutor(
                 "clientOutboundChannel-",
+                clientOutboundPoolSize,
                 CLIENT_OUTBOUND_QUEUE_CAPACITY
         ));
         registration.interceptors(chatStompChannelInterceptor);
     }
 
-    private ThreadPoolTaskExecutor channelExecutor(String threadNamePrefix, int queueCapacity) {
+    private ThreadPoolTaskExecutor channelExecutor(
+            String threadNamePrefix,
+            int poolSize,
+            int queueCapacity
+    ) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(CLIENT_CHANNEL_POOL_SIZE);
-        executor.setMaxPoolSize(CLIENT_CHANNEL_POOL_SIZE);
+        executor.setCorePoolSize(poolSize);
+        executor.setMaxPoolSize(poolSize);
         executor.setQueueCapacity(queueCapacity);
         executor.setThreadNamePrefix(threadNamePrefix);
         return executor;
+    }
+
+    private int requireValidPoolSize(String propertyName, int poolSize) {
+        if (poolSize < 1 || poolSize > 64) {
+            throw new IllegalArgumentException(propertyName + " must be between 1 and 64");
+        }
+        return poolSize;
     }
 
     @Override
