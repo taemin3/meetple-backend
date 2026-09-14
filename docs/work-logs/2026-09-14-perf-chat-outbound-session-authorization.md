@@ -13,6 +13,7 @@
 3. 30초 TTL 만료 시에만 Redis 토큰 상태와 DB 방 접근 권한을 다시 확인한다.
 4. 기존 Redis Pub/Sub 세션 무효화 흐름을 유지했다.
 5. focused/distributed 및 구독자 10/1 조건을 로컬에서 비교했다.
+6. 운영 코드와 분리된 staging 전용 fixture, STOMP 실행기, 잠금 수집기와 정리 절차를 추가했다.
 
 ## 주요 변경
 
@@ -22,13 +23,15 @@
 - 권한 철회 시 해당 방 구독 제거, 토큰 무효/만료 시 세션 제거
 - 실제 Redis·DB 재검증을 `outboundAuthRefresh`로 별도 계측
 - 순번 잠금 획득 이후 서비스 반환과 실제 커밋까지의 시간을 분리 계측
+- staging 공개 API의 history 조회로 저장 ID를 대조하는 원격 실행 모드
+- staging 호스트 allowlist, 명시적 승인, 100 RPS/6,000건 상한과 runId 기반 정리
 
 ## 검증
 
 - 핵심 WebSocket/계측 테스트 26개: 성공
 - `gradlew.bat test --no-daemon`: 478개 성공
 - 모든 유효 100건/s 실행: 3,000 scheduled/attempted/committed/received, 관련 오류·누락·중복 0
-- AWS/staging 배포 및 실제 FCM 발송: 수행하지 않음
+- staging 스크립트 정적 검증만 수행하며 AWS 부하와 실제 FCM 발송은 수행하지 않음
 
 ## 결정과 한계
 

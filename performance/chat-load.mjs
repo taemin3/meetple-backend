@@ -13,6 +13,7 @@ const warmupSeconds = integerArg(args, 'warmup-seconds', 5, 0, 300);
 const settleSeconds = integerArg(args, 'settle-seconds', 20, 1, 300);
 const messageBytes = integerArg(args, 'message-bytes', 256, 80, 1000);
 const subscribersPerRoom = integerArg(args, 'subscribers-per-room', 10, 1, 10);
+const targetMode = args['target-mode'] || 'local';
 const runId = args['run-id'] || `${scenario}-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}`;
 const outputPath = args.output || `chat-load-${runId}.json`;
 
@@ -31,20 +32,35 @@ if (!Array.isArray(manifest.roomIds) || manifest.roomIds.length !== 10
 }
 
 const baseUrl = new URL(manifest.baseUrl || 'http://127.0.0.1:8080');
-if (!['127.0.0.1', 'localhost', '::1'].includes(baseUrl.hostname)) {
-  throw new Error('Remote targets are blocked. This runner is local-only.');
+const localHosts = new Set(['127.0.0.1', 'localhost', '::1']);
+if (!['local', 'staging'].includes(targetMode)) {
+  throw new Error('--target-mode must be local or staging.');
 }
+if (targetMode === 'local' && !localHosts.has(baseUrl.hostname)) {
+  throw new Error('Remote targets require --target-mode staging.');
+}
+if (targetMode === 'staging') {
+  if (baseUrl.protocol !== 'https:' || baseUrl.hostname !== 'api.meetple.shop') {
+    throw new Error('Staging mode only allows https://api.meetple.shop.');
+  }
+  if (args['confirm-target'] !== baseUrl.hostname) {
+    throw new Error(`--confirm-target must exactly match ${baseUrl.hostname}.`);
+  }
+}
+const serverMeasurementEnabled = targetMode === 'local';
 const wsUrl = new URL('/ws', baseUrl);
 wsUrl.protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
 
 const tokens = await Promise.all(manifest.clients.map(login));
-await api('/api/v1/performance/chat-send/reset', tokens[0], {
-  method: 'POST',
-  query: { runId },
-});
-await api('/api/v1/performance/chat-send/realtime-report', tokens[0], {
-  query: { runId },
-});
+if (serverMeasurementEnabled) {
+  await api('/api/v1/performance/chat-send/reset', tokens[0], {
+    method: 'POST',
+    query: { runId },
+  });
+  await api('/api/v1/performance/chat-send/realtime-report', tokens[0], {
+    query: { runId },
+  });
+}
 const connections = tokens.map((token, index) => new StompConnection(
   wsUrl,
   token,
@@ -120,12 +136,14 @@ receivedByMessage.clear();
 
 const metricSamples = [];
 let metricsRunning = true;
-const metricLoop = (async () => {
-  while (metricsRunning) {
-    metricSamples.push(await captureRuntimeMetrics(tokens[0]));
-    await delay(1000);
-  }
-})();
+const metricLoop = serverMeasurementEnabled
+  ? (async () => {
+      while (metricsRunning) {
+        metricSamples.push(await captureRuntimeMetrics(tokens[0]));
+        await delay(1000);
+      }
+    })()
+  : Promise.resolve();
 
 const totalScheduled = targetRps * durationSeconds;
 const sent = new Map();
@@ -162,16 +180,20 @@ metricsRunning = false;
 await metricLoop;
 
 const databaseMessages = await messagesAfter(tokens[0], manifest.roomIds, baselineSequences);
-const measurementReport = (await api(
-  '/api/v1/performance/chat-send/report',
-  tokens[0],
-  { query: { runId } },
-)).data;
-const realtimeMeasurementReport = (await api(
-  '/api/v1/performance/chat-send/realtime-report',
-  tokens[0],
-  { query: { runId } },
-)).data;
+const measurementReport = serverMeasurementEnabled
+  ? (await api(
+      '/api/v1/performance/chat-send/report',
+      tokens[0],
+      { query: { runId } },
+    )).data
+  : null;
+const realtimeMeasurementReport = serverMeasurementEnabled
+  ? (await api(
+      '/api/v1/performance/chat-send/realtime-report',
+      tokens[0],
+      { query: { runId } },
+    )).data
+  : null;
 
 const sentIds = new Set(sent.keys());
 const dbByClientId = new Map(
@@ -180,7 +202,7 @@ const dbByClientId = new Map(
     .map((message) => [message.clientMessageId, message]),
 );
 const committedByClientId = new Map(
-  (measurementReport.records || [])
+  (measurementReport?.records || [])
     .filter((record) => record.transactionStatus === 'COMMITTED')
     .map((record) => [record.clientMessageId, record.messageId]),
 );
@@ -244,12 +266,16 @@ const result = {
     receivedByAnyClient: [...sentIds].filter((id) => receivedIds.has(id)).length,
     missingFromDatabase: [...sentIds].filter((id) => !dbByClientId.has(id)),
     storedButNotReceived: [...sentIds].filter((id) => dbByClientId.has(id) && !receivedIds.has(id)),
-    missingCommitObservation: [...sentIds].filter((id) => !committedByClientId.has(id)),
-    commitIdMismatches: [...sentIds].filter((id) => {
-      const database = dbByClientId.get(id);
-      const observedCommitId = committedByClientId.get(id);
-      return database && observedCommitId && Number(database.id) !== Number(observedCommitId);
-    }),
+    missingCommitObservation: serverMeasurementEnabled
+      ? [...sentIds].filter((id) => !committedByClientId.has(id))
+      : null,
+    commitIdMismatches: serverMeasurementEnabled
+      ? [...sentIds].filter((id) => {
+          const database = dbByClientId.get(id);
+          const observedCommitId = committedByClientId.get(id);
+          return database && observedCommitId && Number(database.id) !== Number(observedCommitId);
+        })
+      : null,
     incompleteObserverMessages,
     duplicateReceipts,
     clientReceiveLatencyMs: summarize(latencies),
@@ -261,6 +287,13 @@ const result = {
   server: measurementReport,
   serverRealtime: realtimeMeasurementReport,
   runtimeMetrics: summarizeRuntimeMetrics(metricSamples),
+  limitations: targetMode === 'staging'
+    ? [
+        'Server-side phase recorders are intentionally unavailable in staging mode.',
+        'Committed messages are reconciled through the authenticated chat history API.',
+        'Collect ECS, RDS, Hikari, and PostgreSQL lock evidence separately for this interval.',
+      ]
+    : [],
   generatedAt: new Date().toISOString(),
 };
 
@@ -275,21 +308,21 @@ console.log(JSON.stringify({
   committed: result.delivery.committedInHistory,
   received: result.delivery.receivedByAnyClient,
   latencyP95Ms: result.delivery.clientReceiveLatencyMs.p95,
-  lockLookupP95Us: measurementReport.phaseMicros?.lockLookup?.p95,
+  lockLookupP95Us: measurementReport?.phaseMicros?.lockLookup?.p95,
   lockHeldUntilCommitP95Us:
-    measurementReport.phaseMicros?.lockHeldUntilCommit?.p95,
-  transactionP95Us: measurementReport.phaseMicros?.transactionCommit?.p95,
-  inboundAuthP95Us: realtimeMeasurementReport.phaseMicros?.inboundAuth?.p95,
-  inboundQueueP95Us: realtimeMeasurementReport.phaseMicros?.inboundQueue?.p95,
-  outboundAuthCount: realtimeMeasurementReport.phaseMicros?.outboundAuth?.count,
-  outboundAuthP95Us: realtimeMeasurementReport.phaseMicros?.outboundAuth?.p95,
+    measurementReport?.phaseMicros?.lockHeldUntilCommit?.p95,
+  transactionP95Us: measurementReport?.phaseMicros?.transactionCommit?.p95,
+  inboundAuthP95Us: realtimeMeasurementReport?.phaseMicros?.inboundAuth?.p95,
+  inboundQueueP95Us: realtimeMeasurementReport?.phaseMicros?.inboundQueue?.p95,
+  outboundAuthCount: realtimeMeasurementReport?.phaseMicros?.outboundAuth?.count,
+  outboundAuthP95Us: realtimeMeasurementReport?.phaseMicros?.outboundAuth?.p95,
   outboundAuthRefreshCount:
-    realtimeMeasurementReport.phaseMicros?.outboundAuthRefresh?.count,
+    realtimeMeasurementReport?.phaseMicros?.outboundAuthRefresh?.count,
   outboundAuthRefreshP95Us:
-    realtimeMeasurementReport.phaseMicros?.outboundAuthRefresh?.p95,
-  outboundQueueP95Us: realtimeMeasurementReport.phaseMicros?.outboundQueue?.p95,
-  localFanOutP95Us: realtimeMeasurementReport.phaseMicros?.localFanOut?.p95,
-  redisPublishP95Us: realtimeMeasurementReport.phaseMicros?.redisPublish?.p95,
+    realtimeMeasurementReport?.phaseMicros?.outboundAuthRefresh?.p95,
+  outboundQueueP95Us: realtimeMeasurementReport?.phaseMicros?.outboundQueue?.p95,
+  localFanOutP95Us: realtimeMeasurementReport?.phaseMicros?.localFanOut?.p95,
+  redisPublishP95Us: realtimeMeasurementReport?.phaseMicros?.redisPublish?.p95,
 }, null, 2));
 
 await Promise.all(connections.map((connection) => connection.close()));
