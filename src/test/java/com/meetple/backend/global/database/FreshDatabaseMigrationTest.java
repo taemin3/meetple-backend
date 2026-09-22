@@ -42,7 +42,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(21);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(22);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
