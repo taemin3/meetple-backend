@@ -116,8 +116,14 @@ public class MeetingController {
     @GetMapping("/{meetingId}")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
     @Operation(summary = "모임 상세 조회", description = "모임 상세 정보를 조회합니다.")
-    public ResponseEntity<ApiResponse<MeetingResponse>> getMeeting(@PathVariable Long meetingId) {
-        return ApiResponse.success(SuccessStatus.OK, meetingService.getMeeting(meetingId));
+    public ResponseEntity<ApiResponse<MeetingResponse>> getMeeting(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PathVariable Long meetingId
+    ) {
+        return ApiResponse.success(
+                SuccessStatus.OK,
+                meetingService.getMeeting(authenticatedMember.id(), meetingId)
+        );
     }
 
     @PatchMapping("/{meetingId}")

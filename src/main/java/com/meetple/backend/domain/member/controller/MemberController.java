@@ -11,6 +11,7 @@ import com.meetple.backend.domain.moderation.dto.response.BlockedMemberResponse;
 import com.meetple.backend.domain.moderation.service.ModerationService;
 import com.meetple.backend.global.config.OpenApiConfig;
 import com.meetple.backend.global.response.ApiResponse;
+import com.meetple.backend.global.response.PageResponse;
 import com.meetple.backend.global.response.SuccessStatus;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,6 +20,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -82,11 +86,13 @@ public class MemberController {
     @GetMapping("/me/blocks")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
     @Operation(summary = "내 차단 목록 조회")
-    public ResponseEntity<ApiResponse<java.util.List<BlockedMemberResponse>>> getBlockedMembers(
-            @AuthenticationPrincipal AuthenticatedMember authenticatedMember
+    public ResponseEntity<ApiResponse<PageResponse<BlockedMemberResponse>>> getBlockedMembers(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable
     ) {
         return ApiResponse.success(SuccessStatus.OK,
-                moderationService.getBlockedMembers(authenticatedMember.id()));
+                moderationService.getBlockedMembers(authenticatedMember.id(), pageable));
     }
 
     @PatchMapping("/me")

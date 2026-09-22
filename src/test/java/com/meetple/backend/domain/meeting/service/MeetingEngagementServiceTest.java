@@ -70,7 +70,8 @@ class MeetingEngagementServiceTest {
         MeetingParticipation approved = MeetingParticipation.apply(meeting, participant, null);
         approved.approve();
 
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdExcludingBlockedHost(3L, 10L))
+                .willReturn(Optional.of(meeting));
         given(participationRepository.findByMeetingIdAndMemberId(10L, 3L))
                 .willReturn(Optional.empty());
         given(participationRepository.findByMeetingIdAndStatus(10L, ParticipationStatus.APPROVED))
@@ -172,7 +173,7 @@ class MeetingEngagementServiceTest {
                 Sort.by(Sort.Order.desc("meeting.meetingDate"))
         );
 
-        given(participationRepository.findByMemberIdAndStatus(
+        given(participationRepository.findVisibleByMemberIdAndStatus(
                 2L,
                 ParticipationStatus.APPROVED,
                 repositoryRequest
@@ -183,7 +184,7 @@ class MeetingEngagementServiceTest {
         PageResponse<MeetingResponse> response = engagementService.getMyJoinedMeetings(2L, request);
 
         assertThat(response.content()).singleElement().extracting(MeetingResponse::id).isEqualTo(10L);
-        verify(participationRepository).findByMemberIdAndStatus(
+        verify(participationRepository).findVisibleByMemberIdAndStatus(
                 2L,
                 ParticipationStatus.APPROVED,
                 repositoryRequest

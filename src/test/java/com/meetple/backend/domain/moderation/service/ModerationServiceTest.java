@@ -4,8 +4,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.mock;
 
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
+import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
+import com.meetple.backend.domain.chat.entity.ChatMessage;
+import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
@@ -27,6 +31,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.data.domain.PageRequest;
 
 @ExtendWith(MockitoExtension.class)
 class ModerationServiceTest {
@@ -34,6 +39,7 @@ class ModerationServiceTest {
     @Mock MemberRepository memberRepository;
     @Mock MeetingRepository meetingRepository;
     @Mock ChatMessageRepository chatMessageRepository;
+    @Mock ChatAccessPolicy chatAccessPolicy;
     @Mock ReportRepository reportRepository;
     @Mock MemberBlockRepository memberBlockRepository;
     @Mock ImageService imageService;
@@ -43,7 +49,7 @@ class ModerationServiceTest {
     @BeforeEach
     void setUp() {
         service = new ModerationService(memberRepository, meetingRepository, chatMessageRepository,
-                reportRepository, memberBlockRepository, imageService);
+                chatAccessPolicy, reportRepository, memberBlockRepository, imageService);
     }
 
     @Test
@@ -108,6 +114,37 @@ class ModerationServiceTest {
         service.block(1L, 2L);
 
         verify(memberBlockRepository, times(1)).save(org.mockito.ArgumentMatchers.any(MemberBlock.class));
+    }
+
+    @Test
+    void verifiesChatRoomAccessBeforeCreatingMessageReport() {
+        Member reporter = member(1L, "reporter");
+        Member sender = member(2L, "sender");
+        ChatMessage message = mock(ChatMessage.class);
+        Meeting meeting = mock(Meeting.class);
+        given(memberRepository.findById(1L)).willReturn(Optional.of(reporter));
+        given(chatMessageRepository.findById(100L)).willReturn(Optional.of(message));
+        given(message.getMeeting()).willReturn(meeting);
+        given(meeting.getId()).willReturn(10L);
+        given(message.getSender()).willReturn(sender);
+        given(chatAccessPolicy.getAccessibleMeeting(1L, 10L)).willReturn(meeting);
+        given(reportRepository.save(org.mockito.ArgumentMatchers.any(Report.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        service.createReport(1L, new CreateReportRequest(
+                ReportTargetType.CHAT_MESSAGE, 100L, ReportReason.SPAM, null
+        ));
+
+        verify(chatAccessPolicy).getAccessibleMeeting(1L, 10L);
+        verify(reportRepository).save(org.mockito.ArgumentMatchers.any(Report.class));
+    }
+
+    @Test
+    void rejectsBlockedMemberPageLargerThanMaximum() {
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member(1L, "blocker")));
+
+        assertThatThrownBy(() -> service.getBlockedMembers(1L, PageRequest.of(0, 101)))
+                .isInstanceOf(BadRequestException.class);
     }
 
     private Member member(Long id, String nickname) {

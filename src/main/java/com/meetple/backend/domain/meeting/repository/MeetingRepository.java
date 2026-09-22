@@ -35,6 +35,12 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                     select m.*
                     from meetings m
                     where m.deleted_at is null
+                      and not exists (
+                        select 1
+                        from member_blocks mb
+                        where mb.blocker_member_id = :memberId
+                          and mb.blocked_member_id = m.host_id
+                      )
                       and (
                         m.host_id = :memberId
                         or exists (
@@ -57,6 +63,12 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                     select count(*)
                     from meetings m
                     where m.deleted_at is null
+                      and not exists (
+                        select 1
+                        from member_blocks mb
+                        where mb.blocker_member_id = :memberId
+                          and mb.blocked_member_id = m.host_id
+                      )
                       and (
                         m.host_id = :memberId
                         or exists (
@@ -240,6 +252,21 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
     @EntityGraph(attributePaths = {"host"})
     @Query("select m from Meeting m where m.id = :meetingId")
     Optional<Meeting> findByIdForReadLock(@Param("meetingId") Long meetingId);
+
+    @EntityGraph(attributePaths = {"host", "category"})
+    @Query("""
+            select meeting from Meeting meeting
+            where meeting.id = :meetingId
+              and not exists (
+                  select 1 from MemberBlock block
+                  where block.blocker.id = :memberId
+                    and block.blocked.id = meeting.host.id
+              )
+            """)
+    Optional<Meeting> findByIdExcludingBlockedHost(
+            @Param("memberId") Long memberId,
+            @Param("meetingId") Long meetingId
+    );
 
     @EntityGraph(attributePaths = {"host", "category"})
     @Query("select m from Meeting m where m.id in :meetingIds")

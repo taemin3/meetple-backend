@@ -10,6 +10,7 @@ import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
+import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import java.math.BigDecimal;
@@ -30,6 +31,9 @@ class ChatAccessPolicyTest {
 
     @Mock
     private MeetingParticipationRepository participationRepository;
+
+    @Mock
+    private MemberBlockRepository memberBlockRepository;
 
     @InjectMocks
     private ChatAccessPolicy accessPolicy;
@@ -81,6 +85,17 @@ class ChatAccessPolicyTest {
         assertThatThrownBy(() -> accessPolicy.getRealtimeAccessibleMeeting(1L, 10L))
                 .isInstanceOf(ForbiddenException.class)
                 .hasMessage("취소된 모임의 실시간 채팅에는 연결할 수 없습니다.");
+    }
+
+    @Test
+    void blockedHostMeetingIsHiddenFromChatAccess() {
+        Meeting meeting = meeting(10L, member(1L, "host"));
+        given(memberBlockRepository.existsByBlockerIdAndBlockedId(2L, 1L))
+                .willReturn(true);
+
+        assertThatThrownBy(() -> accessPolicy.ensureCanAccess(2L, meeting))
+                .isInstanceOf(com.meetple.backend.global.exception.NotFoundException.class)
+                .hasMessage("모임을 찾을 수 없습니다.");
     }
 
     private Meeting meeting(Long id, Member host) {

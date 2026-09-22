@@ -1,7 +1,10 @@
 package com.meetple.backend.domain.moderation.repository;
 
 import com.meetple.backend.domain.moderation.entity.MemberBlock;
+import java.util.Collection;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -14,8 +17,19 @@ public interface MemberBlockRepository extends JpaRepository<MemberBlock, Long> 
     void deleteByBlockerIdAndBlockedId(Long blockerId, Long blockedId);
 
     @EntityGraph(attributePaths = "blocked")
-    List<MemberBlock> findByBlockerIdOrderByCreatedAtDesc(Long blockerId);
+    Page<MemberBlock> findByBlockerId(Long blockerId, Pageable pageable);
 
     @Query("select block.blocked.id from MemberBlock block where block.blocker.id = :blockerId")
     List<Long> findBlockedMemberIds(@Param("blockerId") Long blockerId);
+
+    @Query("""
+            select block.blocker.id
+            from MemberBlock block
+            where block.blocked.id = :blockedMemberId
+              and block.blocker.id in :blockerIds
+            """)
+    List<Long> findBlockerIdsBlockingMember(
+            @Param("blockedMemberId") Long blockedMemberId,
+            @Param("blockerIds") Collection<Long> blockerIds
+    );
 }

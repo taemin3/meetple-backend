@@ -2,6 +2,8 @@ package com.meetple.backend.global.websocket;
 
 import com.meetple.backend.domain.auth.repository.AccessTokenValidationRepository;
 import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
+import com.meetple.backend.domain.chat.realtime.ChatMessageFanOutService;
+import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.global.exception.BaseException;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.security.AuthenticatedAccessToken;
@@ -50,6 +52,7 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
     private final AccessTokenValidationRepository accessTokenValidationRepository;
     private final ChatAccessPolicy chatAccessPolicy;
     private final LocalChatWebSocketSessionRegistry sessionRegistry;
+    private final MemberBlockRepository memberBlockRepository;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -257,6 +260,10 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
             return null;
         }
 
+        if (isBlockedSenderMessage(message, authorization.memberId())) {
+            return null;
+        }
+
         if (!authorization.requiresRevalidation()) {
             return message;
         }
@@ -279,6 +286,16 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
         }
         sessionRegistry.markRoomAuthorizationValidated(sessionId, roomId, now);
         return message;
+    }
+
+    private boolean isBlockedSenderMessage(Message<?> message, Long recipientMemberId) {
+        Object senderMemberId = message.getHeaders()
+                .get(ChatMessageFanOutService.SENDER_MEMBER_ID_HEADER);
+        return senderMemberId instanceof Number senderId
+                && memberBlockRepository.existsByBlockerIdAndBlockedId(
+                        recipientMemberId,
+                        senderId.longValue()
+                );
     }
 
     private Message<?> authorizeOutboundMessageIfNecessary(Message<?> message) {

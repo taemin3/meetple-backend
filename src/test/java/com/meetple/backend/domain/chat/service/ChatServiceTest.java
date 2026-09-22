@@ -283,7 +283,8 @@ class ChatServiceTest {
         Member host = member(1L, "host");
         Meeting meeting = meeting(10L, host);
         given(accessPolicy.getAccessibleMeeting(1L, 10L)).willReturn(meeting);
-        given(messageRepository.findByMeetingIdAndRoomSequenceLessThanOrderByRoomSequenceDesc(
+        given(messageRepository.findVisibleBeforeSequence(
+                1L,
                 10L,
                 5L,
                 PageRequest.of(0, 3)
@@ -343,7 +344,8 @@ class ChatServiceTest {
         Member host = member(1L, "host");
         Meeting meeting = meeting(10L, host);
         given(accessPolicy.getAccessibleMeeting(1L, 10L)).willReturn(meeting);
-        given(messageRepository.findByMeetingIdAndRoomSequenceGreaterThanOrderByRoomSequenceAsc(
+        given(messageRepository.findVisibleAfterSequence(
+                1L,
                 10L,
                 5L,
                 PageRequest.of(0, 3)

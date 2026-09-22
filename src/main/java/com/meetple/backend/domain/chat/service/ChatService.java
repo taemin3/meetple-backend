@@ -19,7 +19,6 @@ import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
-import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
 import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
 import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
@@ -31,7 +30,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -65,7 +63,6 @@ public class ChatService {
     private final OutboxEventPublisher outboxEventPublisher;
     private final ApplicationEventPublisher eventPublisher;
     private final ImageService imageService;
-    private final MemberBlockRepository memberBlockRepository;
 
     public PageResponse<ChatRoomSummaryResponse> getRooms(Long memberId, Pageable pageable) {
         validatePageable(pageable);
@@ -98,14 +95,14 @@ public class ChatService {
         accessPolicy.getAccessibleMeeting(memberId, meetingId);
         validateMessageCursor(beforeSequence, afterSequence, size);
 
-        Set<Long> blockedMemberIds = Set.copyOf(memberBlockRepository.findBlockedMemberIds(memberId));
         PageRequest limit = PageRequest.of(0, size + 1);
         List<ChatMessage> fetched;
         boolean ascending;
 
         if (afterSequence != null) {
             fetched = messageRepository
-                    .findByMeetingIdAndRoomSequenceGreaterThanOrderByRoomSequenceAsc(
+                    .findVisibleAfterSequence(
+                            memberId,
                             meetingId,
                             afterSequence,
                             limit
@@ -113,14 +110,19 @@ public class ChatService {
             ascending = true;
         } else if (beforeSequence != null) {
             fetched = messageRepository
-                    .findByMeetingIdAndRoomSequenceLessThanOrderByRoomSequenceDesc(
+                    .findVisibleBeforeSequence(
+                            memberId,
                             meetingId,
                             beforeSequence,
                             limit
                     );
             ascending = false;
         } else {
-            fetched = messageRepository.findByMeetingIdOrderByRoomSequenceDesc(meetingId, limit);
+            fetched = messageRepository.findVisibleByMeetingIdOrderByRoomSequenceDesc(
+                    memberId,
+                    meetingId,
+                    limit
+            );
             ascending = false;
         }
 
@@ -132,9 +134,7 @@ public class ChatService {
                 .map(ChatMessage::getRoomSequence)
                 .max(Long::compareTo)
                 .orElse(null);
-        List<ChatMessage> selected = new ArrayList<>(rawWindow.stream()
-                .filter(message -> !blockedMemberIds.contains(message.getSender().getId()))
-                .toList());
+        List<ChatMessage> selected = new ArrayList<>(rawWindow);
         if (!ascending) {
             Collections.reverse(selected);
         }

@@ -216,7 +216,7 @@ class MeetingControllerTest {
 
     @Test
     void getMeetingReturnsApiResponse() throws Exception {
-        given(meetingService.getMeeting(10L)).willReturn(meetingResponse());
+        given(meetingService.getMeeting(1L, 10L)).willReturn(meetingResponse());
 
         mockMvc.perform(get("/api/v1/meetings/10"))
                 .andExpect(status().isOk())

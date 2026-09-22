@@ -120,13 +120,15 @@ class ChatRepositoryTest {
         messageRepository.flush();
 
         var older = messageRepository
-                .findByMeetingIdAndRoomSequenceLessThanOrderByRoomSequenceDesc(
+                .findVisibleBeforeSequence(
+                        host.getId(),
                         meeting.getId(),
                         4L,
                         PageRequest.of(0, 2)
                 );
         var newer = messageRepository
-                .findByMeetingIdAndRoomSequenceGreaterThanOrderByRoomSequenceAsc(
+                .findVisibleAfterSequence(
+                        host.getId(),
                         meeting.getId(),
                         2L,
                         PageRequest.of(0, 2)
@@ -134,6 +136,39 @@ class ChatRepositoryTest {
 
         assertThat(older).extracting(ChatMessage::getRoomSequence).containsExactly(3L, 2L);
         assertThat(newer).extracting(ChatMessage::getRoomSequence).containsExactly(3L, 4L);
+    }
+
+    @Test
+    void cursorQueriesFillPageWithVisibleMessages() {
+        Member viewer = memberRepository.save(member("viewer"));
+        Member blockedSender = memberRepository.save(member("blocked"));
+        Category category = categoryRepository.save(Category.create("exercise"));
+        Meeting meeting = meetingRepository.save(meeting(viewer, category, "running"));
+        messageRepository.save(ChatMessage.create(
+                meeting, viewer, 1L, UUID.randomUUID(), "visible-1"
+        ));
+        messageRepository.save(ChatMessage.create(
+                meeting, blockedSender, 2L, UUID.randomUUID(), "hidden-2"
+        ));
+        messageRepository.save(ChatMessage.create(
+                meeting, blockedSender, 3L, UUID.randomUUID(), "hidden-3"
+        ));
+        messageRepository.save(ChatMessage.create(
+                meeting, viewer, 4L, UUID.randomUUID(), "visible-4"
+        ));
+        memberBlockRepository.save(MemberBlock.create(viewer, blockedSender));
+        messageRepository.flush();
+        memberBlockRepository.flush();
+
+        var result = messageRepository.findVisibleBeforeSequence(
+                viewer.getId(),
+                meeting.getId(),
+                5L,
+                PageRequest.of(0, 3)
+        );
+
+        assertThat(result).extracting(ChatMessage::getRoomSequence)
+                .containsExactly(4L, 1L);
     }
 
     @Test

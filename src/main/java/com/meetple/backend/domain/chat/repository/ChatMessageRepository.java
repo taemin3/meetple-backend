@@ -89,20 +89,55 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
             @Param("meetingId") Long meetingId
     );
 
-    @EntityGraph(attributePaths = "sender")
-    List<ChatMessage> findByMeetingIdOrderByRoomSequenceDesc(Long meetingId, Pageable pageable);
-
-    @EntityGraph(attributePaths = "sender")
-    List<ChatMessage> findByMeetingIdAndRoomSequenceLessThanOrderByRoomSequenceDesc(
-            Long meetingId,
-            Long roomSequence,
+    @Query(value = """
+            select cm.* from chat_messages cm
+            where cm.meeting_id = :meetingId
+              and not exists (
+                    select 1 from member_blocks mb
+                    where mb.blocker_member_id = :memberId
+                      and mb.blocked_member_id = cm.sender_id
+              )
+            order by cm.room_sequence desc
+            """, nativeQuery = true)
+    List<ChatMessage> findVisibleByMeetingIdOrderByRoomSequenceDesc(
+            @Param("memberId") Long memberId,
+            @Param("meetingId") Long meetingId,
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = "sender")
-    List<ChatMessage> findByMeetingIdAndRoomSequenceGreaterThanOrderByRoomSequenceAsc(
-            Long meetingId,
-            Long roomSequence,
+    @Query(value = """
+            select cm.* from chat_messages cm
+            where cm.meeting_id = :meetingId
+              and cm.room_sequence < :roomSequence
+              and not exists (
+                    select 1 from member_blocks mb
+                    where mb.blocker_member_id = :memberId
+                      and mb.blocked_member_id = cm.sender_id
+              )
+            order by cm.room_sequence desc
+            """, nativeQuery = true)
+    List<ChatMessage> findVisibleBeforeSequence(
+            @Param("memberId") Long memberId,
+            @Param("meetingId") Long meetingId,
+            @Param("roomSequence") Long roomSequence,
+            Pageable pageable
+    );
+
+    @Query(value = """
+            select cm.* from chat_messages cm
+            where cm.meeting_id = :meetingId
+              and cm.room_sequence > :roomSequence
+              and not exists (
+                    select 1 from member_blocks mb
+                    where mb.blocker_member_id = :memberId
+                      and mb.blocked_member_id = cm.sender_id
+              )
+            order by cm.room_sequence asc
+            """, nativeQuery = true)
+    List<ChatMessage> findVisibleAfterSequence(
+            @Param("memberId") Long memberId,
+            @Param("meetingId") Long meetingId,
+            @Param("roomSequence") Long roomSequence,
             Pageable pageable
     );
 

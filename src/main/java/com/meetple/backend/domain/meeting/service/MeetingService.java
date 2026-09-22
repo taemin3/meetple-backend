@@ -210,8 +210,10 @@ public class MeetingService {
         return PageResponse.from(toResponsePage(loadSearchMeetings(meetingIds)));
     }
 
-    public MeetingResponse getMeeting(Long meetingId) {
-        return toResponse(getMeetingEntity(meetingId));
+    public MeetingResponse getMeeting(Long memberId, Long meetingId) {
+        Meeting meeting = meetingRepository.findByIdExcludingBlockedHost(memberId, meetingId)
+                .orElseThrow(() -> new NotFoundException(MEETING_NOT_FOUND_MESSAGE));
+        return toResponse(meeting);
     }
 
     @Transactional
