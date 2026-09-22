@@ -13,6 +13,8 @@ import com.meetple.backend.domain.meeting.repository.MeetingParticipationReposit
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.moderation.entity.MemberBlock;
+import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -45,6 +47,9 @@ class ChatRepositoryTest {
 
     @Autowired
     private CategoryRepository categoryRepository;
+
+    @Autowired
+    private MemberBlockRepository memberBlockRepository;
 
     @Test
     void roomListIncludesHostedAndApprovedMeetingsOnly() {
@@ -166,6 +171,38 @@ class ChatRepositoryTest {
             assertThat(unreadCount.getMeetingId()).isEqualTo(firstMeeting.getId());
             assertThat(unreadCount.getUnreadCount()).isEqualTo(1L);
         });
+    }
+
+    @Test
+    void summaryQueriesHideBlockedSendersAndUseLatestVisibleMessage() {
+        Member viewer = memberRepository.save(member("viewer"));
+        Member visibleSender = memberRepository.save(member("visible"));
+        Member blockedSender = memberRepository.save(member("blocked"));
+        Category category = categoryRepository.save(Category.create("exercise"));
+        Meeting meeting = meetingRepository.save(meeting(viewer, category, "running"));
+        messageRepository.save(ChatMessage.create(
+                meeting, visibleSender, 1L, UUID.randomUUID(), "visible"
+        ));
+        messageRepository.save(ChatMessage.create(
+                meeting, blockedSender, 2L, UUID.randomUUID(), "hidden"
+        ));
+        memberBlockRepository.save(MemberBlock.create(viewer, blockedSender));
+        messageRepository.flush();
+        memberBlockRepository.flush();
+
+        var latest = messageRepository.findLatestVisibleByMeetingIds(
+                viewer.getId(), List.of(meeting.getId())
+        );
+        var unread = messageRepository.countUnreadByMeetingIds(
+                viewer.getId(), List.of(meeting.getId())
+        );
+
+        assertThat(latest).singleElement()
+                .extracting(ChatMessage::getRoomSequence)
+                .isEqualTo(1L);
+        assertThat(unread).singleElement()
+                .extracting(ChatUnreadCountProjection::getUnreadCount)
+                .isEqualTo(1L);
     }
 
     @Test

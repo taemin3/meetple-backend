@@ -23,6 +23,7 @@ import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
 import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
 import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
@@ -76,6 +77,9 @@ class ChatServiceTest {
 
     @Mock
     private ImageService imageService;
+
+    @Mock
+    private MemberBlockRepository memberBlockRepository;
 
     @InjectMocks
     private ChatService chatService;
@@ -259,7 +263,7 @@ class ChatServiceTest {
                 "latest"
         );
         given(accessPolicy.getAccessibleMeeting(1L, 10L)).willReturn(meeting);
-        given(messageRepository.findTopByMeetingIdOrderByRoomSequenceDesc(10L))
+        given(messageRepository.findLatestVisibleByMeetingId(1L, 10L))
                 .willReturn(Optional.of(latest));
         given(messageRepository.countUnreadByMeetingIds(1L, List.of(10L)))
                 .willReturn(List.of(unreadCount(10L, 3L)));
@@ -317,7 +321,7 @@ class ChatServiceTest {
                 .willReturn(new PageImpl<>(List.of(firstMeeting, secondMeeting), pageable, 2));
         given(meetingRepository.findAllWithHostAndCategoryByIdIn(List.of(10L, 11L)))
                 .willReturn(List.of(firstMeeting, secondMeeting));
-        given(messageRepository.findLatestByMeetingIds(List.of(10L, 11L)))
+        given(messageRepository.findLatestVisibleByMeetingIds(1L, List.of(10L, 11L)))
                 .willReturn(List.of(latestMessage));
         given(messageRepository.countUnreadByMeetingIds(1L, List.of(10L, 11L)))
                 .willReturn(List.of(unreadCount));
@@ -329,7 +333,7 @@ class ChatServiceTest {
         assertThat(response.content().get(0).unreadCount()).isEqualTo(2L);
         assertThat(response.content().get(1).lastMessage()).isNull();
         assertThat(response.content().get(1).unreadCount()).isZero();
-        verify(messageRepository).findLatestByMeetingIds(List.of(10L, 11L));
+        verify(messageRepository).findLatestVisibleByMeetingIds(1L, List.of(10L, 11L));
         verify(messageRepository).countUnreadByMeetingIds(1L, List.of(10L, 11L));
         verify(meetingRepository).findAllWithHostAndCategoryByIdIn(List.of(10L, 11L));
     }

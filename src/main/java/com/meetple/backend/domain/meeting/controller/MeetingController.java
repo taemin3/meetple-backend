@@ -60,10 +60,12 @@ public class MeetingController {
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
     @Operation(summary = "모임 목록 조회", description = "상태 조건을 선택적으로 적용해 모임 목록을 조회합니다.")
     public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> getMeetings(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @RequestParam(required = false) String status,
             @PageableDefault(size = 20, sort = "meetingDate", direction = Sort.Direction.ASC) Pageable pageable
     ) {
-        return ApiResponse.success(SuccessStatus.OK, meetingService.getMeetings(status, pageable));
+        return ApiResponse.success(SuccessStatus.OK,
+                meetingService.getMeetings(authenticatedMember.id(), status, pageable));
     }
 
     @GetMapping("/summaries")
@@ -73,10 +75,12 @@ public class MeetingController {
             description = "목록 화면에 필요한 요약 정보와 대표 이미지만 조회합니다."
     )
     public ResponseEntity<ApiResponse<PageResponse<MeetingSummaryResponse>>> getMeetingSummaries(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @RequestParam(required = false) String status,
             @PageableDefault(size = 20, sort = "meetingDate", direction = Sort.Direction.ASC) Pageable pageable
     ) {
-        return ApiResponse.success(SuccessStatus.OK, meetingService.getMeetingSummaries(status, pageable));
+        return ApiResponse.success(SuccessStatus.OK,
+                meetingService.getMeetingSummaries(authenticatedMember.id(), status, pageable));
     }
 
     @GetMapping("/search")
@@ -86,10 +90,12 @@ public class MeetingController {
             description = "전체 모집 중인 모임을 검색하고 요청 위치에서 가까운 순으로 조회합니다."
     )
     public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> searchMeetings(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @Valid @ModelAttribute MeetingSearchRequest request,
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        return ApiResponse.success(SuccessStatus.OK, meetingService.searchMeetings(request, pageable));
+        return ApiResponse.success(SuccessStatus.OK,
+                meetingService.searchMeetings(authenticatedMember.id(), request, pageable));
     }
 
     @GetMapping("/nearby")
@@ -99,10 +105,12 @@ public class MeetingController {
             description = "요청한 반경 안의 모집 중인 모임을 전체 개수 집계 없이 Slice 방식으로 조회합니다."
     )
     public ResponseEntity<ApiResponse<SliceResponse<MeetingResponse>>> getNearbyMeetings(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @Valid @ModelAttribute NearbyMeetingSearchRequest request,
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        return ApiResponse.success(SuccessStatus.OK, meetingService.getNearbyMeetings(request, pageable));
+        return ApiResponse.success(SuccessStatus.OK,
+                meetingService.getNearbyMeetings(authenticatedMember.id(), request, pageable));
     }
 
     @GetMapping("/{meetingId}")

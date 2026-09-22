@@ -19,6 +19,7 @@ import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
 import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
 import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
@@ -30,6 +31,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -63,13 +65,14 @@ public class ChatService {
     private final OutboxEventPublisher outboxEventPublisher;
     private final ApplicationEventPublisher eventPublisher;
     private final ImageService imageService;
+    private final MemberBlockRepository memberBlockRepository;
 
     public PageResponse<ChatRoomSummaryResponse> getRooms(Long memberId, Pageable pageable) {
         validatePageable(pageable);
         Page<Meeting> meetings = meetingRepository.findChatAccessibleMeetings(memberId, pageable);
         List<Long> meetingIds = meetings.stream().map(Meeting::getId).toList();
         Map<Long, Meeting> meetingsWithCategories = getMeetingsWithCategories(meetingIds);
-        Map<Long, ChatMessageResponse> lastMessages = getLastMessages(meetingIds);
+        Map<Long, ChatMessageResponse> lastMessages = getLastMessages(memberId, meetingIds);
         Map<Long, Long> unreadCounts = getUnreadCounts(memberId, meetingIds);
 
         return PageResponse.from(meetings.map(meeting -> {
@@ -95,6 +98,7 @@ public class ChatService {
         accessPolicy.getAccessibleMeeting(memberId, meetingId);
         validateMessageCursor(beforeSequence, afterSequence, size);
 
+        Set<Long> blockedMemberIds = Set.copyOf(memberBlockRepository.findBlockedMemberIds(memberId));
         PageRequest limit = PageRequest.of(0, size + 1);
         List<ChatMessage> fetched;
         boolean ascending;
@@ -121,23 +125,34 @@ public class ChatService {
         }
 
         boolean hasMore = fetched.size() > size;
-        List<ChatMessage> selected = new ArrayList<>(
+        List<ChatMessage> rawWindow = new ArrayList<>(
                 fetched.subList(0, Math.min(size, fetched.size()))
         );
+        Long latestFetchedSequence = rawWindow.stream()
+                .map(ChatMessage::getRoomSequence)
+                .max(Long::compareTo)
+                .orElse(null);
+        List<ChatMessage> selected = new ArrayList<>(rawWindow.stream()
+                .filter(message -> !blockedMemberIds.contains(message.getSender().getId()))
+                .toList());
         if (!ascending) {
             Collections.reverse(selected);
         }
 
-        return ChatMessagePageResponse.from(
-                selected.stream().map(this::toMessageResponse).toList(),
-                hasMore
+        List<ChatMessageResponse> responses = selected.stream().map(this::toMessageResponse).toList();
+        Long oldestVisibleSequence = responses.isEmpty() ? null : responses.getFirst().sequence();
+        return new ChatMessagePageResponse(
+                responses,
+                hasMore,
+                oldestVisibleSequence,
+                latestFetchedSequence
         );
     }
 
     public ChatRoomSummaryResponse getRoom(Long memberId, Long meetingId) {
         Meeting meeting = accessPolicy.getAccessibleMeeting(memberId, meetingId);
         ChatMessageResponse lastMessage = messageRepository
-                .findTopByMeetingIdOrderByRoomSequenceDesc(meetingId)
+                .findLatestVisibleByMeetingId(memberId, meetingId)
                 .map(this::toMessageResponse)
                 .orElse(null);
         long unreadCount = getUnreadCounts(memberId, List.of(meetingId))
@@ -325,11 +340,11 @@ public class ChatService {
         return readStateRepository.save(readState);
     }
 
-    private Map<Long, ChatMessageResponse> getLastMessages(List<Long> meetingIds) {
+    private Map<Long, ChatMessageResponse> getLastMessages(Long memberId, List<Long> meetingIds) {
         if (meetingIds.isEmpty()) {
             return Map.of();
         }
-        return messageRepository.findLatestByMeetingIds(meetingIds).stream()
+        return messageRepository.findLatestVisibleByMeetingIds(memberId, meetingIds).stream()
                 .map(this::toMessageResponse)
                 .collect(Collectors.toMap(ChatMessageResponse::roomId, Function.identity()));
     }

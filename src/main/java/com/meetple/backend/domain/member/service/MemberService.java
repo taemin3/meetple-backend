@@ -9,6 +9,7 @@ import com.meetple.backend.domain.meeting.repository.MeetingBookmarkRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.dto.response.MemberProfileResponse;
+import com.meetple.backend.domain.member.dto.response.PublicMemberProfileResponse;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.global.exception.NotFoundException;
@@ -41,6 +42,16 @@ public class MemberService {
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
 
         return toProfileResponse(member, memberId);
+    }
+
+    @Transactional(readOnly = true)
+    public PublicMemberProfileResponse getPublicProfile(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
+        return PublicMemberProfileResponse.from(
+                member,
+                imageService.createFileUrl(member.getProfileImageObjectKey())
+        );
     }
 
     @Transactional

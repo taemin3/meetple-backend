@@ -2,6 +2,7 @@ package com.meetple.backend.domain.meeting.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -91,7 +92,7 @@ class MeetingControllerTest {
 
     @Test
     void getMeetingsReturnsPagedApiResponse() throws Exception {
-        given(meetingService.getMeetings(eq("RECRUITING"), any()))
+        given(meetingService.getMeetings(eq(1L), eq("RECRUITING"), any()))
                 .willReturn(PageResponse.from(new org.springframework.data.domain.PageImpl<>(
                         List.of(meetingResponse()),
                         PageRequest.of(0, 20),
@@ -116,7 +117,7 @@ class MeetingControllerTest {
 
     @Test
     void getMeetingSummariesReturnsPagedSummaryWithoutDetailFields() throws Exception {
-        given(meetingService.getMeetingSummaries(eq("RECRUITING"), any()))
+        given(meetingService.getMeetingSummaries(eq(1L), eq("RECRUITING"), any()))
                 .willReturn(PageResponse.from(new org.springframework.data.domain.PageImpl<>(
                         List.of(meetingSummaryResponse()),
                         PageRequest.of(0, 20),
@@ -137,7 +138,7 @@ class MeetingControllerTest {
 
     @Test
     void getMeetingsReturnsBadRequestForInvalidStatus() throws Exception {
-        given(meetingService.getMeetings(eq("OPEN"), any()))
+        given(meetingService.getMeetings(eq(1L), eq("OPEN"), any()))
                 .willThrow(new BadRequestException("지원하지 않는 모임 상태입니다."));
 
         mockMvc.perform(get("/api/v1/meetings")
@@ -155,7 +156,7 @@ class MeetingControllerTest {
                 37.5219,
                 126.9245
         );
-        given(meetingService.searchMeetings(eq(request), eq(PageRequest.of(0, 20))))
+        given(meetingService.searchMeetings(eq(1L), eq(request), eq(PageRequest.of(0, 20))))
                 .willReturn(PageResponse.from(new org.springframework.data.domain.PageImpl<>(
                         List.of(meetingResponse()),
                         PageRequest.of(0, 20),
@@ -171,7 +172,7 @@ class MeetingControllerTest {
                 .andExpect(jsonPath("$.data.content[0].id").value(10))
                 .andExpect(jsonPath("$.data.totalElements").value(1));
 
-        verify(meetingService).searchMeetings(request, PageRequest.of(0, 20));
+        verify(meetingService).searchMeetings(1L, request, PageRequest.of(0, 20));
     }
 
     @Test
@@ -183,12 +184,12 @@ class MeetingControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
 
-        verify(meetingService, never()).searchMeetings(any(), any());
+        verify(meetingService, never()).searchMeetings(anyLong(), any(), any());
     }
 
     @Test
     void getNearbyMeetingsReturnsSliceApiResponseWithoutTotalCount() throws Exception {
-        given(meetingService.getNearbyMeetings(any(), eq(PageRequest.of(0, 20))))
+        given(meetingService.getNearbyMeetings(eq(1L), any(), eq(PageRequest.of(0, 20))))
                 .willReturn(SliceResponse.from(new org.springframework.data.domain.SliceImpl<>(
                         List.of(meetingResponse()),
                         PageRequest.of(0, 20),
