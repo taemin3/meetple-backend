@@ -42,7 +42,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(23);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(24);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
@@ -64,12 +64,13 @@ class FreshDatabaseMigrationTest {
                     "legal_documents",
                     "member_legal_records",
                     "debezium_heartbeat",
-                    "reports"
+                    "reports",
+                    "member_blocks"
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
                     "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-                    "20", "21", "22"
+                    "20", "21", "22", "23"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder(
                     "운동", "스터디", "취미", "친목", "여행", "맛집", "비즈니스", "반려동물"
@@ -107,6 +108,8 @@ class FreshDatabaseMigrationTest {
                     .contains("uk_meeting_participations_meeting_member");
             assertThat(uniqueConstraints(connection, "meeting_bookmarks"))
                     .contains("uk_meeting_bookmarks_meeting_member");
+            assertThat(uniqueConstraints(connection, "member_blocks"))
+                    .contains("uk_member_blocks_relationship");
             assertThat(uniqueConstraints(connection, "chat_messages"))
                     .contains("uk_chat_messages_room_sequence", "uk_chat_messages_client_message");
         }

@@ -13,6 +13,8 @@ import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.moderation.entity.MemberBlock;
+import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
@@ -53,6 +55,9 @@ class MeetingRepositoryTest {
     private MeetingImageRepository meetingImageRepository;
 
     @Autowired
+    private MemberBlockRepository memberBlockRepository;
+
+    @Autowired
     private EntityManager entityManager;
 
     @Test
@@ -75,6 +80,65 @@ class MeetingRepositoryTest {
         assertThat(meeting.getCreatedAt()).isNotNull();
         assertThat(meeting.getUpdatedAt()).isNotNull();
         assertThat(meetingRepository.findByHostId(host.getId())).hasSize(1);
+    }
+
+    @Test
+    void blockedHostsAreHiddenFromMeetingsButRemainInExistingChatRooms() {
+        Member viewer = memberRepository.save(Member.createUser(
+                "viewer@meetple.com", "encoded-password", "viewer", "서울"
+        ));
+        Member blockedHost = memberRepository.save(Member.createUser(
+                "blocked@meetple.com", "encoded-password", "blocked", "서울"
+        ));
+        Category category = categoryRepository.save(Category.create("운동"));
+        Meeting meeting = meetingRepository.save(createMeeting(blockedHost, category));
+        bookmarkRepository.save(MeetingBookmark.create(meeting, viewer));
+        MeetingParticipation participation = MeetingParticipation.apply(meeting, viewer, null);
+        participation.approve();
+        participationRepository.save(participation);
+        memberBlockRepository.save(MemberBlock.create(viewer, blockedHost));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(meetingRepository.findByIdExcludingBlockedHost(
+                viewer.getId(), meeting.getId()
+        )).isEmpty();
+        assertThat(bookmarkRepository.findByMemberId(
+                viewer.getId(), PageRequest.of(0, 20)
+        )).isEmpty();
+        assertThat(participationRepository.findVisibleByMemberIdAndStatus(
+                viewer.getId(), ParticipationStatus.APPROVED, PageRequest.of(0, 20)
+        )).isEmpty();
+        assertThat(bookmarkRepository.countByMemberId(viewer.getId())).isZero();
+        assertThat(participationRepository.countByMemberIdAndStatusAndMeetingStatusIn(
+                viewer.getId(),
+                ParticipationStatus.APPROVED,
+                List.of(MeetingStatus.RECRUITING, MeetingStatus.FULL)
+        )).isZero();
+        assertThat(meetingRepository.findChatAccessibleMeetings(
+                viewer.getId(), PageRequest.of(0, 20)
+        ).getContent()).extracting(Meeting::getId).containsExactly(meeting.getId());
+    }
+
+    @Test
+    void deletesAllMemberBlocksWhereMemberIsEitherSide() {
+        Member member = memberRepository.save(Member.createUser(
+                "member@meetple.com", "encoded-password", "member", "서울"
+        ));
+        Member firstOther = memberRepository.save(Member.createUser(
+                "first@meetple.com", "encoded-password", "first", "서울"
+        ));
+        Member secondOther = memberRepository.save(Member.createUser(
+                "second@meetple.com", "encoded-password", "second", "서울"
+        ));
+        memberBlockRepository.save(MemberBlock.create(member, firstOther));
+        memberBlockRepository.save(MemberBlock.create(secondOther, member));
+        entityManager.flush();
+
+        assertThat(memberBlockRepository.deleteAllByMemberId(member.getId())).isEqualTo(2);
+        entityManager.flush();
+
+        assertThat(memberBlockRepository.findAll()).isEmpty();
     }
 
     @Test

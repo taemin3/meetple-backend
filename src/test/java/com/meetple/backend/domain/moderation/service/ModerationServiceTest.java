@@ -2,6 +2,7 @@ package com.meetple.backend.domain.moderation.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
 
@@ -9,13 +10,16 @@ import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
 import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
 import com.meetple.backend.domain.chat.entity.ChatMessage;
 import com.meetple.backend.domain.meeting.entity.Meeting;
+import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.moderation.dto.request.CreateReportRequest;
+import com.meetple.backend.domain.moderation.entity.MemberBlock;
 import com.meetple.backend.domain.moderation.entity.Report;
 import com.meetple.backend.domain.moderation.entity.ReportReason;
 import com.meetple.backend.domain.moderation.entity.ReportTargetType;
+import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.domain.moderation.repository.ReportRepository;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.NotFoundException;
@@ -27,6 +31,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 @ExtendWith(MockitoExtension.class)
 class ModerationServiceTest {
@@ -36,13 +42,15 @@ class ModerationServiceTest {
     @Mock ChatMessageRepository chatMessageRepository;
     @Mock ChatAccessPolicy chatAccessPolicy;
     @Mock ReportRepository reportRepository;
+    @Mock MemberBlockRepository memberBlockRepository;
+    @Mock ImageService imageService;
 
     private ModerationService service;
 
     @BeforeEach
     void setUp() {
         service = new ModerationService(memberRepository, meetingRepository, chatMessageRepository,
-                chatAccessPolicy, reportRepository);
+                chatAccessPolicy, reportRepository, memberBlockRepository, imageService);
     }
 
     @Test
@@ -95,6 +103,21 @@ class ModerationServiceTest {
     }
 
     @Test
+    void repeatedBlockRequestStoresRelationshipOnce() {
+        Member blocker = member(1L, "blocker");
+        Member blocked = member(2L, "blocked");
+        given(memberRepository.findByIdForUpdate(1L)).willReturn(Optional.of(blocker));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(blocked));
+        given(memberBlockRepository.existsByBlockerIdAndBlockedId(1L, 2L))
+                .willReturn(false, true);
+
+        service.block(1L, 2L);
+        service.block(1L, 2L);
+
+        verify(memberBlockRepository, times(1)).save(org.mockito.ArgumentMatchers.any(MemberBlock.class));
+    }
+
+    @Test
     void verifiesChatRoomAccessBeforeCreatingMessageReport() {
         Member reporter = member(1L, "reporter");
         Member sender = member(2L, "sender");
@@ -115,6 +138,26 @@ class ModerationServiceTest {
 
         verify(chatAccessPolicy).getAccessibleMeeting(1L, 10L);
         verify(reportRepository).save(org.mockito.ArgumentMatchers.any(Report.class));
+    }
+
+    @Test
+    void rejectsBlockedMemberPageLargerThanMaximum() {
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member(1L, "blocker")));
+
+        assertThatThrownBy(() -> service.getBlockedMembers(1L, PageRequest.of(0, 101)))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void rejectsUnsupportedBlockedMemberSortProperty() {
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member(1L, "blocker")));
+
+        assertThatThrownBy(() -> service.getBlockedMembers(
+                1L,
+                PageRequest.of(0, 20, Sort.by("nickname"))
+        ))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("지원하지 않는 정렬 기준입니다.");
     }
 
     private Member member(Long id, String nickname) {

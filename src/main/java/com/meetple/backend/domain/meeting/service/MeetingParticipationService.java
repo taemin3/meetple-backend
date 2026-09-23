@@ -71,7 +71,7 @@ public class MeetingParticipationService {
             Long meetingId,
             CreateMeetingParticipationRequest request
     ) {
-        Meeting meeting = getMeeting(meetingId);
+        Meeting meeting = getVisibleMeeting(memberId, meetingId);
         Member member = getMember(memberId);
         ensureApplicantCanApply(meeting, memberId);
 
@@ -239,6 +239,11 @@ public class MeetingParticipationService {
 
     private Meeting getMeeting(Long meetingId) {
         return meetingRepository.findById(meetingId)
+                .orElseThrow(() -> new NotFoundException(MEETING_NOT_FOUND_MESSAGE));
+    }
+
+    private Meeting getVisibleMeeting(Long memberId, Long meetingId) {
+        return meetingRepository.findByIdExcludingBlockedHost(memberId, meetingId)
                 .orElseThrow(() -> new NotFoundException(MEETING_NOT_FOUND_MESSAGE));
     }
 

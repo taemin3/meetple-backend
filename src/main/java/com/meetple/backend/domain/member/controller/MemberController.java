@@ -7,8 +7,11 @@ import com.meetple.backend.domain.member.dto.response.MemberProfileResponse;
 import com.meetple.backend.domain.member.dto.response.PublicMemberProfileResponse;
 import com.meetple.backend.domain.member.service.MemberService;
 import com.meetple.backend.domain.member.service.AccountDeletionService;
+import com.meetple.backend.domain.moderation.dto.response.BlockedMemberResponse;
+import com.meetple.backend.domain.moderation.service.ModerationService;
 import com.meetple.backend.global.config.OpenApiConfig;
 import com.meetple.backend.global.response.ApiResponse;
+import com.meetple.backend.global.response.PageResponse;
 import com.meetple.backend.global.response.SuccessStatus;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,11 +20,15 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -34,6 +41,7 @@ public class MemberController {
 
     private final MemberService memberService;
     private final AccountDeletionService accountDeletionService;
+    private final ModerationService moderationService;
 
     @GetMapping("/me")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
@@ -51,6 +59,40 @@ public class MemberController {
             @PathVariable Long memberId
     ) {
         return ApiResponse.success(SuccessStatus.OK, memberService.getPublicProfile(memberId));
+    }
+
+    @PostMapping("/{memberId}/block")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(summary = "사용자 차단")
+    public ResponseEntity<ApiResponse<Void>> blockMember(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PathVariable Long memberId
+    ) {
+        moderationService.block(authenticatedMember.id(), memberId);
+        return ApiResponse.successOnly(SuccessStatus.OK);
+    }
+
+    @DeleteMapping("/{memberId}/block")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(summary = "사용자 차단 해제")
+    public ResponseEntity<ApiResponse<Void>> unblockMember(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PathVariable Long memberId
+    ) {
+        moderationService.unblock(authenticatedMember.id(), memberId);
+        return ApiResponse.successOnly(SuccessStatus.OK);
+    }
+
+    @GetMapping("/me/blocks")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(summary = "내 차단 목록 조회")
+    public ResponseEntity<ApiResponse<PageResponse<BlockedMemberResponse>>> getBlockedMembers(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable
+    ) {
+        return ApiResponse.success(SuccessStatus.OK,
+                moderationService.getBlockedMembers(authenticatedMember.id(), pageable));
     }
 
     @PatchMapping("/me")

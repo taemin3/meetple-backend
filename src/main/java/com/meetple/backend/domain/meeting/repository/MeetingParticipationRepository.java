@@ -82,6 +82,37 @@ public interface MeetingParticipationRepository extends JpaRepository<MeetingPar
     );
 
     @EntityGraph(attributePaths = {"meeting", "meeting.host", "meeting.category", "member"})
+    @Query(
+            value = """
+                    select participation
+                    from MeetingParticipation participation
+                    where participation.member.id = :memberId
+                      and participation.status = :status
+                      and not exists (
+                          select 1 from MemberBlock block
+                          where block.blocker.id = :memberId
+                            and block.blocked.id = participation.meeting.host.id
+                      )
+                    """,
+            countQuery = """
+                    select count(participation)
+                    from MeetingParticipation participation
+                    where participation.member.id = :memberId
+                      and participation.status = :status
+                      and not exists (
+                          select 1 from MemberBlock block
+                          where block.blocker.id = :memberId
+                            and block.blocked.id = participation.meeting.host.id
+                      )
+                    """
+    )
+    Page<MeetingParticipation> findVisibleByMemberIdAndStatus(
+            @Param("memberId") Long memberId,
+            @Param("status") ParticipationStatus status,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"meeting", "meeting.host", "meeting.category", "member"})
     Page<MeetingParticipation> findByMemberIdAndStatusAndMeetingStatusIn(
             Long memberId,
             ParticipationStatus status,
@@ -89,10 +120,22 @@ public interface MeetingParticipationRepository extends JpaRepository<MeetingPar
             Pageable pageable
     );
 
+    @Query("""
+            select count(participation)
+            from MeetingParticipation participation
+            where participation.member.id = :memberId
+              and participation.status = :status
+              and participation.meeting.status in :meetingStatuses
+              and not exists (
+                  select 1 from MemberBlock block
+                  where block.blocker.id = :memberId
+                    and block.blocked.id = participation.meeting.host.id
+              )
+            """)
     long countByMemberIdAndStatusAndMeetingStatusIn(
-            Long memberId,
-            ParticipationStatus status,
-            List<MeetingStatus> meetingStatuses
+            @Param("memberId") Long memberId,
+            @Param("status") ParticipationStatus status,
+            @Param("meetingStatuses") List<MeetingStatus> meetingStatuses
     );
 
     @EntityGraph(attributePaths = "member")

@@ -21,6 +21,7 @@ import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.global.exception.BadRequestException;
+import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -70,7 +71,7 @@ class MeetingEngagementServiceTest {
         MeetingParticipation approved = MeetingParticipation.apply(meeting, participant, null);
         approved.approve();
 
-        given(meetingRepository.findById(10L))
+        given(meetingRepository.findByIdExcludingBlockedHost(3L, 10L))
                 .willReturn(Optional.of(meeting));
         given(participationRepository.findByMeetingIdAndMemberId(10L, 3L))
                 .willReturn(Optional.empty());
@@ -86,6 +87,16 @@ class MeetingEngagementServiceTest {
         assertThat(response.members().get(1).nickname()).isEqualTo("member");
         assertThat(response.members().get(1).introduction()).isEqualTo("러닝을 좋아해요.");
         assertThat(response.members().get(1).host()).isFalse();
+    }
+
+    @Test
+    void addBookmarkRejectsMeetingHostedByBlockedMember() {
+        given(meetingRepository.findByIdExcludingBlockedHost(2L, 10L))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> engagementService.addBookmark(2L, 10L))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("Meeting not found.");
     }
 
     @Test
@@ -173,7 +184,7 @@ class MeetingEngagementServiceTest {
                 Sort.by(Sort.Order.desc("meeting.meetingDate"))
         );
 
-        given(participationRepository.findByMemberIdAndStatus(
+        given(participationRepository.findVisibleByMemberIdAndStatus(
                 2L,
                 ParticipationStatus.APPROVED,
                 repositoryRequest
@@ -184,7 +195,7 @@ class MeetingEngagementServiceTest {
         PageResponse<MeetingResponse> response = engagementService.getMyJoinedMeetings(2L, request);
 
         assertThat(response.content()).singleElement().extracting(MeetingResponse::id).isEqualTo(10L);
-        verify(participationRepository).findByMemberIdAndStatus(
+        verify(participationRepository).findVisibleByMemberIdAndStatus(
                 2L,
                 ParticipationStatus.APPROVED,
                 repositoryRequest

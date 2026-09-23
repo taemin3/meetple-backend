@@ -63,7 +63,7 @@ public class MeetingEngagementService {
     private final ImageService imageService;
 
     public MeetingEngagementResponse getEngagement(Long memberId, Long meetingId) {
-        Meeting meeting = getMeeting(meetingId);
+        Meeting meeting = getVisibleMeeting(memberId, meetingId);
         boolean host = meeting.isHostedBy(memberId);
         MeetingParticipationResponse participation = participationRepository
                 .findByMeetingIdAndMemberId(meetingId, memberId)
@@ -93,7 +93,7 @@ public class MeetingEngagementService {
 
     @Transactional
     public void addBookmark(Long memberId, Long meetingId) {
-        Meeting meeting = getMeeting(meetingId);
+        Meeting meeting = getVisibleMeeting(memberId, meetingId);
         if (meeting.isHostedBy(memberId)) {
             throw new BadRequestException("Host cannot bookmark own meeting.");
         }
@@ -140,7 +140,7 @@ public class MeetingEngagementService {
     }
 
     public PageResponse<MeetingResponse> getMyJoinedMeetings(Long memberId, Pageable pageable) {
-        Page<MeetingParticipation> participations = participationRepository.findByMemberIdAndStatus(
+        Page<MeetingParticipation> participations = participationRepository.findVisibleByMemberIdAndStatus(
                 memberId,
                 ParticipationStatus.APPROVED,
                 toJoinedMeetingPageable(pageable)
@@ -157,8 +157,8 @@ public class MeetingEngagementService {
         );
     }
 
-    private Meeting getMeeting(Long meetingId) {
-        return meetingRepository.findById(meetingId)
+    private Meeting getVisibleMeeting(Long memberId, Long meetingId) {
+        return meetingRepository.findByIdExcludingBlockedHost(memberId, meetingId)
                 .orElseThrow(() -> new NotFoundException("Meeting not found."));
     }
 
