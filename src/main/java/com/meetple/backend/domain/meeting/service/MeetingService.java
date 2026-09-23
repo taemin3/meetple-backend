@@ -130,6 +130,15 @@ public class MeetingService {
         return PageResponse.from(toResponsePage(meetings));
     }
 
+    public PageResponse<MeetingResponse> getMeetings(Long memberId, String status, Pageable pageable) {
+        validateSort(pageable);
+        MeetingStatus meetingStatus = parseStatus(status);
+        Page<Meeting> meetings = meetingStatus == null
+                ? meetingRepository.findAllExcludingBlockedHosts(memberId, pageable)
+                : meetingRepository.findByStatusExcludingBlockedHosts(memberId, meetingStatus, pageable);
+        return PageResponse.from(toResponsePage(meetings));
+    }
+
     public PageResponse<MeetingSummaryResponse> getMeetingSummaries(String status, Pageable pageable) {
         validateSort(pageable);
         MeetingStatus meetingStatus = parseStatus(status);
@@ -138,6 +147,17 @@ public class MeetingService {
                 ? meetingRepository.findAllSummaries(pageable)
                 : meetingRepository.findSummariesByStatus(meetingStatus, pageable));
 
+        return PageResponse.from(meetings.map(this::toSummaryResponse));
+    }
+
+    public PageResponse<MeetingSummaryResponse> getMeetingSummaries(
+            Long memberId, String status, Pageable pageable
+    ) {
+        validateSort(pageable);
+        MeetingStatus meetingStatus = parseStatus(status);
+        Page<MeetingSummaryProjection> meetings = meetingStatus == null
+                ? meetingRepository.findAllSummariesExcludingBlockedHosts(memberId, pageable)
+                : meetingRepository.findSummariesByStatusExcludingBlockedHosts(memberId, meetingStatus, pageable);
         return PageResponse.from(meetings.map(this::toSummaryResponse));
     }
 
@@ -156,6 +176,17 @@ public class MeetingService {
         return SliceResponse.from(toResponseSlice(slice));
     }
 
+    public SliceResponse<MeetingResponse> getNearbyMeetings(
+            Long memberId, NearbyMeetingSearchRequest request, Pageable pageable
+    ) {
+        Slice<Meeting> slice = meetingRepository.findNearbyMeetings(
+                MeetingStatus.RECRUITING.name(), normalizeOptionalText(request.category()),
+                request.latitude(), request.longitude(), request.radiusMeters(), memberId,
+                withoutSort(pageable)
+        );
+        return SliceResponse.from(toResponseSlice(slice));
+    }
+
     public PageResponse<MeetingResponse> searchMeetings(MeetingSearchRequest request, Pageable pageable) {
         Page<Long> meetingIds = meetingRepository.searchMeetingIds(
                 MeetingStatus.RECRUITING.name(),
@@ -168,8 +199,21 @@ public class MeetingService {
         return PageResponse.from(toResponsePage(loadSearchMeetings(meetingIds)));
     }
 
-    public MeetingResponse getMeeting(Long meetingId) {
-        return toResponse(getMeetingEntity(meetingId));
+    public PageResponse<MeetingResponse> searchMeetings(
+            Long memberId, MeetingSearchRequest request, Pageable pageable
+    ) {
+        Page<Long> meetingIds = meetingRepository.searchMeetingIds(
+                MeetingStatus.RECRUITING.name(), toLiteralLikePattern(request.keyword()),
+                normalizeOptionalText(request.category()), request.latitude(), request.longitude(),
+                memberId, withoutSort(pageable)
+        );
+        return PageResponse.from(toResponsePage(loadSearchMeetings(meetingIds)));
+    }
+
+    public MeetingResponse getMeeting(Long memberId, Long meetingId) {
+        Meeting meeting = meetingRepository.findByIdExcludingBlockedHost(memberId, meetingId)
+                .orElseThrow(() -> new NotFoundException(MEETING_NOT_FOUND_MESSAGE));
+        return toResponse(meeting);
     }
 
     @Transactional

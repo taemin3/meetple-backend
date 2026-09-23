@@ -13,6 +13,8 @@ import com.meetple.backend.domain.meeting.repository.MeetingParticipationReposit
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.moderation.entity.MemberBlock;
+import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -45,6 +47,9 @@ class ChatRepositoryTest {
 
     @Autowired
     private MemberRepository memberRepository;
+
+    @Autowired
+    private MemberBlockRepository memberBlockRepository;
 
     @Autowired
     private CategoryRepository categoryRepository;
@@ -135,6 +140,35 @@ class ChatRepositoryTest {
 
         assertThat(older).extracting(ChatMessage::getRoomSequence).containsExactly(3L, 2L);
         assertThat(newer).extracting(ChatMessage::getRoomSequence).containsExactly(3L, 4L);
+    }
+
+    @Test
+    void blockedMemberMessagesRemainVisibleInGroupChat() {
+        Member viewer = memberRepository.save(member("viewer"));
+        Member blockedHost = memberRepository.save(member("blocked-host"));
+        Category category = categoryRepository.save(Category.create("exercise"));
+        Meeting meeting = meetingRepository.save(meeting(blockedHost, category, "running"));
+        MeetingParticipation participation = MeetingParticipation.apply(meeting, viewer, null);
+        participation.approve();
+        participationRepository.save(participation);
+        memberBlockRepository.save(MemberBlock.create(viewer, blockedHost));
+        messageRepository.save(ChatMessage.create(
+                meeting, blockedHost, 1L, UUID.randomUUID(), "visible-message"
+        ));
+        messageRepository.flush();
+
+        var rooms = meetingRepository.findChatAccessibleMeetings(
+                viewer.getId(), PageRequest.of(0, 20)
+        );
+        var messages = messageRepository.findByMeetingIdOrderByRoomSequenceDesc(
+                meeting.getId(), PageRequest.of(0, 20)
+        );
+
+        assertThat(rooms.getContent()).extracting(Meeting::getId).contains(meeting.getId());
+        assertThat(messages).singleElement().satisfies(message -> {
+            assertThat(message.getSender().getId()).isEqualTo(blockedHost.getId());
+            assertThat(message.getContent()).isEqualTo("visible-message");
+        });
     }
 
     @Test
