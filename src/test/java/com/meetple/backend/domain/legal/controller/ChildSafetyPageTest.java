@@ -16,32 +16,38 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class PrivacyPolicyPageTest {
+class ChildSafetyPageTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @Test
-    void pageIsPublicAndContainsRequiredLinks() throws Exception {
-        mockMvc.perform(get("/privacy-policy/"))
+    void pageIsPublicAndContainsRequiredStandards() throws Exception {
+        mockMvc.perform(get("/child-safety/"))
                 .andExpect(status().isOk())
-                .andExpect(forwardedUrl("/privacy-policy/index.html"));
+                .andExpect(forwardedUrl("/child-safety/index.html"));
 
-        String page = mockMvc.perform(get("/privacy-policy/index.html"))
+        String page = mockMvc.perform(get("/child-safety/index.html"))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
                 .getContentAsString(StandardCharsets.UTF_8);
 
         assertThat(page).contains(
-                "밋플 개인정보 처리방침",
+                "밋플 아동 안전 표준",
+                "Child Sexual Abuse and Exploitation",
+                "Child Sexual Abuse Material",
+                "앱 내 신고",
+                "관할 수사기관",
                 "meetple99@gmail.com",
-                "/account-deletion",
-                "/child-safety",
-                "장소 검색어",
-                "채팅 메시지 식별자",
-                "데이터베이스 최종 스냅샷",
-                "VPC 보안그룹 접근 제한"
+                "/privacy-policy"
         );
+    }
+
+    @Test
+    void pageIgnoresInvalidAuthorizationHeader() throws Exception {
+        mockMvc.perform(get("/child-safety/")
+                        .header("Authorization", "Bearer invalid-token"))
+                .andExpect(status().isOk());
     }
 }
