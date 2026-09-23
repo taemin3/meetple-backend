@@ -5,7 +5,6 @@ import com.meetple.backend.domain.meeting.entity.MeetingStatus;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
-import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.exception.NotFoundException;
@@ -26,7 +25,6 @@ public class ChatAccessPolicy {
 
     private final MeetingRepository meetingRepository;
     private final MeetingParticipationRepository participationRepository;
-    private final MemberBlockRepository memberBlockRepository;
 
     public Meeting getAccessibleMeeting(Long memberId, Long meetingId) {
         Meeting meeting = meetingRepository.findById(meetingId)
@@ -44,12 +42,6 @@ public class ChatAccessPolicy {
     }
 
     public void ensureCanAccess(Long memberId, Meeting meeting) {
-        if (memberBlockRepository.existsByBlockerIdAndBlockedId(
-                memberId,
-                meeting.getHost().getId()
-        )) {
-            throw new NotFoundException(MEETING_NOT_FOUND_MESSAGE);
-        }
         if (!canAccess(memberId, meeting)) {
             throw new ForbiddenException(CHAT_ACCESS_DENIED_MESSAGE);
         }

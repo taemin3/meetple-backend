@@ -63,7 +63,7 @@ public class MeetingEngagementService {
     private final ImageService imageService;
 
     public MeetingEngagementResponse getEngagement(Long memberId, Long meetingId) {
-        Meeting meeting = getVisibleMeeting(memberId, meetingId);
+        Meeting meeting = getMeeting(meetingId);
         boolean host = meeting.isHostedBy(memberId);
         MeetingParticipationResponse participation = participationRepository
                 .findByMeetingIdAndMemberId(meetingId, memberId)
@@ -140,7 +140,7 @@ public class MeetingEngagementService {
     }
 
     public PageResponse<MeetingResponse> getMyJoinedMeetings(Long memberId, Pageable pageable) {
-        Page<MeetingParticipation> participations = participationRepository.findVisibleByMemberIdAndStatus(
+        Page<MeetingParticipation> participations = participationRepository.findByMemberIdAndStatus(
                 memberId,
                 ParticipationStatus.APPROVED,
                 toJoinedMeetingPageable(pageable)
@@ -159,11 +159,6 @@ public class MeetingEngagementService {
 
     private Meeting getMeeting(Long meetingId) {
         return meetingRepository.findById(meetingId)
-                .orElseThrow(() -> new NotFoundException("Meeting not found."));
-    }
-
-    private Meeting getVisibleMeeting(Long memberId, Long meetingId) {
-        return meetingRepository.findByIdExcludingBlockedHost(memberId, meetingId)
                 .orElseThrow(() -> new NotFoundException("Meeting not found."));
     }
 

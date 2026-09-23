@@ -35,12 +35,6 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                     select m.*
                     from meetings m
                     where m.deleted_at is null
-                      and not exists (
-                        select 1
-                        from member_blocks mb
-                        where mb.blocker_member_id = :memberId
-                          and mb.blocked_member_id = m.host_id
-                      )
                       and (
                         m.host_id = :memberId
                         or exists (
@@ -63,12 +57,6 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                     select count(*)
                     from meetings m
                     where m.deleted_at is null
-                      and not exists (
-                        select 1
-                        from member_blocks mb
-                        where mb.blocker_member_id = :memberId
-                          and mb.blocked_member_id = m.host_id
-                      )
                       and (
                         m.host_id = :memberId
                         or exists (
@@ -102,31 +90,6 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
 
     @EntityGraph(attributePaths = {"host", "category"})
     Page<Meeting> findByStatus(MeetingStatus status, Pageable pageable);
-
-    @EntityGraph(attributePaths = {"host", "category"})
-    @Query("""
-            select m from Meeting m
-            where not exists (
-                select 1 from MemberBlock block
-                where block.blocker.id = :memberId and block.blocked.id = m.host.id
-            )
-            """)
-    Page<Meeting> findAllExcludingBlockedHosts(@Param("memberId") Long memberId, Pageable pageable);
-
-    @EntityGraph(attributePaths = {"host", "category"})
-    @Query("""
-            select m from Meeting m
-            where m.status = :status
-              and not exists (
-                  select 1 from MemberBlock block
-                  where block.blocker.id = :memberId and block.blocked.id = m.host.id
-              )
-            """)
-    Page<Meeting> findByStatusExcludingBlockedHosts(
-            @Param("memberId") Long memberId,
-            @Param("status") MeetingStatus status,
-            Pageable pageable
-    );
 
     @Query(
             value = """
@@ -188,61 +151,6 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
             Pageable pageable
     );
 
-    @Query(
-            value = """
-                    select new com.meetple.backend.domain.meeting.repository.MeetingSummaryProjection(
-                        m.id, h.id, h.nickname, c.id, c.name, m.title, m.locationName, m.address,
-                        m.latitude, m.longitude, m.meetingDate, m.maxPeople, m.currentPeople,
-                        m.status, m.thumbnailImageObjectKey, c.defaultImageUrl
-                    )
-                    from Meeting m join m.host h join m.category c
-                    where not exists (
-                        select 1 from MemberBlock block
-                        where block.blocker.id = :memberId and block.blocked.id = h.id
-                    )
-                    """,
-            countQuery = """
-                    select count(m) from Meeting m
-                    where not exists (
-                        select 1 from MemberBlock block
-                        where block.blocker.id = :memberId and block.blocked.id = m.host.id
-                    )
-                    """
-    )
-    Page<MeetingSummaryProjection> findAllSummariesExcludingBlockedHosts(
-            @Param("memberId") Long memberId,
-            Pageable pageable
-    );
-
-    @Query(
-            value = """
-                    select new com.meetple.backend.domain.meeting.repository.MeetingSummaryProjection(
-                        m.id, h.id, h.nickname, c.id, c.name, m.title, m.locationName, m.address,
-                        m.latitude, m.longitude, m.meetingDate, m.maxPeople, m.currentPeople,
-                        m.status, m.thumbnailImageObjectKey, c.defaultImageUrl
-                    )
-                    from Meeting m join m.host h join m.category c
-                    where m.status = :status
-                      and not exists (
-                          select 1 from MemberBlock block
-                          where block.blocker.id = :memberId and block.blocked.id = h.id
-                      )
-                    """,
-            countQuery = """
-                    select count(m) from Meeting m
-                    where m.status = :status
-                      and not exists (
-                          select 1 from MemberBlock block
-                          where block.blocker.id = :memberId and block.blocked.id = m.host.id
-                      )
-                    """
-    )
-    Page<MeetingSummaryProjection> findSummariesByStatusExcludingBlockedHosts(
-            @Param("memberId") Long memberId,
-            @Param("status") MeetingStatus status,
-            Pageable pageable
-    );
-
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = {"host"})
     @Query("select m from Meeting m where m.id = :meetingId")
@@ -252,21 +160,6 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
     @EntityGraph(attributePaths = {"host"})
     @Query("select m from Meeting m where m.id = :meetingId")
     Optional<Meeting> findByIdForReadLock(@Param("meetingId") Long meetingId);
-
-    @EntityGraph(attributePaths = {"host", "category"})
-    @Query("""
-            select meeting from Meeting meeting
-            where meeting.id = :meetingId
-              and not exists (
-                  select 1 from MemberBlock block
-                  where block.blocker.id = :memberId
-                    and block.blocked.id = meeting.host.id
-              )
-            """)
-    Optional<Meeting> findByIdExcludingBlockedHost(
-            @Param("memberId") Long memberId,
-            @Param("meetingId") Long meetingId
-    );
 
     @EntityGraph(attributePaths = {"host", "category"})
     @Query("select m from Meeting m where m.id in :meetingIds")
@@ -285,11 +178,6 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                         or lower(m.address) like :keywordPattern escape '!'
                       )
                   and (:categoryName is null or c.name = :categoryName)
-                  and not exists (
-                        select 1 from member_blocks mb
-                        where mb.blocker_member_id = :memberId
-                          and mb.blocked_member_id = m.host_id
-                      )
                 order by ST_Distance(
                         m.location,
                         CAST(
@@ -315,11 +203,6 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                         or lower(m.address) like :keywordPattern escape '!'
                       )
                   and (:categoryName is null or c.name = :categoryName)
-                  and not exists (
-                        select 1 from member_blocks mb
-                        where mb.blocker_member_id = :memberId
-                          and mb.blocked_member_id = m.host_id
-                      )
                 """,
             nativeQuery = true
     )
@@ -329,20 +212,8 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
             @Param("categoryName") String categoryName,
             @Param("latitude") double latitude,
             @Param("longitude") double longitude,
-            @Param("memberId") Long memberId,
             Pageable pageable
     );
-
-    default Page<Long> searchMeetingIds(
-            String status,
-            String keywordPattern,
-            String categoryName,
-            double latitude,
-            double longitude,
-            Pageable pageable
-    ) {
-        return searchMeetingIds(status, keywordPattern, categoryName, latitude, longitude, null, pageable);
-    }
 
     @Query(
             value = """
@@ -352,11 +223,6 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                 where m.status = :status
                   and m.deleted_at is null
                   and (:categoryName is null or c.name = :categoryName)
-                  and not exists (
-                        select 1 from member_blocks mb
-                        where mb.blocker_member_id = :memberId
-                          and mb.blocked_member_id = m.host_id
-                      )
                   and ST_DWithin(
                         m.location,
                         CAST(
@@ -389,20 +255,8 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
             @Param("latitude") double latitude,
             @Param("longitude") double longitude,
             @Param("radiusMeters") int radiusMeters,
-            @Param("memberId") Long memberId,
             Pageable pageable
     );
-
-    default Slice<Meeting> findNearbyMeetings(
-            String status,
-            String categoryName,
-            double latitude,
-            double longitude,
-            int radiusMeters,
-            Pageable pageable
-    ) {
-        return findNearbyMeetings(status, categoryName, latitude, longitude, radiusMeters, null, pageable);
-    }
 
     @Query(
             value = """

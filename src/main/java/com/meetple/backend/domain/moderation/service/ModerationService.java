@@ -3,24 +3,18 @@ package com.meetple.backend.domain.moderation.service;
 import com.meetple.backend.domain.chat.entity.ChatMessage;
 import com.meetple.backend.domain.chat.repository.ChatMessageRepository;
 import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
-import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.moderation.dto.request.CreateReportRequest;
-import com.meetple.backend.domain.moderation.dto.response.BlockedMemberResponse;
 import com.meetple.backend.domain.moderation.dto.response.ReportResponse;
-import com.meetple.backend.domain.moderation.entity.MemberBlock;
 import com.meetple.backend.domain.moderation.entity.Report;
 import com.meetple.backend.domain.moderation.entity.ReportReason;
-import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.domain.moderation.repository.ReportRepository;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.NotFoundException;
-import com.meetple.backend.global.response.PageResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -30,15 +24,12 @@ import org.springframework.util.StringUtils;
 @Transactional(readOnly = true)
 public class ModerationService {
     private static final String MEMBER_NOT_FOUND_MESSAGE = "회원을 찾을 수 없습니다.";
-    private static final int MAX_PAGE_SIZE = 100;
 
     private final MemberRepository memberRepository;
     private final MeetingRepository meetingRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final ChatAccessPolicy chatAccessPolicy;
     private final ReportRepository reportRepository;
-    private final MemberBlockRepository memberBlockRepository;
-    private final ImageService imageService;
 
     @Transactional
     public ReportResponse createReport(Long reporterId, CreateReportRequest request) {
@@ -52,38 +43,6 @@ public class ModerationService {
                 normalizeDescription(request.reason(), request.otherDescription())
         ));
         return ReportResponse.from(report);
-    }
-
-    @Transactional
-    public void block(Long blockerId, Long blockedId) {
-        if (blockerId.equals(blockedId)) {
-            throw new BadRequestException("자기 자신은 차단할 수 없습니다.");
-        }
-        Member blocker = memberRepository.findByIdForUpdate(blockerId)
-                .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
-        Member blocked = getMember(blockedId);
-        if (!memberBlockRepository.existsByBlockerIdAndBlockedId(blockerId, blockedId)) {
-            memberBlockRepository.save(MemberBlock.create(blocker, blocked));
-        }
-    }
-
-    @Transactional
-    public void unblock(Long blockerId, Long blockedId) {
-        getMember(blockerId);
-        memberBlockRepository.deleteByBlockerIdAndBlockedId(blockerId, blockedId);
-    }
-
-    public PageResponse<BlockedMemberResponse> getBlockedMembers(
-            Long blockerId,
-            Pageable pageable
-    ) {
-        getMember(blockerId);
-        if (pageable.getPageSize() < 1 || pageable.getPageSize() > MAX_PAGE_SIZE) {
-            throw new BadRequestException("페이지 크기는 1 이상 100 이하여야 합니다.");
-        }
-        return PageResponse.from(memberBlockRepository.findByBlockerId(blockerId, pageable)
-                .map(block -> BlockedMemberResponse.from(block,
-                        imageService.createFileUrl(block.getBlocked().getProfileImageObjectKey()))));
     }
 
     private Long resolveTargetAuthorId(Long reporterId, CreateReportRequest request) {

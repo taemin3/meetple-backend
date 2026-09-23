@@ -9,7 +9,6 @@ import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
 import com.meetple.backend.domain.member.entity.Member;
-import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,9 +24,6 @@ class ChatPushRecipientResolverTest {
 
     @Mock
     private MeetingParticipationRepository participationRepository;
-
-    @Mock
-    private MemberBlockRepository memberBlockRepository;
 
     @InjectMocks
     private ChatPushRecipientResolver resolver;
@@ -60,25 +56,6 @@ class ChatPushRecipientResolverTest {
         )).willReturn(List.of());
 
         assertThat(resolver.resolve(meeting, host.getId())).isEmpty();
-    }
-
-    @Test
-    void excludesRecipientsWhoBlockedSender() {
-        Member host = member(1L, "host");
-        Member sender = member(2L, "sender");
-        Member recipient = member(3L, "recipient");
-        Meeting meeting = meeting(10L, host);
-        given(participationRepository.findByMeetingIdAndStatus(
-                10L,
-                ParticipationStatus.APPROVED
-        )).willReturn(List.of(approvedParticipation(meeting, recipient)));
-        given(memberBlockRepository.findBlockerIdsBlockingMember(
-                sender.getId(),
-                new java.util.LinkedHashSet<>(List.of(host.getId(), recipient.getId()))
-        )).willReturn(List.of(recipient.getId()));
-
-        assertThat(resolver.resolve(meeting, sender.getId()))
-                .containsExactly(host.getId());
     }
 
     private MeetingParticipation approvedParticipation(Meeting meeting, Member member) {

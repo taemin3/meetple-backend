@@ -2,7 +2,6 @@ package com.meetple.backend.domain.chat.realtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -17,8 +16,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.messaging.core.MessagePostProcessor;
-import org.springframework.messaging.support.MessageBuilder;
 
 @ExtendWith(MockitoExtension.class)
 class ChatMessageFanOutServiceTest {
@@ -35,12 +32,9 @@ class ChatMessageFanOutServiceTest {
         service.fanOutToLocalSubscribers(event);
 
         ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
-        ArgumentCaptor<MessagePostProcessor> postProcessorCaptor =
-                ArgumentCaptor.forClass(MessagePostProcessor.class);
         verify(messagingTemplate).convertAndSend(
                 eq("/topic/chat/rooms/10"),
-                payloadCaptor.capture(),
-                postProcessorCaptor.capture()
+                payloadCaptor.capture()
         );
         assertThat(payloadCaptor.getValue()).isInstanceOf(ApiResponse.class);
         ApiResponse<?> response = (ApiResponse<?>) payloadCaptor.getValue();
@@ -48,12 +42,6 @@ class ChatMessageFanOutServiceTest {
         assertThat(response.getSuccess()).isTrue();
         assertThat(response.getCode()).isEqualTo(20000);
         assertThat(response.getData()).isEqualTo(event.message());
-        var processed = postProcessorCaptor.getValue().postProcessMessage(
-                MessageBuilder.withPayload(new byte[0]).build()
-        );
-        assertThat(processed.getHeaders().get(
-                ChatMessageFanOutService.SENDER_MEMBER_ID_HEADER
-        )).isEqualTo(event.message().senderId());
     }
 
     @Test
@@ -65,8 +53,7 @@ class ChatMessageFanOutServiceTest {
                 .when(messagingTemplate)
                 .convertAndSend(
                         eq("/topic/chat/rooms/10"),
-                        org.mockito.ArgumentMatchers.any(ApiResponse.class),
-                        any(MessagePostProcessor.class)
+                        org.mockito.ArgumentMatchers.any(ApiResponse.class)
                 );
 
         service.fanOutToLocalSubscribers(event);
@@ -74,8 +61,7 @@ class ChatMessageFanOutServiceTest {
 
         verify(messagingTemplate, times(2)).convertAndSend(
                 eq("/topic/chat/rooms/10"),
-                org.mockito.ArgumentMatchers.any(ApiResponse.class),
-                any(MessagePostProcessor.class)
+                org.mockito.ArgumentMatchers.any(ApiResponse.class)
         );
     }
 

@@ -11,7 +11,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -20,7 +19,6 @@ import org.springframework.stereotype.Service;
 public class ChatMessageFanOutService {
 
     public static final String ROOM_TOPIC_PREFIX = "/topic/chat/rooms/";
-    public static final String SENDER_MEMBER_ID_HEADER = "chatSenderMemberId";
     private static final Duration EVENT_DEDUPLICATION_TTL = Duration.ofMinutes(10);
     private static final int EVENT_DEDUPLICATION_CLEANUP_THRESHOLD = 10_000;
     private static final Duration EVENT_DEDUPLICATION_CLEANUP_INTERVAL =
@@ -41,10 +39,7 @@ public class ChatMessageFanOutService {
         try {
             messagingTemplate.convertAndSend(
                     ROOM_TOPIC_PREFIX + event.message().roomId(),
-                    ApiResponse.successBody(SuccessStatus.OK, event.message()),
-                    message -> MessageBuilder.fromMessage(message)
-                            .setHeader(SENDER_MEMBER_ID_HEADER, event.message().senderId())
-                            .build()
+                    ApiResponse.successBody(SuccessStatus.OK, event.message())
             );
         } catch (RuntimeException exception) {
             handledEventIds.remove(event.eventId());

@@ -64,13 +64,12 @@ class FreshDatabaseMigrationTest {
                     "legal_documents",
                     "member_legal_records",
                     "debezium_heartbeat",
-                    "reports",
-                    "member_blocks"
+                    "reports"
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
                     "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-                    "20", "21"
+                    "20", "21", "22"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder(
                     "운동", "스터디", "취미", "친목", "여행", "맛집", "비즈니스", "반려동물"

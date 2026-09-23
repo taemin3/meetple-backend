@@ -13,8 +13,6 @@ import static org.mockito.Mockito.verify;
 import com.meetple.backend.domain.auth.repository.AccessTokenValidationRepository;
 import com.meetple.backend.domain.chat.service.ChatAccessPolicy;
 import com.meetple.backend.domain.member.entity.MemberRole;
-import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
-import com.meetple.backend.domain.chat.realtime.ChatMessageFanOutService;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.security.AuthenticatedAccessToken;
 import com.meetple.backend.global.security.AuthenticatedMember;
@@ -59,9 +57,6 @@ class ChatStompChannelInterceptorTest {
 
     @Mock
     private LocalChatWebSocketSessionRegistry sessionRegistry;
-
-    @Mock
-    private MemberBlockRepository memberBlockRepository;
 
     @InjectMocks
     private ChatStompChannelInterceptor interceptor;
@@ -315,18 +310,6 @@ class ChatStompChannelInterceptorTest {
         verify(chatAccessPolicy, never()).getAccessibleMeeting(1L, 10L);
     }
 
-    @Test
-    void outboundRoomMessageIsDroppedWhenRecipientBlockedSender() {
-        stubOutboundAuthorization(10L, false, Instant.now().plusSeconds(3600));
-        given(memberBlockRepository.existsByBlockerIdAndBlockedId(1L, 7L))
-                .willReturn(true);
-
-        Message<?> result = interceptor.preSend(outboundMessage(10L, 7L), null);
-
-        assertThat(result).isNull();
-        verify(jwtTokenProvider, never()).getAccessTokenSession(ACCESS_TOKEN);
-    }
-
     private void stubActiveSession() {
         given(jwtTokenProvider.getAccessTokenSession(ACCESS_TOKEN))
                 .willReturn(new JwtTokenSession(1L, "session-1"));
@@ -432,17 +415,4 @@ class ChatStompChannelInterceptorTest {
         return MessageBuilder.createMessage(payload, accessor.getMessageHeaders());
     }
 
-    private Message<byte[]> outboundMessage(Long roomId, Long senderMemberId) {
-        SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.create(
-                SimpMessageType.MESSAGE
-        );
-        accessor.setDestination("/topic/chat/rooms/" + roomId);
-        accessor.setSessionId("session-1");
-        accessor.setSubscriptionId("subscription-1");
-        accessor.setHeader(
-                ChatMessageFanOutService.SENDER_MEMBER_ID_HEADER,
-                senderMemberId
-        );
-        return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
-    }
 }

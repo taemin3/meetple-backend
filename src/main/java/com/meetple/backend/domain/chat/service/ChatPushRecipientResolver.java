@@ -3,7 +3,6 @@ package com.meetple.backend.domain.chat.service;
 import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.meeting.repository.MeetingParticipationRepository;
-import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Component;
 public class ChatPushRecipientResolver {
 
     private final MeetingParticipationRepository participationRepository;
-    private final MemberBlockRepository memberBlockRepository;
 
     public List<Long> resolve(Meeting meeting, Long senderMemberId) {
         Set<Long> recipientMemberIds = new LinkedHashSet<>();
@@ -27,12 +25,6 @@ public class ChatPushRecipientResolver {
                 .map(participation -> participation.getMember().getId())
                 .forEach(recipientMemberIds::add);
         recipientMemberIds.remove(senderMemberId);
-        if (!recipientMemberIds.isEmpty()) {
-            recipientMemberIds.removeAll(memberBlockRepository.findBlockerIdsBlockingMember(
-                    senderMemberId,
-                    recipientMemberIds
-            ));
-        }
         return List.copyOf(recipientMemberIds);
     }
 }

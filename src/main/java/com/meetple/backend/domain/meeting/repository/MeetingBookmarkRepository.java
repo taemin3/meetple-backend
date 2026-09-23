@@ -28,22 +28,12 @@ public interface MeetingBookmarkRepository extends JpaRepository<MeetingBookmark
                     from MeetingBookmark bookmark
                     where bookmark.member.id = :memberId
                       and bookmark.meeting.deletedAt is null
-                      and not exists (
-                          select 1 from MemberBlock block
-                          where block.blocker.id = :memberId
-                            and block.blocked.id = bookmark.meeting.host.id
-                      )
                     """,
             countQuery = """
                     select count(bookmark)
                     from MeetingBookmark bookmark
                     where bookmark.member.id = :memberId
                       and bookmark.meeting.deletedAt is null
-                      and not exists (
-                          select 1 from MemberBlock block
-                          where block.blocker.id = :memberId
-                            and block.blocked.id = bookmark.meeting.host.id
-                      )
                     """
     )
     Page<MeetingBookmark> findByMemberId(@Param("memberId") Long memberId, Pageable pageable);

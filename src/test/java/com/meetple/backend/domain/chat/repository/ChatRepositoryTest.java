@@ -13,12 +13,13 @@ import com.meetple.backend.domain.meeting.repository.MeetingParticipationReposit
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
-import com.meetple.backend.domain.moderation.entity.MemberBlock;
-import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -49,7 +50,7 @@ class ChatRepositoryTest {
     private CategoryRepository categoryRepository;
 
     @Autowired
-    private MemberBlockRepository memberBlockRepository;
+    private EntityManager entityManager;
 
     @Test
     void roomListIncludesHostedAndApprovedMeetingsOnly() {
@@ -120,15 +121,13 @@ class ChatRepositoryTest {
         messageRepository.flush();
 
         var older = messageRepository
-                .findVisibleBeforeSequence(
-                        host.getId(),
+                .findByMeetingIdAndRoomSequenceLessThanOrderByRoomSequenceDesc(
                         meeting.getId(),
                         4L,
                         PageRequest.of(0, 2)
                 );
         var newer = messageRepository
-                .findVisibleAfterSequence(
-                        host.getId(),
+                .findByMeetingIdAndRoomSequenceGreaterThanOrderByRoomSequenceAsc(
                         meeting.getId(),
                         2L,
                         PageRequest.of(0, 2)
@@ -139,36 +138,38 @@ class ChatRepositoryTest {
     }
 
     @Test
-    void cursorQueriesFillPageWithVisibleMessages() {
-        Member viewer = memberRepository.save(member("viewer"));
-        Member blockedSender = memberRepository.save(member("blocked"));
+    void historyQueryFetchesSendersWithoutLazyFollowUpQueries() {
+        Member firstSender = memberRepository.save(member("first-sender"));
+        Member secondSender = memberRepository.save(member("second-sender"));
         Category category = categoryRepository.save(Category.create("exercise"));
-        Meeting meeting = meetingRepository.save(meeting(viewer, category, "running"));
+        Meeting meeting = meetingRepository.save(meeting(firstSender, category, "running"));
         messageRepository.save(ChatMessage.create(
-                meeting, viewer, 1L, UUID.randomUUID(), "visible-1"
+                meeting, firstSender, 1L, UUID.randomUUID(), "message-1"
         ));
         messageRepository.save(ChatMessage.create(
-                meeting, blockedSender, 2L, UUID.randomUUID(), "hidden-2"
+                meeting, secondSender, 2L, UUID.randomUUID(), "message-2"
         ));
-        messageRepository.save(ChatMessage.create(
-                meeting, blockedSender, 3L, UUID.randomUUID(), "hidden-3"
-        ));
-        messageRepository.save(ChatMessage.create(
-                meeting, viewer, 4L, UUID.randomUUID(), "visible-4"
-        ));
-        memberBlockRepository.save(MemberBlock.create(viewer, blockedSender));
         messageRepository.flush();
-        memberBlockRepository.flush();
+        entityManager.clear();
+        Statistics statistics = entityManager.getEntityManagerFactory()
+                .unwrap(SessionFactory.class)
+                .getStatistics();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
 
-        var result = messageRepository.findVisibleBeforeSequence(
-                viewer.getId(),
+        var result = messageRepository.findByMeetingIdOrderByRoomSequenceDesc(
                 meeting.getId(),
-                5L,
-                PageRequest.of(0, 3)
+                PageRequest.of(0, 20)
         );
 
-        assertThat(result).extracting(ChatMessage::getRoomSequence)
-                .containsExactly(4L, 1L);
+        var persistenceUnitUtil = entityManager.getEntityManagerFactory()
+                .getPersistenceUnitUtil();
+        assertThat(result).hasSize(2);
+        assertThat(result).allSatisfy(message ->
+                assertThat(persistenceUnitUtil.isLoaded(message.getSender())).isTrue()
+        );
+        result.forEach(message -> assertThat(message.getSender().getNickname()).isNotBlank());
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(1L);
     }
 
     @Test
@@ -206,38 +207,6 @@ class ChatRepositoryTest {
             assertThat(unreadCount.getMeetingId()).isEqualTo(firstMeeting.getId());
             assertThat(unreadCount.getUnreadCount()).isEqualTo(1L);
         });
-    }
-
-    @Test
-    void summaryQueriesHideBlockedSendersAndUseLatestVisibleMessage() {
-        Member viewer = memberRepository.save(member("viewer"));
-        Member visibleSender = memberRepository.save(member("visible"));
-        Member blockedSender = memberRepository.save(member("blocked"));
-        Category category = categoryRepository.save(Category.create("exercise"));
-        Meeting meeting = meetingRepository.save(meeting(viewer, category, "running"));
-        messageRepository.save(ChatMessage.create(
-                meeting, visibleSender, 1L, UUID.randomUUID(), "visible"
-        ));
-        messageRepository.save(ChatMessage.create(
-                meeting, blockedSender, 2L, UUID.randomUUID(), "hidden"
-        ));
-        memberBlockRepository.save(MemberBlock.create(viewer, blockedSender));
-        messageRepository.flush();
-        memberBlockRepository.flush();
-
-        var latest = messageRepository.findLatestVisibleByMeetingIds(
-                viewer.getId(), List.of(meeting.getId())
-        );
-        var unread = messageRepository.countUnreadByMeetingIds(
-                viewer.getId(), List.of(meeting.getId())
-        );
-
-        assertThat(latest).singleElement()
-                .extracting(ChatMessage::getRoomSequence)
-                .isEqualTo(1L);
-        assertThat(unread).singleElement()
-                .extracting(ChatUnreadCountProjection::getUnreadCount)
-                .isEqualTo(1L);
     }
 
     @Test
