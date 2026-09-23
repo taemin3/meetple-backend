@@ -70,7 +70,8 @@ class MeetingEngagementServiceTest {
         MeetingParticipation approved = MeetingParticipation.apply(meeting, participant, null);
         approved.approve();
 
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findById(10L))
+                .willReturn(Optional.of(meeting));
         given(participationRepository.findByMeetingIdAndMemberId(10L, 3L))
                 .willReturn(Optional.empty());
         given(participationRepository.findByMeetingIdAndStatus(10L, ParticipationStatus.APPROVED))

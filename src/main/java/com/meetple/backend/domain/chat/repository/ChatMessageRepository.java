@@ -13,6 +13,10 @@ import org.springframework.data.repository.query.Param;
 
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
+    @Override
+    @EntityGraph(attributePaths = "sender")
+    Optional<ChatMessage> findById(Long id);
+
     @Modifying(flushAutomatically = true)
     @Query("update ChatMessage message set message.content = :replacement where message.sender.id = :memberId")
     int anonymizeAllBySenderId(

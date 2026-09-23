@@ -13,10 +13,13 @@ import com.meetple.backend.domain.meeting.repository.MeetingParticipationReposit
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -45,6 +48,9 @@ class ChatRepositoryTest {
 
     @Autowired
     private CategoryRepository categoryRepository;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Test
     void roomListIncludesHostedAndApprovedMeetingsOnly() {
@@ -129,6 +135,41 @@ class ChatRepositoryTest {
 
         assertThat(older).extracting(ChatMessage::getRoomSequence).containsExactly(3L, 2L);
         assertThat(newer).extracting(ChatMessage::getRoomSequence).containsExactly(3L, 4L);
+    }
+
+    @Test
+    void historyQueryFetchesSendersWithoutLazyFollowUpQueries() {
+        Member firstSender = memberRepository.save(member("first-sender"));
+        Member secondSender = memberRepository.save(member("second-sender"));
+        Category category = categoryRepository.save(Category.create("exercise"));
+        Meeting meeting = meetingRepository.save(meeting(firstSender, category, "running"));
+        messageRepository.save(ChatMessage.create(
+                meeting, firstSender, 1L, UUID.randomUUID(), "message-1"
+        ));
+        messageRepository.save(ChatMessage.create(
+                meeting, secondSender, 2L, UUID.randomUUID(), "message-2"
+        ));
+        messageRepository.flush();
+        entityManager.clear();
+        Statistics statistics = entityManager.getEntityManagerFactory()
+                .unwrap(SessionFactory.class)
+                .getStatistics();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+
+        var result = messageRepository.findByMeetingIdOrderByRoomSequenceDesc(
+                meeting.getId(),
+                PageRequest.of(0, 20)
+        );
+
+        var persistenceUnitUtil = entityManager.getEntityManagerFactory()
+                .getPersistenceUnitUtil();
+        assertThat(result).hasSize(2);
+        assertThat(result).allSatisfy(message ->
+                assertThat(persistenceUnitUtil.isLoaded(message.getSender())).isTrue()
+        );
+        result.forEach(message -> assertThat(message.getSender().getNickname()).isNotBlank());
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(1L);
     }
 
     @Test

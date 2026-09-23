@@ -414,4 +414,5 @@ class ChatStompChannelInterceptorTest {
         accessor.setSubscriptionId("subscription-1");
         return MessageBuilder.createMessage(payload, accessor.getMessageHeaders());
     }
+
 }

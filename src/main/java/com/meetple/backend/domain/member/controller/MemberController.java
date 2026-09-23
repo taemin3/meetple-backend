@@ -4,6 +4,7 @@ import com.meetple.backend.domain.member.dto.request.UpdateProfileImageRequest;
 import com.meetple.backend.domain.auth.dto.request.AccountDeletionRequest;
 import com.meetple.backend.domain.member.dto.request.UpdateProfileRequest;
 import com.meetple.backend.domain.member.dto.response.MemberProfileResponse;
+import com.meetple.backend.domain.member.dto.response.PublicMemberProfileResponse;
 import com.meetple.backend.domain.member.service.MemberService;
 import com.meetple.backend.domain.member.service.AccountDeletionService;
 import com.meetple.backend.global.config.OpenApiConfig;
@@ -19,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,6 +42,15 @@ public class MemberController {
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember
     ) {
         return ApiResponse.success(SuccessStatus.OK, memberService.getMyProfile(authenticatedMember.id()));
+    }
+
+    @GetMapping("/{memberId}/public-profile")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
+    @Operation(summary = "회원 공개 프로필 조회", description = "프로필 사진, 닉네임, 자기소개만 조회합니다.")
+    public ResponseEntity<ApiResponse<PublicMemberProfileResponse>> getPublicProfile(
+            @PathVariable Long memberId
+    ) {
+        return ApiResponse.success(SuccessStatus.OK, memberService.getPublicProfile(memberId));
     }
 
     @PatchMapping("/me")

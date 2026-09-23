@@ -121,16 +121,25 @@ public class ChatService {
         }
 
         boolean hasMore = fetched.size() > size;
-        List<ChatMessage> selected = new ArrayList<>(
+        List<ChatMessage> rawWindow = new ArrayList<>(
                 fetched.subList(0, Math.min(size, fetched.size()))
         );
+        Long latestFetchedSequence = rawWindow.stream()
+                .map(ChatMessage::getRoomSequence)
+                .max(Long::compareTo)
+                .orElse(null);
+        List<ChatMessage> selected = new ArrayList<>(rawWindow);
         if (!ascending) {
             Collections.reverse(selected);
         }
 
-        return ChatMessagePageResponse.from(
-                selected.stream().map(this::toMessageResponse).toList(),
-                hasMore
+        List<ChatMessageResponse> responses = selected.stream().map(this::toMessageResponse).toList();
+        Long oldestVisibleSequence = responses.isEmpty() ? null : responses.getFirst().sequence();
+        return new ChatMessagePageResponse(
+                responses,
+                hasMore,
+                oldestVisibleSequence,
+                latestFetchedSequence
         );
     }
 
