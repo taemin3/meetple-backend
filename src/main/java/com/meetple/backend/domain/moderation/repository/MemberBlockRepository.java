@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -15,6 +16,14 @@ public interface MemberBlockRepository extends JpaRepository<MemberBlock, Long> 
     boolean existsByBlockerIdAndBlockedId(Long blockerId, Long blockedId);
 
     void deleteByBlockerIdAndBlockedId(Long blockerId, Long blockedId);
+
+    @Modifying
+    @Query("""
+            delete from MemberBlock block
+            where block.blocker.id = :memberId
+               or block.blocked.id = :memberId
+            """)
+    int deleteAllByMemberId(@Param("memberId") Long memberId);
 
     @EntityGraph(attributePaths = "blocked")
     Page<MemberBlock> findByBlockerId(Long blockerId, Pageable pageable);

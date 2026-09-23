@@ -93,7 +93,7 @@ public class MeetingEngagementService {
 
     @Transactional
     public void addBookmark(Long memberId, Long meetingId) {
-        Meeting meeting = getMeeting(meetingId);
+        Meeting meeting = getVisibleMeeting(memberId, meetingId);
         if (meeting.isHostedBy(memberId)) {
             throw new BadRequestException("Host cannot bookmark own meeting.");
         }
@@ -155,11 +155,6 @@ public class MeetingEngagementService {
                 participationRepository.findByMemberId(memberId, pageable)
                         .map(this::toParticipationResponse)
         );
-    }
-
-    private Meeting getMeeting(Long meetingId) {
-        return meetingRepository.findById(meetingId)
-                .orElseThrow(() -> new NotFoundException("Meeting not found."));
     }
 
     private Meeting getVisibleMeeting(Long memberId, Long meetingId) {

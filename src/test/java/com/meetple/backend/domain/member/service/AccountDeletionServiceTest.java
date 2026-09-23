@@ -30,6 +30,7 @@ import com.meetple.backend.domain.meeting.entity.MeetingParticipation;
 import com.meetple.backend.domain.meeting.entity.ParticipationStatus;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.domain.notification.repository.NotificationRepository;
 import com.meetple.backend.domain.notification.service.NotificationService;
 import com.meetple.backend.domain.push.service.PushDeviceTokenService;
@@ -58,6 +59,7 @@ class AccountDeletionServiceTest {
     @Mock private ChatNotificationSettingRepository chatNotificationSettingRepository;
     @Mock private ChatReadStateRepository chatReadStateRepository;
     @Mock private NotificationRepository notificationRepository;
+    @Mock private MemberBlockRepository memberBlockRepository;
     @Mock private NotificationService notificationService;
     @Mock private PushDeviceTokenService pushDeviceTokenService;
     @Mock private RefreshTokenRepository refreshTokenRepository;
@@ -81,7 +83,8 @@ class AccountDeletionServiceTest {
         service = new AccountDeletionService(
                 memberRepository, meetingRepository, participationRepository,
                 bookmarkRepository, chatMessageRepository, chatNotificationSettingRepository,
-                chatReadStateRepository, notificationRepository, notificationService,
+                chatReadStateRepository, notificationRepository, memberBlockRepository,
+                notificationService,
                 pushDeviceTokenService,
                 refreshTokenRepository, imageDeletionService, passwordEncoder, eventPublisher,
                 accountDeletionRepository, emailDeliveryService, secretGenerator, hasher,
@@ -138,6 +141,7 @@ class AccountDeletionServiceTest {
         verify(chatNotificationSettingRepository).deleteAllByMemberId(7L);
         verify(chatReadStateRepository).deleteAllByMemberId(7L);
         verify(notificationRepository).deleteAllByMemberId(7L);
+        verify(memberBlockRepository).deleteAllByMemberId(7L);
         verify(notificationRepository).anonymizeParticipationActorByNickname("사용자");
         verify(chatMessageRepository).anonymizeAllBySenderId(
                 7L,

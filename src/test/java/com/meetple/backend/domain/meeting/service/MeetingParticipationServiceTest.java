@@ -21,6 +21,7 @@ import com.meetple.backend.domain.notification.service.NotificationService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.ForbiddenException;
+import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
 import com.meetple.backend.global.websocket.ChatAccessRevocationReason;
 import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
@@ -70,7 +71,8 @@ class MeetingParticipationServiceTest {
         Member applicant = member(2L, "runner@meetple.com", "runner");
         Meeting meeting = meeting(10L, host);
 
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdExcludingBlockedHost(2L, 10L))
+                .willReturn(Optional.of(meeting));
         given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
         given(participationRepository.findByMeetingIdAndMemberIdForUpdate(10L, 2L)).willReturn(Optional.empty());
         given(participationRepository.saveAndFlush(any(MeetingParticipation.class))).willAnswer(invocation -> {
@@ -96,7 +98,8 @@ class MeetingParticipationServiceTest {
     void applyParticipationRejectsHost() {
         Member host = member(1L, "host@meetple.com", "host");
         Meeting meeting = meeting(10L, host);
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdExcludingBlockedHost(1L, 10L))
+                .willReturn(Optional.of(meeting));
         given(memberRepository.findById(1L)).willReturn(Optional.of(host));
 
         assertThatThrownBy(() -> participationService.applyParticipation(
@@ -114,7 +117,8 @@ class MeetingParticipationServiceTest {
         Member applicant = member(2L, "runner@meetple.com", "runner");
         Meeting meeting = meeting(10L, host);
 
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdExcludingBlockedHost(2L, 10L))
+                .willReturn(Optional.of(meeting));
         given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
         given(participationRepository.findByMeetingIdAndMemberIdForUpdate(10L, 2L))
                 .willReturn(Optional.of(participation(100L, meeting, applicant)));
@@ -134,7 +138,8 @@ class MeetingParticipationServiceTest {
         Member applicant = member(2L, "runner@meetple.com", "runner");
         Meeting meeting = meeting(10L, host);
 
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdExcludingBlockedHost(2L, 10L))
+                .willReturn(Optional.of(meeting));
         given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
         given(participationRepository.findByMeetingIdAndMemberIdForUpdate(10L, 2L)).willReturn(Optional.empty());
         given(participationRepository.saveAndFlush(any(MeetingParticipation.class)))
@@ -157,7 +162,8 @@ class MeetingParticipationServiceTest {
         MeetingParticipation participation = participation(100L, meeting, applicant);
         participation.cancel();
 
-        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingRepository.findByIdExcludingBlockedHost(2L, 10L))
+                .willReturn(Optional.of(meeting));
         given(memberRepository.findById(2L)).willReturn(Optional.of(applicant));
         given(participationRepository.findByMeetingIdAndMemberIdForUpdate(10L, 2L))
                 .willReturn(Optional.of(participation));
@@ -170,6 +176,20 @@ class MeetingParticipationServiceTest {
 
         assertThat(response.status()).isEqualTo(ParticipationStatus.PENDING);
         assertThat(response.message()).isEqualTo("Apply again");
+    }
+
+    @Test
+    void applyParticipationRejectsMeetingHostedByBlockedMember() {
+        given(meetingRepository.findByIdExcludingBlockedHost(2L, 10L))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> participationService.applyParticipation(
+                2L,
+                10L,
+                new CreateMeetingParticipationRequest(null)
+        ))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("Meeting not found.");
     }
 
     @Test

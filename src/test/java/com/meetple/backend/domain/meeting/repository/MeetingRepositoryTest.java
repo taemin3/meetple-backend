@@ -109,9 +109,36 @@ class MeetingRepositoryTest {
         assertThat(participationRepository.findVisibleByMemberIdAndStatus(
                 viewer.getId(), ParticipationStatus.APPROVED, PageRequest.of(0, 20)
         )).isEmpty();
+        assertThat(bookmarkRepository.countByMemberId(viewer.getId())).isZero();
+        assertThat(participationRepository.countByMemberIdAndStatusAndMeetingStatusIn(
+                viewer.getId(),
+                ParticipationStatus.APPROVED,
+                List.of(MeetingStatus.RECRUITING, MeetingStatus.FULL)
+        )).isZero();
         assertThat(meetingRepository.findChatAccessibleMeetings(
                 viewer.getId(), PageRequest.of(0, 20)
         ).getContent()).extracting(Meeting::getId).containsExactly(meeting.getId());
+    }
+
+    @Test
+    void deletesAllMemberBlocksWhereMemberIsEitherSide() {
+        Member member = memberRepository.save(Member.createUser(
+                "member@meetple.com", "encoded-password", "member", "서울"
+        ));
+        Member firstOther = memberRepository.save(Member.createUser(
+                "first@meetple.com", "encoded-password", "first", "서울"
+        ));
+        Member secondOther = memberRepository.save(Member.createUser(
+                "second@meetple.com", "encoded-password", "second", "서울"
+        ));
+        memberBlockRepository.save(MemberBlock.create(member, firstOther));
+        memberBlockRepository.save(MemberBlock.create(secondOther, member));
+        entityManager.flush();
+
+        assertThat(memberBlockRepository.deleteAllByMemberId(member.getId())).isEqualTo(2);
+        entityManager.flush();
+
+        assertThat(memberBlockRepository.findAll()).isEmpty();
     }
 
     @Test

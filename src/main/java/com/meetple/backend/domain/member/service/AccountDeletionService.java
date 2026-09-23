@@ -26,6 +26,7 @@ import com.meetple.backend.domain.meeting.repository.MeetingParticipationReposit
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.domain.notification.repository.NotificationRepository;
 import com.meetple.backend.domain.notification.service.NotificationService;
 import com.meetple.backend.domain.push.service.PushDeviceTokenService;
@@ -73,6 +74,7 @@ public class AccountDeletionService {
     private final ChatNotificationSettingRepository chatNotificationSettingRepository;
     private final ChatReadStateRepository chatReadStateRepository;
     private final NotificationRepository notificationRepository;
+    private final MemberBlockRepository memberBlockRepository;
     private final NotificationService notificationService;
     private final PushDeviceTokenService pushDeviceTokenService;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -249,6 +251,7 @@ public class AccountDeletionService {
         chatReadStateRepository.deleteAllByMemberId(memberId);
         notificationRepository.anonymizeParticipationActorByNickname(member.getNickname());
         notificationRepository.deleteAllByMemberId(memberId);
+        memberBlockRepository.deleteAllByMemberId(memberId);
         chatMessageRepository.anonymizeAllBySenderId(memberId, DELETED_MESSAGE);
         pushDeviceTokenService.removeAllDevices(memberId);
 

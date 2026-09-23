@@ -21,6 +21,7 @@ import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.global.exception.BadRequestException;
+import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -86,6 +87,16 @@ class MeetingEngagementServiceTest {
         assertThat(response.members().get(1).nickname()).isEqualTo("member");
         assertThat(response.members().get(1).introduction()).isEqualTo("러닝을 좋아해요.");
         assertThat(response.members().get(1).host()).isFalse();
+    }
+
+    @Test
+    void addBookmarkRejectsMeetingHostedByBlockedMember() {
+        given(meetingRepository.findByIdExcludingBlockedHost(2L, 10L))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> engagementService.addBookmark(2L, 10L))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("Meeting not found.");
     }
 
     @Test

@@ -19,6 +19,7 @@ import com.meetple.backend.domain.moderation.repository.ReportRepository;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,11 @@ import org.springframework.util.StringUtils;
 public class ModerationService {
     private static final String MEMBER_NOT_FOUND_MESSAGE = "회원을 찾을 수 없습니다.";
     private static final int MAX_PAGE_SIZE = 100;
+    private static final Set<String> BLOCK_SORT_PROPERTIES = Set.of(
+            "id",
+            "createdAt",
+            "updatedAt"
+    );
 
     private final MemberRepository memberRepository;
     private final MeetingRepository meetingRepository;
@@ -81,6 +87,11 @@ public class ModerationService {
         if (pageable.getPageSize() < 1 || pageable.getPageSize() > MAX_PAGE_SIZE) {
             throw new BadRequestException("페이지 크기는 1 이상 100 이하여야 합니다.");
         }
+        pageable.getSort().forEach(order -> {
+            if (!BLOCK_SORT_PROPERTIES.contains(order.getProperty())) {
+                throw new BadRequestException("지원하지 않는 정렬 기준입니다.");
+            }
+        });
         return PageResponse.from(memberBlockRepository.findByBlockerId(blockerId, pageable)
                 .map(block -> BlockedMemberResponse.from(block,
                         imageService.createFileUrl(block.getBlocked().getProfileImageObjectKey()))));

@@ -32,6 +32,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 @ExtendWith(MockitoExtension.class)
 class ModerationServiceTest {
@@ -145,6 +146,18 @@ class ModerationServiceTest {
 
         assertThatThrownBy(() -> service.getBlockedMembers(1L, PageRequest.of(0, 101)))
                 .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void rejectsUnsupportedBlockedMemberSortProperty() {
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member(1L, "blocker")));
+
+        assertThatThrownBy(() -> service.getBlockedMembers(
+                1L,
+                PageRequest.of(0, 20, Sort.by("nickname"))
+        ))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("지원하지 않는 정렬 기준입니다.");
     }
 
     private Member member(Long id, String nickname) {
