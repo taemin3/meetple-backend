@@ -52,3 +52,11 @@ performance/k6/data/manifests/
 ### Firebase credentials ###
 *firebase-adminsdk*.json
 service-account*.json
+
+### Python AI service ###
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+ai-service/evals/results/
