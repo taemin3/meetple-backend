@@ -53,10 +53,9 @@ performance/k6/data/manifests/
 *firebase-adminsdk*.json
 service-account*.json
 
-### Python AI service ###
+### Local Python environments and caches ###
 .venv/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
-ai-service/evals/results/
