@@ -2,7 +2,7 @@
 
 Python AI 서버는 독립 저장소 [meetple-ai](https://github.com/taemin3/meetple-ai)에서 관리한다. 실행·평가·API 계약은 [AI 서버 README](https://github.com/taemin3/meetple-ai/blob/main/README.md)를 참고한다.
 
-권장 로컬 폴더는 `C:\project\meetple\app`, `backend`, `ai`다. `backend-ai-search`는 Spring 연동 기능을 개발하는 별도 Git worktree이며 main 병합 전 검증은 이 worktree에서 진행한다.
+권장 로컬 폴더는 `C:\project\meetple\app`, `backend`, `ai`다. Spring은 `backend`에서 실행한다. AI 기능이 main에 병합되기 전에는 `feat/ai-search-foundation` 브랜치에서 연동을 검증한다.
 
 ## 백엔드에 남는 역할
 
