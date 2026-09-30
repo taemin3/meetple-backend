@@ -41,7 +41,7 @@ import org.testcontainers.utility.DockerImageName;
 class FreshDatabaseApplicationContextTest {
 
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName
-            .parse("meetple-postgres:16-3.5-bigm")
+            .parse("meetple-postgres:16-3.5-bigm-vector0.8.6")
             .asCompatibleSubstituteFor("postgres");
 
     @Container
@@ -109,7 +109,7 @@ class FreshDatabaseApplicationContextTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE",
                 Integer.class
-        )).isEqualTo(24);
+        )).isEqualTo(25);
         assertThat(jdbcTemplate.queryForObject(
                 """
                 SELECT version

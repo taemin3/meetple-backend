@@ -18,7 +18,7 @@ import org.testcontainers.utility.DockerImageName;
 class AiMeetingSearchRepositoryTest {
     @Container
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(DockerImageName
-            .parse("meetple-postgres:16-3.5-bigm").asCompatibleSubstituteFor("postgres"))
+            .parse("meetple-postgres:16-3.5-bigm-vector0.8.6").asCompatibleSubstituteFor("postgres"))
             .withCommand("postgres", "-c", "shared_preload_libraries=pg_bigm,pg_stat_statements");
     private JdbcTemplate jdbc;
     private AiMeetingSearchRepository repository;
