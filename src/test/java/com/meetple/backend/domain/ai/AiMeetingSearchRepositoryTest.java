@@ -3,6 +3,10 @@ package com.meetple.backend.domain.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,6 +54,22 @@ class AiMeetingSearchRepositoryTest {
     private AiSearchContracts.Filters filters(String keyword) {
         return new AiSearchContracts.Filters(keyword, "운동", start, start.plusDays(2),
                 null, null, 37.5, 127, 3000);
+    }
+
+    private List<Double> embedding(int activeDimension) {
+        var values = new ArrayList<>(Collections.nCopies(1536, 0.0));
+        values.set(activeDimension, 1.0);
+        return values;
+    }
+
+    private void insertEmbedding(long meetingId, List<Double> embedding) {
+        String vector = embedding.stream().map(String::valueOf)
+                .collect(Collectors.joining(",", "[", "]"));
+        jdbc.update("""
+                INSERT INTO meeting_embeddings
+                    (meeting_id, embedding, embedding_model, content_hash, embedded_at)
+                VALUES (?, cast(? as vector), 'test-embedding-model', ?, now())
+                """, meetingId, vector, "a".repeat(64));
     }
 
     @Test void excludesBlockedDeletedFullOutOfRangeAndPastMeetings() {
@@ -102,5 +122,18 @@ class AiMeetingSearchRepositoryTest {
         assertThat(result.items()).hasSize(20);
         assertThat(result.hasMore()).isTrue();
         assertThat(result.items().getFirst().id()).isEqualTo(1L);
+    }
+
+    @Test void combinesKeywordMatchAndVectorSimilarityWithoutDroppingKeywordFallback() {
+        insert(10, "러닝 모임", 2, "RECRUITING", 2, 37.5, start.plusHours(15));
+        insert(11, "초보 운동 모임", 2, "RECRUITING", 2, 37.5, start.plusHours(15));
+        insert(12, "러닝 초보 모임", 2, "RECRUITING", 2, 37.5, start.plusHours(15));
+        insertEmbedding(11, embedding(0));
+        insertEmbedding(12, embedding(0));
+
+        var result = repository.search(1, filters("러닝"), embedding(0));
+
+        assertThat(result.items()).extracting(AiSearchContracts.Candidate::id)
+                .containsExactly(12L, 11L, 10L);
     }
 }

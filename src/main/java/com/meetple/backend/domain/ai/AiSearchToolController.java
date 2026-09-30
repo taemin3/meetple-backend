@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/internal/ai/search")
 @RequiredArgsConstructor
 public class AiSearchToolController {
+    private static final int EMBEDDING_DIMENSIONS = 1536;
     private final AiSearchCapability capability;
     private final AiMeetingSearchRepository repository;
 
@@ -33,10 +34,13 @@ public class AiSearchToolController {
     public ResponseEntity<ApiResponse<Candidates>> search(
             @RequestHeader(value = "X-AI-Service-Token", required = false) String serviceToken,
             @RequestHeader(value = "X-Meetple-Capability", required = false) String token,
-            @RequestBody Filters filters
+            @RequestBody ToolSearchRequest request
     ) {
         long memberId = capability.verify(serviceToken, token);
+        if (request == null) throw new BadRequestException("AI 검색 조건이 올바르지 않습니다.");
+        Filters filters = request.filters();
         validateFilters(filters);
+        validateEmbedding(request.queryEmbedding());
         LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
         if (filters.endsBefore().isBefore(now) || filters.endsBefore().isEqual(now)) {
             return ApiResponse.success(SuccessStatus.OK, new Candidates(List.of(), false));
@@ -45,7 +49,8 @@ public class AiSearchToolController {
                 filters.startsAt().isBefore(now) ? now : filters.startsAt(), filters.endsBefore(),
                 filters.startsAtTime(), filters.endsBeforeTime(),
                 filters.latitude(), filters.longitude(), filters.radiusMeters());
-        return ApiResponse.success(SuccessStatus.OK, repository.search(memberId, bounded));
+        return ApiResponse.success(SuccessStatus.OK,
+                repository.search(memberId, bounded, request.queryEmbedding()));
     }
 
     static void validateFilters(Filters f) {
@@ -59,6 +64,19 @@ public class AiSearchToolController {
                 || (f.keyword() != null && f.keyword().length() > 100)
                 || (f.category() != null && f.category().length() > 30)) {
             throw new BadRequestException("AI 검색 조건이 올바르지 않습니다.");
+        }
+    }
+
+    static void validateEmbedding(List<Double> embedding) {
+        if (embedding == null) return;
+        if (embedding.size() != EMBEDDING_DIMENSIONS
+                || embedding.stream().anyMatch(value -> value == null || !Double.isFinite(value))) {
+            throw new BadRequestException("AI 검색 임베딩이 올바르지 않습니다.");
+        }
+        double norm = 0;
+        for (double value : embedding) norm = Math.hypot(norm, value);
+        if (norm == 0 || !Double.isFinite(norm)) {
+            throw new BadRequestException("AI 검색 임베딩이 올바르지 않습니다.");
         }
     }
 }

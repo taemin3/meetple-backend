@@ -1,14 +1,18 @@
 package com.meetple.backend.domain.ai;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.meetple.backend.domain.member.entity.MemberRole;
+import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.GlobalExceptionHandler;
 import com.meetple.backend.global.security.AuthenticatedMember;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -54,5 +58,45 @@ class AiSearchControllerTest {
                                 + "\"endsBefore\":\"2026-10-05T00:00:00\",\"latitude\":37.5,\"longitude\":127,\"radiusMeters\":3000}"))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(repository);
+    }
+
+    @Test void acceptsOnlyConfiguredEmbeddingDimensionsAndFiniteValues() {
+        var valid = new java.util.ArrayList<>(java.util.Collections.nCopies(1536, 0.0));
+        valid.set(0, 1.0);
+        assertThatCode(() -> AiSearchToolController.validateEmbedding(valid)).doesNotThrowAnyException();
+        assertThatCode(() -> AiSearchToolController.validateEmbedding(null)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> AiSearchToolController.validateEmbedding(List.of(0.1)))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> AiSearchToolController.validateEmbedding(
+                java.util.Collections.nCopies(1536, 0.0))).isInstanceOf(BadRequestException.class);
+        var nonFinite = new java.util.ArrayList<>(java.util.Collections.nCopies(1536, 0.0));
+        nonFinite.set(0, Double.NaN);
+        assertThatThrownBy(() -> AiSearchToolController.validateEmbedding(nonFinite))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test void internalToolBindsAndForwardsQueryEmbedding() throws Exception {
+        var repository = mock(AiMeetingSearchRepository.class);
+        var capability = new AiSearchCapability(AiSearchCapabilityTest.PROPERTIES);
+        when(repository.search(eq(42L), any(), any())).thenReturn(new AiSearchContracts.Candidates(List.of(), false));
+        var mvc = MockMvcBuilders.standaloneSetup(new AiSearchToolController(capability, repository))
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
+        String embedding = "1.0," + java.util.Collections.nCopies(1535, "0.0").stream()
+                .collect(Collectors.joining(","));
+
+        mvc.perform(post("/internal/ai/search/meetings")
+                        .header("X-AI-Service-Token", AiSearchCapabilityTest.SERVICE_KEY)
+                        .header("X-Meetple-Capability", capability.issue(42))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"keyword":"러닝","category":"운동",
+                                 "startsAt":"2027-01-03T00:00:00","endsBefore":"2027-01-05T00:00:00",
+                                 "startsAtTime":null,"endsBeforeTime":null,
+                                 "latitude":37.5,"longitude":127.0,"radiusMeters":3000,
+                                 "queryEmbedding":[%s]}
+                                """.formatted(embedding)))
+                .andExpect(status().isOk());
+
+        verify(repository).search(eq(42L), any(), argThat(values -> values.size() == 1536));
     }
 }

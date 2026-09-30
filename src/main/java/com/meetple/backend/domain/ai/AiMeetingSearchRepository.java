@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -20,12 +21,34 @@ public class AiMeetingSearchRepository {
     }
 
     public Candidates search(long memberId, Filters filters) {
+        return search(memberId, filters, null);
+    }
+
+    public Candidates search(long memberId, Filters filters, List<Double> queryEmbedding) {
         Map<String, Object> params = parameters(memberId, filters);
+        boolean hybrid = queryEmbedding != null;
+        if (hybrid) params.put("queryEmbedding", vectorLiteral(queryEmbedding));
         String sql = """
                 select m.id, m.title, m.content, c.name as category_name, m.location_name,
                        m.meeting_date, m.end_date, m.max_people, m.current_people,
                        ST_Distance(m.location, CAST(ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326) AS geography), false) as distance_meters
-                from meetings m join categories c on c.id = m.category_id
+                """;
+        if (hybrid) {
+            sql += """
+                       , (case when lower(m.title) like :keyword escape '!'
+                                    or lower(m.content) like :keyword escape '!'
+                               then 0.45 else 0 end
+                          + case when me.embedding is null then 0
+                                 else 0.55 * (1 - (me.embedding <=> cast(:queryEmbedding as vector))) end
+                         ) as hybrid_score
+                    """;
+        }
+        sql += """
+                from meetings m
+                join categories c on c.id = m.category_id
+                """;
+        if (hybrid) sql += " left join meeting_embeddings me on me.meeting_id = m.id\n";
+        sql += """
                 where m.deleted_at is null and m.status = 'RECRUITING'
                   and m.current_people < m.max_people
                   and m.meeting_date >= :startsAt and m.meeting_date < :endsBefore
@@ -36,7 +59,14 @@ public class AiMeetingSearchRepository {
                 """;
         if (filters.category() != null && !filters.category().isBlank()) sql += " and c.name = :category\n";
         if (filters.keyword() != null && !filters.keyword().isBlank()) {
-            sql += " and (lower(m.title) like :keyword escape '!' or lower(m.content) like :keyword escape '!')\n";
+            if (hybrid) {
+                sql += " and (lower(m.title) like :keyword escape '!'"
+                        + " or lower(m.content) like :keyword escape '!' or me.embedding is not null)\n";
+            } else {
+                sql += " and (lower(m.title) like :keyword escape '!' or lower(m.content) like :keyword escape '!')\n";
+            }
+        } else if (hybrid) {
+            sql += " and me.embedding is not null\n";
         }
         if (filters.startsAtTime() != null && filters.endsBeforeTime() != null) {
             if (filters.startsAtTime().isBefore(filters.endsBeforeTime())) {
@@ -51,7 +81,9 @@ public class AiMeetingSearchRepository {
         } else if (filters.endsBeforeTime() != null) {
             sql += " and cast(m.meeting_date as time) < :endsBeforeTime\n";
         }
-        sql += " order by distance_meters, m.meeting_date, m.id limit 21";
+        sql += hybrid
+                ? " order by hybrid_score desc, distance_meters, m.meeting_date, m.id limit 21"
+                : " order by distance_meters, m.meeting_date, m.id limit 21";
         List<Candidate> rows = jdbc.query(sql, params, (rs, index) -> new Candidate(
                 rs.getLong("id"), rs.getString("title"), rs.getString("content"),
                 rs.getString("category_name"), rs.getString("location_name"),
@@ -59,6 +91,10 @@ public class AiMeetingSearchRepository {
                 rs.getInt("max_people"), rs.getInt("current_people"), rs.getDouble("distance_meters")
         ));
         return new Candidates(rows.stream().limit(20).toList(), rows.size() > 20);
+    }
+
+    private String vectorLiteral(List<Double> embedding) {
+        return embedding.stream().map(String::valueOf).collect(Collectors.joining(",", "[", "]"));
     }
 
     private Map<String, Object> parameters(long memberId, Filters f) {
