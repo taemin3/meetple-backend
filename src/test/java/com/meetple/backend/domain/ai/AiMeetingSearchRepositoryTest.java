@@ -63,13 +63,17 @@ class AiMeetingSearchRepositoryTest {
     }
 
     private void insertEmbedding(long meetingId, List<Double> embedding) {
+        insertEmbedding(meetingId, embedding, "test-embedding-model");
+    }
+
+    private void insertEmbedding(long meetingId, List<Double> embedding, String model) {
         String vector = embedding.stream().map(String::valueOf)
                 .collect(Collectors.joining(",", "[", "]"));
         jdbc.update("""
                 INSERT INTO meeting_embeddings
                     (meeting_id, embedding, embedding_model, content_hash, embedded_at)
-                VALUES (?, cast(? as vector), 'test-embedding-model', ?, now())
-                """, meetingId, vector, "a".repeat(64));
+                VALUES (?, cast(? as vector), ?, ?, now())
+                """, meetingId, vector, model, "a".repeat(64));
     }
 
     @Test void excludesBlockedDeletedFullOutOfRangeAndPastMeetings() {
@@ -128,12 +132,22 @@ class AiMeetingSearchRepositoryTest {
         insert(10, "러닝 모임", 2, "RECRUITING", 2, 37.5, start.plusHours(15));
         insert(11, "초보 운동 모임", 2, "RECRUITING", 2, 37.5, start.plusHours(15));
         insert(12, "러닝 초보 모임", 2, "RECRUITING", 2, 37.5, start.plusHours(15));
+        insert(13, "다른 모델의 초보 모임", 2, "RECRUITING", 2, 37.5, start.plusHours(15));
         insertEmbedding(11, embedding(0));
         insertEmbedding(12, embedding(0));
+        insertEmbedding(13, embedding(0), "other-embedding-model");
 
-        var result = repository.search(1, filters("러닝"), embedding(0));
+        var result = repository.search(1, filters("러닝"), embedding(0), "test-embedding-model");
 
         assertThat(result.items()).extracting(AiSearchContracts.Candidate::id)
                 .containsExactly(12L, 11L, 10L);
+    }
+
+    @Test void finalValidationKeepsEligibleSemanticCandidateWithoutKeywordMatch() {
+        insert(10, "초보 운동 모임", 2, "RECRUITING", 2, 37.5, start.plusHours(15));
+
+        assertThat(repository.findEligibleByIds(1, filters("러닝"), List.of(10L)))
+                .extracting(AiSearchContracts.Candidate::id)
+                .containsExactly(10L);
     }
 }

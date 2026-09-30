@@ -32,7 +32,7 @@ public final class AiSearchContracts {
             String keyword, String category, LocalDateTime startsAt, LocalDateTime endsBefore,
             LocalTime startsAtTime, LocalTime endsBeforeTime,
             double latitude, double longitude, int radiusMeters,
-            List<Double> queryEmbedding
+            List<Double> queryEmbedding, String queryEmbeddingModel
     ) {
         public Filters filters() {
             return new Filters(keyword, category, startsAt, endsBefore, startsAtTime, endsBeforeTime,

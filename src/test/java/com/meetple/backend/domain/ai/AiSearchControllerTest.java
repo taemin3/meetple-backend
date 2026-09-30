@@ -63,22 +63,33 @@ class AiSearchControllerTest {
     @Test void acceptsOnlyConfiguredEmbeddingDimensionsAndFiniteValues() {
         var valid = new java.util.ArrayList<>(java.util.Collections.nCopies(1536, 0.0));
         valid.set(0, 1.0);
-        assertThatCode(() -> AiSearchToolController.validateEmbedding(valid)).doesNotThrowAnyException();
-        assertThatCode(() -> AiSearchToolController.validateEmbedding(null)).doesNotThrowAnyException();
-        assertThatThrownBy(() -> AiSearchToolController.validateEmbedding(List.of(0.1)))
+        assertThatCode(() -> AiSearchToolController.validateEmbedding(valid, "test-model"))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> AiSearchToolController.validateEmbedding(null, null)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> AiSearchToolController.validateEmbedding(List.of(0.1), "test-model"))
                 .isInstanceOf(BadRequestException.class);
         assertThatThrownBy(() -> AiSearchToolController.validateEmbedding(
-                java.util.Collections.nCopies(1536, 0.0))).isInstanceOf(BadRequestException.class);
+                java.util.Collections.nCopies(1536, 0.0), "test-model"))
+                .isInstanceOf(BadRequestException.class);
         var nonFinite = new java.util.ArrayList<>(java.util.Collections.nCopies(1536, 0.0));
         nonFinite.set(0, Double.NaN);
-        assertThatThrownBy(() -> AiSearchToolController.validateEmbedding(nonFinite))
+        assertThatThrownBy(() -> AiSearchToolController.validateEmbedding(nonFinite, "test-model"))
+                .isInstanceOf(BadRequestException.class);
+        valid.set(0, Double.MAX_VALUE);
+        assertThatThrownBy(() -> AiSearchToolController.validateEmbedding(valid, "test-model"))
+                .isInstanceOf(BadRequestException.class);
+        valid.set(0, 1.0);
+        assertThatThrownBy(() -> AiSearchToolController.validateEmbedding(valid, null))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> AiSearchToolController.validateEmbedding(null, "test-model"))
                 .isInstanceOf(BadRequestException.class);
     }
 
     @Test void internalToolBindsAndForwardsQueryEmbedding() throws Exception {
         var repository = mock(AiMeetingSearchRepository.class);
         var capability = new AiSearchCapability(AiSearchCapabilityTest.PROPERTIES);
-        when(repository.search(eq(42L), any(), any())).thenReturn(new AiSearchContracts.Candidates(List.of(), false));
+        when(repository.search(eq(42L), any(), any(), any()))
+                .thenReturn(new AiSearchContracts.Candidates(List.of(), false));
         var mvc = MockMvcBuilders.standaloneSetup(new AiSearchToolController(capability, repository))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
         String embedding = "1.0," + java.util.Collections.nCopies(1535, "0.0").stream()
@@ -93,10 +104,10 @@ class AiSearchControllerTest {
                                  "startsAt":"2027-01-03T00:00:00","endsBefore":"2027-01-05T00:00:00",
                                  "startsAtTime":null,"endsBeforeTime":null,
                                  "latitude":37.5,"longitude":127.0,"radiusMeters":3000,
-                                 "queryEmbedding":[%s]}
+                                 "queryEmbedding":[%s],"queryEmbeddingModel":"test-model"}
                                 """.formatted(embedding)))
                 .andExpect(status().isOk());
 
-        verify(repository).search(eq(42L), any(), argThat(values -> values.size() == 1536));
+        verify(repository).search(eq(42L), any(), argThat(values -> values.size() == 1536), eq("test-model"));
     }
 }

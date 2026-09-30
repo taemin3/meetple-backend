@@ -40,7 +40,7 @@ public class AiSearchToolController {
         if (request == null) throw new BadRequestException("AI 검색 조건이 올바르지 않습니다.");
         Filters filters = request.filters();
         validateFilters(filters);
-        validateEmbedding(request.queryEmbedding());
+        validateEmbedding(request.queryEmbedding(), request.queryEmbeddingModel());
         LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
         if (filters.endsBefore().isBefore(now) || filters.endsBefore().isEqual(now)) {
             return ApiResponse.success(SuccessStatus.OK, new Candidates(List.of(), false));
@@ -50,7 +50,7 @@ public class AiSearchToolController {
                 filters.startsAtTime(), filters.endsBeforeTime(),
                 filters.latitude(), filters.longitude(), filters.radiusMeters());
         return ApiResponse.success(SuccessStatus.OK,
-                repository.search(memberId, bounded, request.queryEmbedding()));
+                repository.search(memberId, bounded, request.queryEmbedding(), request.queryEmbeddingModel()));
     }
 
     static void validateFilters(Filters f) {
@@ -67,14 +67,24 @@ public class AiSearchToolController {
         }
     }
 
-    static void validateEmbedding(List<Double> embedding) {
-        if (embedding == null) return;
+    static void validateEmbedding(List<Double> embedding, String embeddingModel) {
+        if (embedding == null && embeddingModel == null) return;
+        if (embedding == null || embeddingModel == null || embeddingModel.isBlank()
+                || embeddingModel.length() > 100 || !embeddingModel.equals(embeddingModel.strip())) {
+            throw new BadRequestException("AI 검색 임베딩이 올바르지 않습니다.");
+        }
         if (embedding.size() != EMBEDDING_DIMENSIONS
                 || embedding.stream().anyMatch(value -> value == null || !Double.isFinite(value))) {
             throw new BadRequestException("AI 검색 임베딩이 올바르지 않습니다.");
         }
         double norm = 0;
-        for (double value : embedding) norm = Math.hypot(norm, value);
+        for (double value : embedding) {
+            float storedValue = (float) value;
+            if (!Float.isFinite(storedValue)) {
+                throw new BadRequestException("AI 검색 임베딩이 올바르지 않습니다.");
+            }
+            norm = Math.hypot(norm, storedValue);
+        }
         if (norm == 0 || !Double.isFinite(norm)) {
             throw new BadRequestException("AI 검색 임베딩이 올바르지 않습니다.");
         }
