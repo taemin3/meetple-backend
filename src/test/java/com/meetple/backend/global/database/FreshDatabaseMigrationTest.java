@@ -19,7 +19,7 @@ import org.testcontainers.utility.DockerImageName;
 class FreshDatabaseMigrationTest {
 
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName
-            .parse("meetple-postgres:16-3.5-bigm")
+            .parse("meetple-postgres:16-3.5-bigm-vector0.8.6")
             .asCompatibleSubstituteFor("postgres");
 
     @Container
@@ -42,7 +42,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(24);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(25);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
@@ -65,12 +65,13 @@ class FreshDatabaseMigrationTest {
                     "member_legal_records",
                     "debezium_heartbeat",
                     "reports",
-                    "member_blocks"
+                    "member_blocks",
+                    "meeting_embeddings"
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
                     "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-                    "20", "21", "22", "23"
+                    "20", "21", "22", "23", "24"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder(
                     "운동", "스터디", "취미", "친목", "여행", "맛집", "비즈니스", "반려동물"
@@ -91,9 +92,15 @@ class FreshDatabaseMigrationTest {
             assertThat(columnType(connection, "outbox_events", "id")).isEqualTo("uuid");
             assertThat(columnType(connection, "push_event_deliveries", "claim_id")).isEqualTo("uuid");
             assertThat(columnType(connection, "meetings", "location")).isEqualTo("geography");
+            assertThat(columnType(connection, "meeting_embeddings", "embedding")).isEqualTo("vector");
+            assertThat(formattedColumnType(connection, "meeting_embeddings", "embedding"))
+                    .isEqualTo("vector(1536)");
             assertThat(columnGeneration(connection, "meetings", "location")).isEqualTo("ALWAYS");
             assertThat(indexDefinition(connection, "idx_meetings_location_gist"))
                     .contains("USING gist (location)");
+            assertThat(indexDefinition(connection, "idx_meeting_embeddings_embedding_hnsw"))
+                    .contains("USING hnsw (embedding vector_cosine_ops)");
+            assertThat(installedExtensions(connection)).contains("postgis", "pg_bigm", "vector");
             assertThat(columnIsNullable(connection, "members", "email_verified_at")).isTrue();
             assertThat(columnIsNullable(connection, "members", "profile_image_object_key")).isTrue();
             assertThat(columnIsNullable(connection, "members", "deleted_at")).isTrue();
@@ -242,6 +249,39 @@ class FreshDatabaseMigrationTest {
                 assertThat(resultSet.next()).isTrue();
                 return "YES".equals(resultSet.getString("is_nullable"));
             }
+        }
+    }
+
+    private String formattedColumnType(Connection connection, String tableName, String columnName)
+            throws SQLException {
+        try (var statement = connection.prepareStatement("""
+                SELECT format_type(attribute.atttypid, attribute.atttypmod)
+                FROM pg_attribute attribute
+                JOIN pg_class relation ON relation.oid = attribute.attrelid
+                JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+                WHERE namespace.nspname = 'public'
+                  AND relation.relname = ?
+                  AND attribute.attname = ?
+                  AND attribute.attnum > 0
+                  AND NOT attribute.attisdropped
+                """)) {
+            statement.setString(1, tableName);
+            statement.setString(2, columnName);
+            try (var resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                return resultSet.getString(1);
+            }
+        }
+    }
+
+    private Set<String> installedExtensions(Connection connection) throws SQLException {
+        try (var statement = connection.prepareStatement("SELECT extname FROM pg_extension");
+             var resultSet = statement.executeQuery()) {
+            var extensions = new java.util.HashSet<String>();
+            while (resultSet.next()) {
+                extensions.add(resultSet.getString("extname"));
+            }
+            return extensions;
         }
     }
 

@@ -36,4 +36,4 @@ AI 서버의 `AI_BACKEND_URL`에는 이 Spring 서버의 주소를 지정한다.
 .\gradlew.bat test
 ```
 
-PostGIS 통합 테스트에는 Docker와 기존 `meetple-postgres:16-3.5-bigm` 이미지, 전체 테스트에는 Redis가 필요하다. Python 테스트는 AI 저장소에서 실행한다.
+PostGIS·pgvector 통합 테스트에는 Docker와 `meetple-postgres:16-3.5-bigm-vector0.8.6` 이미지, 전체 테스트에는 Redis가 필요하다. Python 테스트는 AI 저장소에서 실행한다.
