@@ -10,6 +10,10 @@ Spring Boot 기반 meetple API 서버입니다.
 - WebSocket 예정
 - Docker Compose
 
+## AI 서비스
+
+Python AI 서버는 별도 [meetple-ai 저장소](https://github.com/taemin3/meetple-ai)에서 관리합니다. 백엔드는 로그인·데이터 조회·AI 호출을 담당합니다. [연동 설정과 API 안내](docs/AI_SEARCH.md)를 참고하세요.
+
 ## 로컬 인프라 실행
 
 PostgreSQL/PostGIS와 Redis는 Docker Compose로 실행합니다.

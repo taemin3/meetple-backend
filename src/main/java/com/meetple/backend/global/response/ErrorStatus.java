@@ -51,7 +51,9 @@ public enum ErrorStatus {
 
     // 500 INTERNAL_SERVER_ERROR
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.",10501),
-    EXTERNAL_API_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "외부 API 호출 중 오류가 발생했습니다.",10502);
+    EXTERNAL_API_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "외부 API 호출 중 오류가 발생했습니다.",10502),
+    AI_SEARCH_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 검색을 사용할 수 없습니다. 잠시 후 다시 시도해주세요.", 15301),
+    AI_SEARCH_INVALID_RESPONSE(HttpStatus.BAD_GATEWAY, "AI 검색 결과를 확인할 수 없습니다. 다시 검색해주세요.", 15201);
 
     private final HttpStatus httpStatus;
     private final String message;

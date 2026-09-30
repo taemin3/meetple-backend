@@ -142,6 +142,14 @@ naver:
     maps-client-id: ${NAVER_MAPS_CLIENT_ID:}
     maps-client-secret: ${NAVER_MAPS_CLIENT_SECRET:}
 
+ai:
+  search:
+    enabled: ${AI_SEARCH_ENABLED:false}
+    base-url: ${AI_SEARCH_BASE_URL:http://127.0.0.1:8001}
+    service-token: ${AI_SEARCH_SERVICE_TOKEN:}
+    capability-secret: ${AI_SEARCH_CAPABILITY_SECRET:}
+    timeout: ${AI_SEARCH_TIMEOUT:45s}
+
 image:
   deletion:
     kafka:

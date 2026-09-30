@@ -47,6 +47,9 @@ public class SecurityConfig {
             "/api/v1/account-deletions/email-verifications/confirm",
             "/api/v1/legal-documents/signup",
             "/api/v1/categories",
+            // 로그인 JWT 대신 AiSearchCapability의 서비스 키 + 단기 서명을 확인한다.
+            "/internal/ai/search/categories",
+            "/internal/ai/search/meetings",
             "/ws",
             "/swagger-ui.html",
             "/swagger-ui/**",
