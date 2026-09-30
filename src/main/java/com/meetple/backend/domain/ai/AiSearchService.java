@@ -7,6 +7,7 @@ import com.meetple.backend.global.response.ErrorStatus;
 import java.net.http.HttpClient;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashSet;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -72,12 +73,16 @@ public class AiSearchService {
                 f.startsAt().isBefore(now) ? now : f.startsAt(), f.endsBefore(),
                 f.startsAtTime(), f.endsBeforeTime(),
                 f.latitude(), f.longitude(), f.radiusMeters());
-        var current = repository.search(memberId, currentFilters).items();
         var seen = new HashSet<Long>();
+        var recommendationIds = new ArrayList<Long>();
         for (Recommendation recommendation : response.recommendations()) {
             if (recommendation == null || !seen.add(recommendation.meetingId())
                     || recommendation.evidenceQuote() == null || recommendation.evidenceQuote().isBlank()
                     || recommendation.evidenceQuote().length() > 500) throw invalid();
+            recommendationIds.add(recommendation.meetingId());
+        }
+        var current = repository.findEligibleByIds(memberId, currentFilters, recommendationIds);
+        for (Recommendation recommendation : response.recommendations()) {
             boolean grounded = current.stream().anyMatch(m -> m.id() == recommendation.meetingId()
                     && (m.title().contains(recommendation.evidenceQuote()) || m.description().contains(recommendation.evidenceQuote())));
             if (!grounded) throw invalid();

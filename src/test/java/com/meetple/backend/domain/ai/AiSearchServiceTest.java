@@ -22,14 +22,14 @@ class AiSearchServiceTest {
             LocalDateTime.now().plusDays(1), null, 6, 2, 300);
 
     @Test void validatesEvidenceAgainstFreshPermissionFilteredCandidates() {
-        when(repository.search(eq(42L), any())).thenReturn(new Candidates(List.of(candidate), false));
+        when(repository.findEligibleByIds(eq(42L), any(), eq(List.of(10L)))).thenReturn(List.of(candidate));
         assertThatCode(() -> service.validateResponse(42, request, response(10, "처음 달리는 분 환영", filters)))
                 .doesNotThrowAnyException();
-        verify(repository).search(eq(42L), any());
+        verify(repository).findEligibleByIds(eq(42L), any(), eq(List.of(10L)));
     }
 
     @Test void rejectsUnknownIdsAndFabricatedQuotes() {
-        when(repository.search(eq(42L), any())).thenReturn(new Candidates(List.of(candidate), false));
+        when(repository.findEligibleByIds(eq(42L), any(), any())).thenReturn(List.of(candidate));
         assertThatThrownBy(() -> service.validateResponse(42, request, response(99, "처음 달리는 분 환영", filters)))
                 .isInstanceOf(BaseException.class);
         assertThatThrownBy(() -> service.validateResponse(42, request, response(10, "참가비 무료", filters)))
@@ -37,7 +37,7 @@ class AiSearchServiceTest {
     }
 
     @Test void rejectsResultsHiddenByBlockOrRecruitmentChange() {
-        when(repository.search(eq(42L), any())).thenReturn(new Candidates(List.of(), false));
+        when(repository.findEligibleByIds(eq(42L), any(), any())).thenReturn(List.of());
         assertThatThrownBy(() -> service.validateResponse(42, request, response(10, "처음 달리는 분 환영", filters)))
                 .isInstanceOf(BaseException.class);
     }

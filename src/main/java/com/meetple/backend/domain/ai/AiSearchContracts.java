@@ -28,6 +28,18 @@ public final class AiSearchContracts {
             double latitude, double longitude, int radiusMeters
     ) {}
 
+    public record ToolSearchRequest(
+            String keyword, String category, LocalDateTime startsAt, LocalDateTime endsBefore,
+            LocalTime startsAtTime, LocalTime endsBeforeTime,
+            double latitude, double longitude, int radiusMeters,
+            List<Double> queryEmbedding, String queryEmbeddingModel
+    ) {
+        public Filters filters() {
+            return new Filters(keyword, category, startsAt, endsBefore, startsAtTime, endsBeforeTime,
+                    latitude, longitude, radiusMeters);
+        }
+    }
+
     public record Candidate(
             long id, String title, String description, String categoryName, String locationName,
             LocalDateTime scheduledAt, LocalDateTime endsAt, int capacity, int currentPeople,
