@@ -24,7 +24,7 @@ class AiSearchHttpTest {
                     .contains("\"query\":\"러닝\"", "\"referenceTime\":\"")
                     .doesNotContain("memberId", "email");
             var response = new MockClientHttpResponse("""
-                    {"status":"NEEDS_CLARIFICATION","message":"위치를 선택해주세요.",
+                    {"status":"INPUT_REQUIRED","message":"위치를 선택해주세요.",
                      "filters":null,"recommendations":[],"retrievalMode":"keyword"}
                     """.getBytes(StandardCharsets.UTF_8), HttpStatus.OK);
             response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
@@ -32,7 +32,7 @@ class AiSearchHttpTest {
         });
         var service = new AiSearchService(AiSearchCapabilityTest.PROPERTIES, capability, repository, builder);
         var result = service.search(42, new AiSearchContracts.Request(" 러닝 ", null, null, 3000));
-        assertThat(result.status()).isEqualTo(AiSearchContracts.Status.NEEDS_CLARIFICATION);
+        assertThat(result.status()).isEqualTo(AiSearchContracts.Status.INPUT_REQUIRED);
         verifyNoInteractions(repository);
     }
 

@@ -2,6 +2,7 @@ package com.meetple.backend.domain.ai;
 
 import jakarta.validation.constraints.*;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 public final class AiSearchContracts {
@@ -23,6 +24,7 @@ public final class AiSearchContracts {
 
     public record Filters(
             String keyword, String category, LocalDateTime startsAt, LocalDateTime endsBefore,
+            LocalTime startsAtTime, LocalTime endsBeforeTime,
             double latitude, double longitude, int radiusMeters
     ) {}
 
@@ -34,7 +36,7 @@ public final class AiSearchContracts {
 
     public record Candidates(List<Candidate> items, boolean hasMore) {}
     public record Recommendation(long meetingId, String evidenceQuote) {}
-    public enum Status { COMPLETED, NO_RESULTS, NEEDS_CLARIFICATION }
+    public enum Status { COMPLETED, NO_RESULTS, INPUT_REQUIRED, UNSUPPORTED }
     public record Response(Status status, String message, Filters filters,
                            List<Recommendation> recommendations, String retrievalMode) {}
 }

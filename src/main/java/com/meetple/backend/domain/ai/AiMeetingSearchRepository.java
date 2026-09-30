@@ -38,6 +38,12 @@ public class AiMeetingSearchRepository {
         if (filters.keyword() != null && !filters.keyword().isBlank()) {
             sql += " and (lower(m.title) like :keyword escape '!' or lower(m.content) like :keyword escape '!')\n";
         }
+        if (filters.startsAtTime() != null) {
+            sql += " and cast(m.meeting_date as time) >= :startsAtTime\n";
+        }
+        if (filters.endsBeforeTime() != null) {
+            sql += " and cast(m.meeting_date as time) < :endsBeforeTime\n";
+        }
         sql += " order by distance_meters, m.meeting_date, m.id limit 21";
         List<Candidate> rows = jdbc.query(sql, params, (rs, index) -> new Candidate(
                 rs.getLong("id"), rs.getString("title"), rs.getString("content"),
@@ -54,6 +60,7 @@ public class AiMeetingSearchRepository {
         params.put("latitude", f.latitude()); params.put("longitude", f.longitude());
         params.put("radiusMeters", f.radiusMeters()); params.put("startsAt", f.startsAt());
         params.put("endsBefore", f.endsBefore()); params.put("category", f.category());
+        params.put("startsAtTime", f.startsAtTime()); params.put("endsBeforeTime", f.endsBeforeTime());
         String literal = f.keyword() == null ? "" : f.keyword().strip().toLowerCase(java.util.Locale.ROOT);
         params.put("keyword", "%" + literal.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%");
         return params;

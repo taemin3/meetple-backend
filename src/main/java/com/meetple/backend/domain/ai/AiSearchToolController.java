@@ -43,6 +43,7 @@ public class AiSearchToolController {
         }
         Filters bounded = new Filters(filters.keyword(), filters.category(),
                 filters.startsAt().isBefore(now) ? now : filters.startsAt(), filters.endsBefore(),
+                filters.startsAtTime(), filters.endsBeforeTime(),
                 filters.latitude(), filters.longitude(), filters.radiusMeters());
         return ApiResponse.success(SuccessStatus.OK, repository.search(memberId, bounded));
     }
@@ -52,6 +53,8 @@ public class AiSearchToolController {
                 || Math.abs(f.latitude()) > 90 || Math.abs(f.longitude()) > 180
                 || f.radiusMeters() < 100 || f.radiusMeters() > 50000
                 || f.startsAt() == null || f.endsBefore() == null || !f.startsAt().isBefore(f.endsBefore())
+                || (f.startsAtTime() != null && f.endsBeforeTime() != null
+                    && !f.startsAtTime().isBefore(f.endsBeforeTime()))
                 || f.endsBefore().isAfter(f.startsAt().plusDays(366))
                 || (f.keyword() != null && f.keyword().length() > 100)
                 || (f.category() != null && f.category().length() > 30)) {

@@ -51,7 +51,7 @@ public class AiSearchService {
         if (response == null || response.status() == null || response.message() == null
                 || response.message().length() > 500 || response.recommendations() == null
                 || response.recommendations().size() > 5 || !"keyword".equals(response.retrievalMode())) throw invalid();
-        if (response.status() == Status.NEEDS_CLARIFICATION) {
+        if (response.status() == Status.INPUT_REQUIRED || response.status() == Status.UNSUPPORTED) {
             if (!response.recommendations().isEmpty() || response.filters() != null) throw invalid();
             return;
         }
@@ -70,6 +70,7 @@ public class AiSearchService {
         if (!f.endsBefore().isAfter(now)) throw invalid();
         Filters currentFilters = new Filters(f.keyword(), f.category(),
                 f.startsAt().isBefore(now) ? now : f.startsAt(), f.endsBefore(),
+                f.startsAtTime(), f.endsBeforeTime(),
                 f.latitude(), f.longitude(), f.radiusMeters());
         var current = repository.search(memberId, currentFilters).items();
         var seen = new HashSet<Long>();

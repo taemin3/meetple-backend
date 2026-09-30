@@ -48,7 +48,8 @@ class AiMeetingSearchRepositoryTest {
     }
 
     private AiSearchContracts.Filters filters(String keyword) {
-        return new AiSearchContracts.Filters(keyword, "운동", start, start.plusDays(2), 37.5, 127, 3000);
+        return new AiSearchContracts.Filters(keyword, "운동", start, start.plusDays(2),
+                null, null, 37.5, 127, 3000);
     }
 
     @Test void excludesBlockedDeletedFullOutOfRangeAndPastMeetings() {
@@ -74,6 +75,15 @@ class AiMeetingSearchRepositoryTest {
         assertThat(repository.search(1, filters("%_러닝!")).items()).extracting(AiSearchContracts.Candidate::id)
                 .containsExactly(10L);
         assertThat(repository.search(1, filters("' OR 1=1 --")).items()).isEmpty();
+    }
+
+    @Test void filtersByTimeOfDayAcrossDateRange() {
+        insert(10, "오후 러닝", 2, "RECRUITING", 2, 37.5, start.plusHours(15));
+        insert(11, "저녁 러닝", 2, "RECRUITING", 2, 37.5, start.plusHours(19));
+        var evening = new AiSearchContracts.Filters("러닝", "운동", start, start.plusDays(2),
+                java.time.LocalTime.of(18, 0), null, 37.5, 127, 3000);
+        assertThat(repository.search(1, evening).items()).extracting(AiSearchContracts.Candidate::id)
+                .containsExactly(11L);
     }
 
     @Test void returnsBoundedCandidatesAndMoreFlag() {

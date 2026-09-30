@@ -26,13 +26,13 @@ class AiSearchControllerTest {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new AuthenticatedMember(42L, "test@example.test", MemberRole.USER), null, List.of()));
         when(service.search(eq(42L), any())).thenReturn(new AiSearchContracts.Response(
-                AiSearchContracts.Status.NEEDS_CLARIFICATION, "위치를 선택해주세요.", null, List.of(), "keyword"));
+                AiSearchContracts.Status.INPUT_REQUIRED, "위치를 선택해주세요.", null, List.of(), "keyword"));
         var mvc = MockMvcBuilders.standaloneSetup(new AiSearchController(service))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
         mvc.perform(post("/api/v1/meetings/ai-search").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"query\":\"러닝 모임\",\"radiusMeters\":3000}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("NEEDS_CLARIFICATION"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("INPUT_REQUIRED"));
     }
 
     @Test void rejectsIncompleteCoordinatesBeforeCallingModel() throws Exception {
