@@ -86,6 +86,16 @@ class AiMeetingSearchRepositoryTest {
                 .containsExactly(11L);
     }
 
+    @Test void filtersTimeRangeAcrossMidnight() {
+        insert(10, "늦은 밤 러닝", 2, "RECRUITING", 2, 37.5, start.plusHours(23).plusMinutes(45));
+        insert(11, "자정 이후 러닝", 2, "RECRUITING", 2, 37.5, start.plusDays(1).plusMinutes(15));
+        insert(12, "낮 러닝", 2, "RECRUITING", 2, 37.5, start.plusDays(1).plusHours(12));
+        var aroundMidnight = new AiSearchContracts.Filters("러닝", "운동", start, start.plusDays(2),
+                java.time.LocalTime.of(23, 30), java.time.LocalTime.of(0, 30), 37.5, 127, 3000);
+        assertThat(repository.search(1, aroundMidnight).items()).extracting(AiSearchContracts.Candidate::id)
+                .containsExactly(10L, 11L);
+    }
+
     @Test void returnsBoundedCandidatesAndMoreFlag() {
         for (long id = 1; id <= 21; id++) insert(id, "러닝", 2, "RECRUITING", 2, 37.5, start.plusHours(15));
         var result = repository.search(1, filters("러닝"));

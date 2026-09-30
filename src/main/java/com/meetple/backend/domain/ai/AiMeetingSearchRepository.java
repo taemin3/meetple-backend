@@ -38,10 +38,17 @@ public class AiMeetingSearchRepository {
         if (filters.keyword() != null && !filters.keyword().isBlank()) {
             sql += " and (lower(m.title) like :keyword escape '!' or lower(m.content) like :keyword escape '!')\n";
         }
-        if (filters.startsAtTime() != null) {
+        if (filters.startsAtTime() != null && filters.endsBeforeTime() != null) {
+            if (filters.startsAtTime().isBefore(filters.endsBeforeTime())) {
+                sql += " and cast(m.meeting_date as time) >= :startsAtTime"
+                        + " and cast(m.meeting_date as time) < :endsBeforeTime\n";
+            } else {
+                sql += " and (cast(m.meeting_date as time) >= :startsAtTime"
+                        + " or cast(m.meeting_date as time) < :endsBeforeTime)\n";
+            }
+        } else if (filters.startsAtTime() != null) {
             sql += " and cast(m.meeting_date as time) >= :startsAtTime\n";
-        }
-        if (filters.endsBeforeTime() != null) {
+        } else if (filters.endsBeforeTime() != null) {
             sql += " and cast(m.meeting_date as time) < :endsBeforeTime\n";
         }
         sql += " order by distance_meters, m.meeting_date, m.id limit 21";

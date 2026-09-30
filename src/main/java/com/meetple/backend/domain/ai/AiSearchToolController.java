@@ -54,7 +54,7 @@ public class AiSearchToolController {
                 || f.radiusMeters() < 100 || f.radiusMeters() > 50000
                 || f.startsAt() == null || f.endsBefore() == null || !f.startsAt().isBefore(f.endsBefore())
                 || (f.startsAtTime() != null && f.endsBeforeTime() != null
-                    && !f.startsAtTime().isBefore(f.endsBeforeTime()))
+                    && f.startsAtTime().equals(f.endsBeforeTime()))
                 || f.endsBefore().isAfter(f.startsAt().plusDays(366))
                 || (f.keyword() != null && f.keyword().length() > 100)
                 || (f.category() != null && f.category().length() > 30)) {
