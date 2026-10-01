@@ -75,3 +75,9 @@
 - FastAPI 신고 분석 계약과 LangGraph 구현
 - Kafka 신고 분석 이벤트 소비와 Spring 신고 문맥 API 연결
 - 검색 후보 이력, AI 결과의 증거·정책 ID 검증 및 분석 결과 저장
+
+## 리뷰 반영
+
+- 필터 조건 때문에 HNSW 후보가 소진되는 문제를 막기 위해 검색 트랜잭션에
+  `hnsw.iterative_scan=strict_order`와 `hnsw.max_scan_tuples=50000`을 적용했다.
+- 벡터 후보 수를 요청 `limit`의 10배이자 최소 100개로 확장했다.

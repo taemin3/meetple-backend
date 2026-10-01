@@ -18,7 +18,9 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -36,6 +38,7 @@ class ModerationPolicyRepositoryTest {
     private static final String MODEL = "test-embedding-model";
     private JdbcTemplate jdbc;
     private ModerationPolicyRepository repository;
+    private TransactionTemplate transactions;
 
     @BeforeEach
     void prepare() {
@@ -45,6 +48,7 @@ class ModerationPolicyRepositoryTest {
         Flyway.configure().dataSource(datasource).locations("classpath:db/migration").load().migrate();
         jdbc = new JdbcTemplate(datasource);
         repository = new ModerationPolicyRepository(new NamedParameterJdbcTemplate(datasource));
+        transactions = new TransactionTemplate(new DataSourceTransactionManager(datasource));
         jdbc.execute("TRUNCATE moderation_policies CASCADE");
         var fixture = new ResourceDatabasePopulator(
                 new ClassPathResource("fixtures/moderation-policies.sql")
@@ -59,7 +63,7 @@ class ModerationPolicyRepositoryTest {
         insertEmbedding(1002, embedding(0), MODEL, "2".repeat(64));
         insertEmbedding(1003, embedding(0), "other-model", "3".repeat(64));
 
-        var result = repository.search(
+        var result = search(
                 "광고",
                 ReportTargetType.CHAT_MESSAGE,
                 null,
@@ -92,7 +96,7 @@ class ModerationPolicyRepositoryTest {
         jdbc.update("UPDATE moderation_policies SET active=FALSE WHERE id=101");
         jdbc.update("UPDATE moderation_policies SET effective_to=DATE '2026-09-30' WHERE id=102");
 
-        var result = repository.search(
+        var result = search(
                 "일치하지않는키워드",
                 ReportTargetType.MEMBER,
                 ModerationPolicyType.SAFETY,
@@ -123,7 +127,7 @@ class ModerationPolicyRepositoryTest {
                 """, "4".repeat(64));
         insertEmbedding(1004, embedding(0), MODEL, "4".repeat(64));
 
-        var searchResult = repository.search(
+        var searchResult = search(
                 "시행 예정",
                 ReportTargetType.MEMBER,
                 ModerationPolicyType.SPAM,
@@ -177,6 +181,48 @@ class ModerationPolicyRepositoryTest {
                 FROM moderation_policy_embeddings
                 WHERE policy_chunk_id=1001 AND embedding_model=?
                 """, String.class, MODEL)).isEqualTo("1".repeat(64));
+    }
+
+    @Test
+    void enablesIterativeHnswScanForFilteredVectorSearch() {
+        transactions.executeWithoutResult(status -> {
+            repository.search(
+                    "광고",
+                    ReportTargetType.CHAT_MESSAGE,
+                    null,
+                    embedding(0),
+                    MODEL,
+                    20,
+                    EFFECTIVE_DATE
+            );
+
+            assertThat(jdbc.queryForObject(
+                    "SELECT current_setting('hnsw.iterative_scan')", String.class
+            )).isEqualTo("strict_order");
+            assertThat(jdbc.queryForObject(
+                    "SELECT current_setting('hnsw.max_scan_tuples')", Integer.class
+            )).isEqualTo(50_000);
+        });
+    }
+
+    private ModerationPolicyContracts.Candidates search(
+            String keyword,
+            ReportTargetType targetType,
+            ModerationPolicyType policyType,
+            List<Double> queryEmbedding,
+            String embeddingModel,
+            int limit,
+            LocalDate effectiveDate
+    ) {
+        return transactions.execute(status -> repository.search(
+                keyword,
+                targetType,
+                policyType,
+                queryEmbedding,
+                embeddingModel,
+                limit,
+                effectiveDate
+        ));
     }
 
     private void insertEmbedding(

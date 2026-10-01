@@ -13,10 +13,13 @@ import java.util.stream.Collectors;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public class ModerationPolicyRepository {
-    private static final int VECTOR_CANDIDATE_LIMIT = 100;
+    private static final int MIN_VECTOR_CANDIDATE_LIMIT = 100;
+    private static final int VECTOR_CANDIDATE_MULTIPLIER = 10;
+    private static final int HNSW_MAX_SCAN_TUPLES = 50_000;
     private static final RowMapper<Candidate> CANDIDATE_MAPPER = (rs, rowNum) -> new Candidate(
             rs.getLong("policy_id"),
             rs.getLong("policy_chunk_id"),
@@ -51,6 +54,7 @@ public class ModerationPolicyRepository {
         this.jdbc = jdbc;
     }
 
+    @Transactional(readOnly = true)
     public Candidates search(
             String keyword,
             ReportTargetType targetType,
@@ -60,12 +64,16 @@ public class ModerationPolicyRepository {
             int limit,
             LocalDate effectiveDate
     ) {
+        configureFilteredHnswSearch();
         Map<String, Object> params = commonParameters(
                 targetType, policyType, embeddingModel, effectiveDate
         );
         params.put("keyword", escapedKeyword(keyword));
         params.put("queryEmbedding", vectorLiteral(queryEmbedding));
-        params.put("vectorCandidateLimit", VECTOR_CANDIDATE_LIMIT);
+        params.put(
+                "vectorCandidateLimit",
+                Math.max(MIN_VECTOR_CANDIDATE_LIMIT, limit * VECTOR_CANDIDATE_MULTIPLIER)
+        );
         params.put("resultLimit", limit + 1);
 
         List<Candidate> rows = jdbc.query("""
@@ -125,6 +133,13 @@ public class ModerationPolicyRepository {
                 """, params, CANDIDATE_MAPPER);
 
         return new Candidates(rows.stream().limit(limit).toList(), rows.size() > limit);
+    }
+
+    private void configureFilteredHnswSearch() {
+        jdbc.getJdbcTemplate().execute("SET LOCAL hnsw.iterative_scan = 'strict_order'");
+        jdbc.getJdbcTemplate().execute(
+                "SET LOCAL hnsw.max_scan_tuples = '" + HNSW_MAX_SCAN_TUPLES + "'"
+        );
     }
 
     public EmbeddingJobs findEmbeddingJobs(
