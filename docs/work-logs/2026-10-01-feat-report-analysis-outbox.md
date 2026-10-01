@@ -43,6 +43,7 @@
 - `ReportAnalysisRequestedEvent`: `reportId` 전용 이벤트 데이터 계약
 - `OutboxEventTopic`: 신고 분석 토픽 추가
 - `docker-compose.yml`: 로컬 기본, Retry, DLQ 토픽 추가
+- `infra/terraform/event_runtime.tf`: 운영 기본, Retry, DLQ 토픽과 보존 정책 추가
 - `ModerationServiceTest`: 이벤트 계약 검증
 
 ## 검증
@@ -56,12 +57,15 @@
 - 전체 513개 테스트 통과, 실패 0, 오류 0, 제외 0
 - 변경 관련 `ModerationServiceTest`, `OutboxEventPublisherIntegrationTest` 선택 실행 통과
 - `docker-compose config` 구성 검증 통과. 사용자 Docker 설정 파일 접근 경고는 있었으나 구성 오류는 없었다.
+- 번들 Terraform 1.16.0으로 `terraform fmt -check -recursive` 통과
+- 번들 Terraform 1.16.0으로 `terraform validate -no-color` 통과. 기존 Service Discovery `failure_threshold` deprecation 경고만 확인
 
 ## 이슈와 결정
 
 - 신고 설명, 사용자 JWT, 회원 개인정보는 Kafka payload에 포함하지 않았다.
 - AI 서버는 후속 PR에서 서비스 인증이 적용된 Spring 내부 API로 신고 문맥을 조회한다.
 - AI 소비, 정책 RAG, 분석 결과 저장, 자동 경고, 관리자 제재는 별도 PR로 분리한다.
+- Kafka auto-create가 비활성화된 운영 환경도 같은 토픽을 명시적으로 프로비저닝한다.
 
 ## 후속 작업
 
