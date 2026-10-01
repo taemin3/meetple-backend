@@ -42,7 +42,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(26);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(27);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
@@ -69,12 +69,14 @@ class FreshDatabaseMigrationTest {
                     "meeting_embeddings",
                     "moderation_policies",
                     "moderation_policy_chunks",
-                    "moderation_policy_embeddings"
+                    "moderation_policy_embeddings",
+                    "report_analyses",
+                    "report_analysis_policies"
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
                     "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-                    "20", "21", "22", "23", "24", "25"
+                    "20", "21", "22", "23", "24", "25", "26"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder(
                     "운동", "스터디", "취미", "친목", "여행", "맛집", "비즈니스", "반려동물"
@@ -120,6 +122,8 @@ class FreshDatabaseMigrationTest {
             assertThat(columnIsNullable(connection, "meetings", "thumbnail_image_object_key")).isTrue();
             assertThat(columnIsNullable(connection, "meeting_images", "image_url")).isTrue();
             assertThat(columnIsNullable(connection, "meeting_images", "object_key")).isTrue();
+            assertThat(columnIsNullable(connection, "reports", "target_snapshot")).isTrue();
+            assertThat(columnIsNullable(connection, "reports", "target_snapshot_hash")).isTrue();
 
             assertThat(uniqueConstraints(connection, "categories")).contains("uk_categories_name");
             assertThat(uniqueConstraints(connection, "members")).contains("uk_members_email");

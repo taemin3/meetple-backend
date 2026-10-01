@@ -52,6 +52,7 @@ public class SecurityConfig {
             "/internal/ai/search/meetings",
             // 로그인 JWT 대신 AiModerationAuthenticator가 전용 서비스 키를 확인한다.
             "/internal/ai/moderation/policies/**",
+            "/internal/ai/moderation/reports/**",
             "/ws",
             "/swagger-ui.html",
             "/swagger-ui/**",

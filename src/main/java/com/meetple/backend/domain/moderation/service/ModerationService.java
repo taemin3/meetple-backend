@@ -8,6 +8,7 @@ import com.meetple.backend.domain.meeting.entity.Meeting;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.moderation.analysis.ReportAnalysisService;
 import com.meetple.backend.domain.moderation.dto.request.CreateReportRequest;
 import com.meetple.backend.domain.moderation.dto.response.BlockedMemberResponse;
 import com.meetple.backend.domain.moderation.dto.response.ReportResponse;
@@ -35,6 +36,7 @@ import org.springframework.util.StringUtils;
 @Transactional(readOnly = true)
 public class ModerationService {
     private static final String MEMBER_NOT_FOUND_MESSAGE = "회원을 찾을 수 없습니다.";
+    private static final int MAX_EVIDENCE_LENGTH = 4000;
     private static final int MAX_PAGE_SIZE = 100;
     private static final Set<String> BLOCK_SORT_PROPERTIES = Set.of(
             "id",
@@ -50,18 +52,23 @@ public class ModerationService {
     private final MemberBlockRepository memberBlockRepository;
     private final ImageService imageService;
     private final OutboxEventPublisher outboxEventPublisher;
+    private final ReportAnalysisService reportAnalysisService;
 
     @Transactional
     public ReportResponse createReport(Long reporterId, CreateReportRequest request) {
         Member reporter = getMember(reporterId);
-        Long targetAuthorId = resolveTargetAuthorId(reporterId, request);
-        if (reporterId.equals(targetAuthorId)) {
+        ResolvedReportTarget target = resolveTarget(reporterId, request);
+        if (reporterId.equals(target.authorId())) {
             throw new BadRequestException("자신 또는 자신이 작성한 콘텐츠는 신고할 수 없습니다.");
         }
         Report report = reportRepository.save(Report.create(
                 reporter, request.targetType(), request.targetId(), request.reason(),
                 normalizeDescription(request.reason(), request.otherDescription())
         ));
+        reportAnalysisService.initialize(
+                report.getId(),
+                target.evidenceContent()
+        );
         publishAnalysisRequest(report);
         return ReportResponse.from(report);
     }
@@ -117,21 +124,44 @@ public class ModerationService {
                         imageService.createFileUrl(block.getBlocked().getProfileImageObjectKey()))));
     }
 
-    private Long resolveTargetAuthorId(Long reporterId, CreateReportRequest request) {
+    private ResolvedReportTarget resolveTarget(Long reporterId, CreateReportRequest request) {
         return switch (request.targetType()) {
-            case MEMBER -> getMember(request.targetId()).getId();
+            case MEMBER -> {
+                Member member = getMember(request.targetId());
+                yield new ResolvedReportTarget(
+                        member.getId(),
+                        normalizeEvidence(member.getIntroduction(), "[프로필 소개 없음]")
+                );
+            }
             case MEETING -> {
                 Meeting meeting = meetingRepository.findById(request.targetId())
                         .orElseThrow(() -> new NotFoundException("모임을 찾을 수 없습니다."));
-                yield meeting.getHost().getId();
+                yield new ResolvedReportTarget(
+                        meeting.getHost().getId(),
+                        normalizeEvidence(
+                                meeting.getTitle() + "\n" + meeting.getContent(),
+                                "[모임 내용 없음]"
+                        )
+                );
             }
             case CHAT_MESSAGE -> {
                 ChatMessage message = chatMessageRepository.findById(request.targetId())
                         .orElseThrow(() -> new NotFoundException("채팅 메시지를 찾을 수 없습니다."));
                 chatAccessPolicy.getAccessibleMeeting(reporterId, message.getMeeting().getId());
-                yield message.getSender().getId();
+                yield new ResolvedReportTarget(
+                        message.getSender().getId(),
+                        normalizeEvidence(message.getContent(), "[채팅 내용 없음]")
+                );
             }
         };
+    }
+
+    private String normalizeEvidence(String content, String emptyValue) {
+        String normalized = StringUtils.hasText(content) ? content.strip() : emptyValue;
+        int codePointCount = normalized.codePointCount(0, normalized.length());
+        return codePointCount <= MAX_EVIDENCE_LENGTH
+                ? normalized
+                : normalized.substring(0, normalized.offsetByCodePoints(0, MAX_EVIDENCE_LENGTH));
     }
 
     private String normalizeDescription(ReportReason reason, String description) {
@@ -145,5 +175,11 @@ public class ModerationService {
     private Member getMember(Long memberId) {
         return memberRepository.findById(memberId)
                 .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
+    }
+
+    private record ResolvedReportTarget(
+            Long authorId,
+            String evidenceContent
+    ) {
     }
 }

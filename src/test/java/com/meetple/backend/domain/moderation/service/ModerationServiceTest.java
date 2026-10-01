@@ -14,6 +14,7 @@ import com.meetple.backend.domain.image.service.ImageService;
 import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.repository.MemberRepository;
+import com.meetple.backend.domain.moderation.analysis.ReportAnalysisService;
 import com.meetple.backend.domain.moderation.dto.request.CreateReportRequest;
 import com.meetple.backend.domain.moderation.entity.MemberBlock;
 import com.meetple.backend.domain.moderation.entity.Report;
@@ -48,6 +49,7 @@ class ModerationServiceTest {
     @Mock MemberBlockRepository memberBlockRepository;
     @Mock ImageService imageService;
     @Mock OutboxEventPublisher outboxEventPublisher;
+    @Mock ReportAnalysisService reportAnalysisService;
 
     private ModerationService service;
 
@@ -55,7 +57,7 @@ class ModerationServiceTest {
     void setUp() {
         service = new ModerationService(memberRepository, meetingRepository, chatMessageRepository,
                 chatAccessPolicy, reportRepository, memberBlockRepository, imageService,
-                outboxEventPublisher);
+                outboxEventPublisher, reportAnalysisService);
     }
 
     @Test
@@ -93,6 +95,10 @@ class ModerationServiceTest {
         org.assertj.core.api.Assertions.assertThat(event.data())
                 .extracting("reportId")
                 .isEqualTo(10L);
+        verify(reportAnalysisService).initialize(
+                10L,
+                "[프로필 소개 없음]"
+        );
     }
 
     @Test
