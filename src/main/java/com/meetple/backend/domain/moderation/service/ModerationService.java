@@ -15,7 +15,6 @@ import com.meetple.backend.domain.moderation.dto.response.ReportResponse;
 import com.meetple.backend.domain.moderation.entity.MemberBlock;
 import com.meetple.backend.domain.moderation.entity.Report;
 import com.meetple.backend.domain.moderation.entity.ReportReason;
-import com.meetple.backend.domain.moderation.entity.ReportTargetType;
 import com.meetple.backend.domain.moderation.event.ReportAnalysisRequestedEvent;
 import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.domain.moderation.repository.ReportRepository;
@@ -68,8 +67,6 @@ public class ModerationService {
         ));
         reportAnalysisService.initialize(
                 report.getId(),
-                target.evidenceType(),
-                target.sourceId(),
                 target.evidenceContent()
         );
         publishAnalysisRequest(report);
@@ -133,8 +130,6 @@ public class ModerationService {
                 Member member = getMember(request.targetId());
                 yield new ResolvedReportTarget(
                         member.getId(),
-                        ReportTargetType.MEMBER,
-                        member.getId(),
                         normalizeEvidence(member.getIntroduction(), "[프로필 소개 없음]")
                 );
             }
@@ -143,8 +138,6 @@ public class ModerationService {
                         .orElseThrow(() -> new NotFoundException("모임을 찾을 수 없습니다."));
                 yield new ResolvedReportTarget(
                         meeting.getHost().getId(),
-                        ReportTargetType.MEETING,
-                        request.targetId(),
                         normalizeEvidence(
                                 meeting.getTitle() + "\n" + meeting.getContent(),
                                 "[모임 내용 없음]"
@@ -157,8 +150,6 @@ public class ModerationService {
                 chatAccessPolicy.getAccessibleMeeting(reporterId, message.getMeeting().getId());
                 yield new ResolvedReportTarget(
                         message.getSender().getId(),
-                        ReportTargetType.CHAT_MESSAGE,
-                        request.targetId(),
                         normalizeEvidence(message.getContent(), "[채팅 내용 없음]")
                 );
             }
@@ -188,8 +179,6 @@ public class ModerationService {
 
     private record ResolvedReportTarget(
             Long authorId,
-            ReportTargetType evidenceType,
-            Long sourceId,
             String evidenceContent
     ) {
     }

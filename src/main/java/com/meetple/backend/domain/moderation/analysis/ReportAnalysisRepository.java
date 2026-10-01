@@ -4,17 +4,12 @@ import static com.meetple.backend.domain.moderation.analysis.ReportAnalysisContr
 
 import com.meetple.backend.domain.moderation.entity.ReportReason;
 import com.meetple.backend.domain.moderation.entity.ReportTargetType;
-import com.meetple.backend.domain.moderation.policy.ModerationPolicyContracts.Candidate;
-import com.meetple.backend.domain.moderation.policy.ModerationPolicyType;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -25,24 +20,22 @@ public class ReportAnalysisRepository {
         this.jdbc = jdbc;
     }
 
-    public void initialize(
-            long reportId,
-            ReportTargetType evidenceType,
-            long sourceId,
-            String content,
-            String contentHash
-    ) {
-        jdbc.update("""
-                INSERT INTO report_analysis_evidence
-                    (report_id, evidence_type, source_id, content, content_hash)
-                VALUES (:reportId, :evidenceType, :sourceId, :content, :contentHash)
+    public void initialize(long reportId, String targetSnapshot, String targetSnapshotHash) {
+        int updated = jdbc.update("""
+                UPDATE reports
+                SET target_snapshot = :targetSnapshot,
+                    target_snapshot_hash = :targetSnapshotHash
+                WHERE id = :reportId
+                  AND target_snapshot IS NULL
+                  AND target_snapshot_hash IS NULL
                 """, Map.of(
                 "reportId", reportId,
-                "evidenceType", evidenceType.name(),
-                "sourceId", sourceId,
-                "content", content,
-                "contentHash", contentHash
+                "targetSnapshot", targetSnapshot,
+                "targetSnapshotHash", targetSnapshotHash
         ));
+        if (updated != 1) {
+            throw new IllegalStateException("신고 스냅샷을 저장할 수 없습니다.");
+        }
         jdbc.update("""
                 INSERT INTO report_analyses (report_id, status)
                 VALUES (:reportId, 'PENDING')
@@ -50,37 +43,26 @@ public class ReportAnalysisRepository {
     }
 
     public Optional<Context> findContext(long reportId) {
-        List<ContextHeader> headers = jdbc.query("""
-                SELECT id, target_type, reason, other_description
+        List<Context> rows = jdbc.query("""
+                SELECT id, target_type, reason, other_description, target_snapshot
                 FROM reports
                 WHERE id = :reportId
-                """, Map.of("reportId", reportId), (rs, rowNum) -> new ContextHeader(
-                rs.getLong("id"),
-                ReportTargetType.valueOf(rs.getString("target_type")),
-                ReportReason.valueOf(rs.getString("reason")),
-                rs.getString("other_description")
-        ));
-        if (headers.isEmpty()) {
-            return Optional.empty();
-        }
-        ContextHeader header = headers.getFirst();
-        List<Evidence> evidence = jdbc.query("""
-                SELECT id, evidence_type, content
-                FROM report_analysis_evidence
-                WHERE report_id = :reportId
-                ORDER BY id
-                """, Map.of("reportId", reportId), (rs, rowNum) -> new Evidence(
-                rs.getLong("id"),
-                ReportTargetType.valueOf(rs.getString("evidence_type")),
-                rs.getString("content")
-        ));
-        return Optional.of(new Context(
-                header.reportId(),
-                header.targetType(),
-                header.reason(),
-                header.description(),
-                evidence
-        ));
+                  AND target_snapshot IS NOT NULL
+                """, Map.of("reportId", reportId), (rs, rowNum) -> {
+            ReportTargetType targetType = ReportTargetType.valueOf(rs.getString("target_type"));
+            return new Context(
+                    rs.getLong("id"),
+                    targetType,
+                    ReportReason.valueOf(rs.getString("reason")),
+                    rs.getString("other_description"),
+                    List.of(new Evidence(
+                            rs.getLong("id"),
+                            targetType,
+                            rs.getString("target_snapshot")
+                    ))
+            );
+        });
+        return rows.stream().findFirst();
     }
 
     public void markProcessing(long reportId) {
@@ -94,52 +76,6 @@ public class ReportAnalysisRepository {
                 WHERE report_id = :reportId
                   AND status IN ('PENDING', 'PROCESSING', 'FAILED_RETRYABLE')
                 """, Map.of("reportId", reportId));
-    }
-
-    public Optional<ReportTargetType> findTargetType(long reportId) {
-        List<ReportTargetType> rows = jdbc.query("""
-                SELECT target_type
-                FROM reports
-                WHERE id = :reportId
-                """, Map.of("reportId", reportId), (rs, rowNum) ->
-                ReportTargetType.valueOf(rs.getString("target_type")));
-        return rows.stream().findFirst();
-    }
-
-    public long recordRetrieval(
-            long reportId,
-            String embeddingModel,
-            String keyword,
-            ModerationPolicyType policyType,
-            List<Candidate> candidates
-    ) {
-        KeyHolder keyHolder = new GeneratedKeyHolder();
-        MapSqlParameterSource parameters = new MapSqlParameterSource()
-                .addValue("reportId", reportId)
-                .addValue("embeddingModel", embeddingModel)
-                .addValue("keyword", keyword)
-                .addValue("policyType", policyType == null ? null : policyType.name());
-        jdbc.update("""
-                INSERT INTO moderation_policy_retrievals
-                    (report_id, query_embedding_model, keyword, requested_policy_type)
-                VALUES (:reportId, :embeddingModel, :keyword, :policyType)
-                """, parameters, keyHolder, new String[]{"id"});
-        long retrievalId = keyHolder.getKeyAs(Long.class);
-        for (int index = 0; index < candidates.size(); index++) {
-            Candidate candidate = candidates.get(index);
-            jdbc.update("""
-                    INSERT INTO moderation_policy_retrieval_items
-                        (retrieval_id, policy_id, policy_chunk_id, result_rank, content_hash)
-                    VALUES (:retrievalId, :policyId, :policyChunkId, :resultRank, :contentHash)
-                    """, Map.of(
-                    "retrievalId", retrievalId,
-                    "policyId", candidate.policyId(),
-                    "policyChunkId", candidate.policyChunkId(),
-                    "resultRank", index + 1,
-                    "contentHash", candidate.contentHash()
-            ));
-        }
-        return retrievalId;
     }
 
     public Optional<AnalysisLock> lockAnalysis(long reportId) {
@@ -157,44 +93,30 @@ public class ReportAnalysisRepository {
         return rows.stream().findFirst();
     }
 
-    public boolean retrievalBelongsToReport(long reportId, long retrievalId) {
-        Integer count = jdbc.queryForObject("""
-                SELECT COUNT(*)
-                FROM moderation_policy_retrievals
-                WHERE id = :retrievalId
-                  AND report_id = :reportId
-                """, Map.of("reportId", reportId, "retrievalId", retrievalId), Integer.class);
-        return count != null && count == 1;
-    }
-
-    public Set<Long> findEvidenceIds(long reportId, List<Long> evidenceIds) {
+    public Set<Long> findApplicablePolicyIds(
+            ReportTargetType targetType,
+            List<Long> policyIds
+    ) {
         return Set.copyOf(jdbc.queryForList("""
                 SELECT id
-                FROM report_analysis_evidence
-                WHERE report_id = :reportId
-                  AND id IN (:evidenceIds)
-                """, Map.of("reportId", reportId, "evidenceIds", evidenceIds), Long.class));
-    }
-
-    public Set<Long> findRetrievedPolicyIds(long retrievalId, List<Long> policyIds) {
-        return Set.copyOf(jdbc.queryForList("""
-                SELECT DISTINCT policy_id
-                FROM moderation_policy_retrieval_items
-                WHERE retrieval_id = :retrievalId
-                  AND policy_id IN (:policyIds)
-                """, Map.of("retrievalId", retrievalId, "policyIds", policyIds), Long.class));
+                FROM moderation_policies
+                WHERE id IN (:policyIds)
+                  AND active = TRUE
+                  AND (target_type = 'ALL' OR target_type = :targetType)
+                """, Map.of(
+                "targetType", targetType.name(),
+                "policyIds", policyIds
+        ), Long.class));
     }
 
     public void complete(
             long reportId,
             CompleteRequest request,
             String resultHash,
-            List<Long> evidenceIds,
             List<Long> policyIds
     ) {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("reportId", reportId);
-        parameters.put("policyRetrievalId", request.policyRetrievalId());
         parameters.put("reportType", request.reportType().name());
         parameters.put("riskLevel", request.riskLevel().name());
         parameters.put("priority", request.priority().name());
@@ -213,15 +135,16 @@ public class ReportAnalysisRepository {
                     rationale = :rationale,
                     confidence = :confidence,
                     recommended_action = :recommendedAction,
-                    policy_retrieval_id = :policyRetrievalId,
                     result_hash = :resultHash,
                     failure_code = NULL,
                     completed_at = CURRENT_TIMESTAMP,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE report_id = :reportId
                 """, parameters);
-        insertSelections("report_analysis_evidence_selections", "evidence_id", reportId, evidenceIds);
-        insertSelections("report_analysis_policy_selections", "policy_id", reportId, policyIds);
+        policyIds.forEach(policyId -> jdbc.update("""
+                INSERT INTO report_analysis_policies (report_id, policy_id)
+                VALUES (:reportId, :policyId)
+                """, Map.of("reportId", reportId, "policyId", policyId)));
     }
 
     public void fail(long reportId, boolean retryable, String failureCode) {
@@ -240,32 +163,10 @@ public class ReportAnalysisRepository {
         ));
     }
 
-    private void insertSelections(
-            String table,
-            String idColumn,
-            long reportId,
-            List<Long> selectedIds
-    ) {
-        String sql = "INSERT INTO " + table + " (report_id, " + idColumn + ") "
-                + "VALUES (:reportId, :selectedId)";
-        selectedIds.forEach(selectedId -> jdbc.update(
-                sql,
-                Map.of("reportId", reportId, "selectedId", selectedId)
-        ));
-    }
-
     public record AnalysisLock(
             AnalysisStatus status,
             String resultHash,
             ReportTargetType targetType
-    ) {
-    }
-
-    private record ContextHeader(
-            long reportId,
-            ReportTargetType targetType,
-            ReportReason reason,
-            String description
     ) {
     }
 }

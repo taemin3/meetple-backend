@@ -70,12 +70,8 @@ class FreshDatabaseMigrationTest {
                     "moderation_policies",
                     "moderation_policy_chunks",
                     "moderation_policy_embeddings",
-                    "report_analysis_evidence",
-                    "moderation_policy_retrievals",
-                    "moderation_policy_retrieval_items",
                     "report_analyses",
-                    "report_analysis_evidence_selections",
-                    "report_analysis_policy_selections"
+                    "report_analysis_policies"
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
@@ -126,6 +122,8 @@ class FreshDatabaseMigrationTest {
             assertThat(columnIsNullable(connection, "meetings", "thumbnail_image_object_key")).isTrue();
             assertThat(columnIsNullable(connection, "meeting_images", "image_url")).isTrue();
             assertThat(columnIsNullable(connection, "meeting_images", "object_key")).isTrue();
+            assertThat(columnIsNullable(connection, "reports", "target_snapshot")).isTrue();
+            assertThat(columnIsNullable(connection, "reports", "target_snapshot_hash")).isTrue();
 
             assertThat(uniqueConstraints(connection, "categories")).contains("uk_categories_name");
             assertThat(uniqueConstraints(connection, "members")).contains("uk_members_email");
@@ -142,10 +140,6 @@ class FreshDatabaseMigrationTest {
                             "uk_moderation_policy_chunks_clause",
                             "uk_moderation_policy_chunks_order"
                     );
-            assertThat(uniqueConstraints(connection, "report_analysis_evidence"))
-                    .contains("uk_report_analysis_evidence_source");
-            assertThat(uniqueConstraints(connection, "moderation_policy_retrieval_items"))
-                    .contains("uk_moderation_policy_retrieval_items_rank");
             assertThat(uniqueConstraints(connection, "chat_messages"))
                     .contains("uk_chat_messages_room_sequence", "uk_chat_messages_client_message");
         }

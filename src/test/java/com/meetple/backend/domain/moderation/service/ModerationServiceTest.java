@@ -97,8 +97,6 @@ class ModerationServiceTest {
                 .isEqualTo(10L);
         verify(reportAnalysisService).initialize(
                 10L,
-                ReportTargetType.MEMBER,
-                2L,
                 "[프로필 소개 없음]"
         );
     }
