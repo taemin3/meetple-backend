@@ -4,6 +4,7 @@ import com.meetple.backend.domain.moderation.entity.ReportReason;
 import com.meetple.backend.domain.moderation.entity.ReportTargetType;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -83,7 +84,8 @@ public final class ReportAnalysisContracts {
             @NotBlank @Size(max = 1000) String rationale,
             @NotEmpty @Size(max = 10) List<@NotNull @Min(1) Long> evidenceIds,
             @NotEmpty @Size(max = 10) List<@NotNull @Min(1) Long> policyIds,
-            @NotNull @DecimalMin("0.0") @DecimalMax("1.0") BigDecimal confidence,
+            @NotNull @DecimalMin("0.0") @DecimalMax("1.0")
+            @Digits(integer = 1, fraction = 4) BigDecimal confidence,
             @NotNull RecommendedAction recommendedAction
     ) {
     }
@@ -96,7 +98,7 @@ public final class ReportAnalysisContracts {
     }
 
     public record FailureRequest(
-            boolean retryable,
+            @NotNull Boolean retryable,
             @NotBlank @Size(max = 100)
             @Pattern(regexp = "[A-Z][A-Z0-9_]{0,99}") String failureCode
     ) {

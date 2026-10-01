@@ -12,6 +12,10 @@ import com.meetple.backend.domain.moderation.entity.ReportTargetType;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -24,13 +28,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class ReportAnalysisServiceTest {
+    private static final LocalDate TODAY = LocalDate.of(2026, 10, 1);
     @Mock ReportAnalysisRepository repository;
 
     private ReportAnalysisService service;
 
     @BeforeEach
     void setUp() {
-        service = new ReportAnalysisService(repository);
+        service = new ReportAnalysisService(
+                repository,
+                Clock.fixed(Instant.parse("2026-10-01T00:00:00Z"), ZoneOffset.UTC)
+        );
     }
 
     @Test
@@ -63,7 +71,8 @@ class ReportAnalysisServiceTest {
         )));
         given(repository.findApplicablePolicyIds(
                 ReportTargetType.CHAT_MESSAGE,
-                List.of(40L)
+                List.of(40L),
+                TODAY
         )).willReturn(Set.of(40L));
 
         Completion completion = service.complete(10L, request);
@@ -111,7 +120,8 @@ class ReportAnalysisServiceTest {
         )));
         given(repository.findApplicablePolicyIds(
                 ReportTargetType.CHAT_MESSAGE,
-                List.of(40L)
+                List.of(40L),
+                TODAY
         )).willReturn(Set.of());
 
         assertThatThrownBy(() -> service.complete(10L, request))
@@ -133,7 +143,8 @@ class ReportAnalysisServiceTest {
         )));
         given(repository.findApplicablePolicyIds(
                 ReportTargetType.CHAT_MESSAGE,
-                List.of(40L)
+                List.of(40L),
+                TODAY
         )).willReturn(Set.of(40L));
         service.complete(10L, request);
         ArgumentCaptor<String> hash = ArgumentCaptor.forClass(String.class);

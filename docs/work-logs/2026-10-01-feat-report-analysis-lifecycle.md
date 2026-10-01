@@ -55,7 +55,7 @@ git diff --check
 
 ```text
 집중 테스트: BUILD SUCCESSFUL
-전체 테스트: 541 tests, failures 0, skipped 0
+전체 테스트: 544 tests, failures 0, skipped 0
 git diff --check: 이상 없음
 ```
 
@@ -67,6 +67,9 @@ git diff --check: 이상 없음
 - 증거는 별도 테이블로 분리하지 않고 기존 `reports`에 신고 시점 스냅샷으로 저장한다.
 - 회원 증거에는 이메일·닉네임·지역을 포함하지 않고 공개 소개만 저장한다.
 - 실패 콜백에는 원문 오류를 받지 않고 제한된 `failureCode`만 저장한다.
+- 완료 결과의 정책은 서울 기준 현재 유효 기간과 신고 대상 유형을 다시 검증한다.
+- `confidence`는 DB 정밀도와 동일하게 소수 4자리까지 허용한다.
+- 실패 콜백의 `retryable`은 누락 시 영구 실패로 오인되지 않도록 필수값으로 검증한다.
 - `FAILED_PERMANENT`와 `COMPLETED` 상태는 늦게 도착한 콜백으로 되돌릴 수 없게 했다.
 
 ## 후속 작업

@@ -10,6 +10,9 @@ import com.meetple.backend.global.exception.NotFoundException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.EnumMap;
 import java.util.HexFormat;
 import java.util.List;
@@ -23,9 +26,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReportAnalysisService {
     private static final Map<RiskLevel, Set<RecommendedAction>> ALLOWED_ACTIONS = allowedActions();
     private final ReportAnalysisRepository repository;
+    private final Clock clock;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ReportAnalysisService(ReportAnalysisRepository repository) {
+        this(repository, Clock.system(ZoneId.of("Asia/Seoul")));
+    }
+
+    ReportAnalysisService(ReportAnalysisRepository repository, Clock clock) {
         this.repository = repository;
+        this.clock = clock;
     }
 
     @Transactional
@@ -65,7 +75,11 @@ public class ReportAnalysisService {
         if (!evidenceIds.equals(List.of(reportId))) {
             throw new BadRequestException("신고 스냅샷과 일치하지 않는 증거가 포함되어 있습니다.");
         }
-        if (!repository.findApplicablePolicyIds(analysis.targetType(), policyIds)
+        if (!repository.findApplicablePolicyIds(
+                analysis.targetType(),
+                policyIds,
+                LocalDate.now(clock)
+        )
                 .equals(Set.copyOf(policyIds))) {
             throw new BadRequestException("신고 대상에 적용할 수 없는 운영 정책이 포함되어 있습니다.");
         }

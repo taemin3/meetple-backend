@@ -4,6 +4,7 @@ import static com.meetple.backend.domain.moderation.analysis.ReportAnalysisContr
 
 import com.meetple.backend.domain.moderation.entity.ReportReason;
 import com.meetple.backend.domain.moderation.entity.ReportTargetType;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -95,17 +96,21 @@ public class ReportAnalysisRepository {
 
     public Set<Long> findApplicablePolicyIds(
             ReportTargetType targetType,
-            List<Long> policyIds
+            List<Long> policyIds,
+            LocalDate effectiveDate
     ) {
         return Set.copyOf(jdbc.queryForList("""
                 SELECT id
                 FROM moderation_policies
                 WHERE id IN (:policyIds)
                   AND active = TRUE
+                  AND effective_from <= :effectiveDate
+                  AND (effective_to IS NULL OR effective_to >= :effectiveDate)
                   AND (target_type = 'ALL' OR target_type = :targetType)
                 """, Map.of(
                 "targetType", targetType.name(),
-                "policyIds", policyIds
+                "policyIds", policyIds,
+                "effectiveDate", effectiveDate
         ), Long.class));
     }
 

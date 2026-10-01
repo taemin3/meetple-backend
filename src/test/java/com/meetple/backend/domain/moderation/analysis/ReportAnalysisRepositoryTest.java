@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.meetple.backend.domain.moderation.entity.ReportTargetType;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
@@ -98,6 +99,17 @@ class ReportAnalysisRepositoryTest {
                 "SELECT target_snapshot FROM reports WHERE id=10",
                 String.class
         )).isEqualTo("최초 신고 메시지");
+    }
+
+    @Test
+    void expiredPolicyIsNotApplicableToAnalysisResult() {
+        jdbc.update("UPDATE moderation_policies SET effective_to=DATE '2026-09-30' WHERE id=40");
+
+        assertThat(repository.findApplicablePolicyIds(
+                ReportTargetType.CHAT_MESSAGE,
+                List.of(40L),
+                LocalDate.of(2026, 10, 1)
+        )).isEmpty();
     }
 
     private void insertFixtures() {

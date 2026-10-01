@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -62,6 +64,44 @@ class ReportAnalysisToolControllerTest {
 
         mvc.perform(get("/internal/ai/moderation/reports/10/context"))
                 .andExpect(status().isForbidden());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void confidenceWithMoreThanFourDecimalPlacesIsRejected() throws Exception {
+        mvc.perform(put("/internal/ai/moderation/reports/10/analysis")
+                        .header("X-AI-Service-Token", "service-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reportType": "SPAM",
+                                  "riskLevel": "LOW",
+                                  "priority": "LOW",
+                                  "summary": "광고 신고",
+                                  "rationale": "증거와 정책에 따른 판단",
+                                  "evidenceIds": [10],
+                                  "policyIds": [40],
+                                  "confidence": 0.99999,
+                                  "recommendedAction": "WARNING"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void missingRetryableIsRejectedInsteadOfBecomingPermanentFailure() throws Exception {
+        mvc.perform(put("/internal/ai/moderation/reports/10/analysis/failure")
+                        .header("X-AI-Service-Token", "service-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "failureCode": "MODEL_TIMEOUT"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
 
         verifyNoInteractions(service);
     }
