@@ -121,6 +121,14 @@ services:
           --partitions "$${KAFKA_PUSH_TOPIC_PARTITIONS}" \
           --replication-factor 1 \
           --config retention.ms=86400000
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:29092 \
+          --create \
+          --if-not-exists \
+          --topic meetple.moderation.report-analysis.v1 \
+          --partitions "$${KAFKA_PUSH_TOPIC_PARTITIONS}" \
+          --replication-factor 1 \
+          --config retention.ms=86400000
         for topic in \
           meetple.push.notification.v1.retry-0 \
           meetple.push.notification.v1.retry-1 \
@@ -140,7 +148,12 @@ services:
           meetple.email.delivery.v1.retry-0 \
           meetple.email.delivery.v1.retry-1 \
           meetple.email.delivery.v1.retry-2 \
-          meetple.email.delivery.v1.dlq
+          meetple.email.delivery.v1.dlq \
+          meetple.moderation.report-analysis.v1.retry-0 \
+          meetple.moderation.report-analysis.v1.retry-1 \
+          meetple.moderation.report-analysis.v1.retry-2 \
+          meetple.moderation.report-analysis.v1.retry-3 \
+          meetple.moderation.report-analysis.v1.dlq
         do
           /opt/kafka/bin/kafka-topics.sh \
             --bootstrap-server kafka:29092 \
@@ -167,6 +180,22 @@ services:
                 --add-config retention.ms=86400000
               ;;
             meetple.email.delivery.v1.*)
+              /opt/kafka/bin/kafka-configs.sh \
+                --bootstrap-server kafka:29092 \
+                --entity-type topics \
+                --entity-name "$${topic}" \
+                --alter \
+                --add-config retention.ms=86400000
+              ;;
+            meetple.moderation.report-analysis.v1.dlq)
+              /opt/kafka/bin/kafka-configs.sh \
+                --bootstrap-server kafka:29092 \
+                --entity-type topics \
+                --entity-name "$${topic}" \
+                --alter \
+                --add-config retention.ms=1209600000
+              ;;
+            meetple.moderation.report-analysis.v1.*)
               /opt/kafka/bin/kafka-configs.sh \
                 --bootstrap-server kafka:29092 \
                 --entity-type topics \
