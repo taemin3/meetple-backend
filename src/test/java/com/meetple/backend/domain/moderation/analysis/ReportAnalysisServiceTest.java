@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import com.meetple.backend.domain.moderation.analysis.ReportAnalysisRepository.AnalysisLock;
 import com.meetple.backend.domain.moderation.entity.ReportReason;
 import com.meetple.backend.domain.moderation.entity.ReportTargetType;
+import com.meetple.backend.domain.moderation.warning.AutomaticWarningService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import java.math.BigDecimal;
@@ -30,6 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class ReportAnalysisServiceTest {
     private static final LocalDate TODAY = LocalDate.of(2026, 10, 1);
     @Mock ReportAnalysisRepository repository;
+    @Mock AutomaticWarningService automaticWarningService;
 
     private ReportAnalysisService service;
 
@@ -37,6 +39,7 @@ class ReportAnalysisServiceTest {
     void setUp() {
         service = new ReportAnalysisService(
                 repository,
+                automaticWarningService,
                 Clock.fixed(Instant.parse("2026-10-01T00:00:00Z"), ZoneOffset.UTC)
         );
     }
@@ -85,6 +88,7 @@ class ReportAnalysisServiceTest {
                 hash.capture(),
                 org.mockito.ArgumentMatchers.eq(List.of(40L))
         );
+        verify(automaticWarningService).issueIfEligible(10L, request);
         assertThat(hash.getValue()).matches("[0-9a-f]{64}");
     }
 

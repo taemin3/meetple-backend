@@ -153,6 +153,12 @@ ai:
     enabled: ${AI_MODERATION_ENABLED:false}
     service-token: ${AI_MODERATION_SERVICE_TOKEN:}
 
+moderation:
+  auto-warning:
+    enabled: ${MODERATION_AUTO_WARNING_ENABLED:false}
+    min-confidence: ${MODERATION_AUTO_WARNING_MIN_CONFIDENCE:0.95}
+    allowed-report-types: ${MODERATION_AUTO_WARNING_ALLOWED_REPORT_TYPES:SPAM}
+
 image:
   deletion:
     kafka:
