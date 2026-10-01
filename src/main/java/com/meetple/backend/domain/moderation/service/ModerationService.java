@@ -14,8 +14,12 @@ import com.meetple.backend.domain.moderation.dto.response.ReportResponse;
 import com.meetple.backend.domain.moderation.entity.MemberBlock;
 import com.meetple.backend.domain.moderation.entity.Report;
 import com.meetple.backend.domain.moderation.entity.ReportReason;
+import com.meetple.backend.domain.moderation.event.ReportAnalysisRequestedEvent;
 import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.domain.moderation.repository.ReportRepository;
+import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
+import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
+import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.NotFoundException;
 import com.meetple.backend.global.response.PageResponse;
@@ -45,6 +49,7 @@ public class ModerationService {
     private final ReportRepository reportRepository;
     private final MemberBlockRepository memberBlockRepository;
     private final ImageService imageService;
+    private final OutboxEventPublisher outboxEventPublisher;
 
     @Transactional
     public ReportResponse createReport(Long reporterId, CreateReportRequest request) {
@@ -57,7 +62,22 @@ public class ModerationService {
                 reporter, request.targetType(), request.targetId(), request.reason(),
                 normalizeDescription(request.reason(), request.otherDescription())
         ));
+        publishAnalysisRequest(report);
         return ReportResponse.from(report);
+    }
+
+    private void publishAnalysisRequest(Report report) {
+        String reportId = report.getId().toString();
+        outboxEventPublisher.publish(new OutboxEventRequest(
+                "report",
+                reportId,
+                "REPORT_ANALYSIS_REQUESTED",
+                "report:" + reportId,
+                OutboxEventTopic.REPORT_ANALYSIS,
+                1,
+                "report-analysis-requested:" + reportId + ":v1",
+                new ReportAnalysisRequestedEvent(report.getId())
+        ));
     }
 
     @Transactional

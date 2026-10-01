@@ -21,6 +21,9 @@ import com.meetple.backend.domain.moderation.entity.ReportReason;
 import com.meetple.backend.domain.moderation.entity.ReportTargetType;
 import com.meetple.backend.domain.moderation.repository.MemberBlockRepository;
 import com.meetple.backend.domain.moderation.repository.ReportRepository;
+import com.meetple.backend.domain.outbox.event.OutboxEventTopic;
+import com.meetple.backend.domain.outbox.service.OutboxEventPublisher;
+import com.meetple.backend.domain.outbox.service.OutboxEventRequest;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.NotFoundException;
 import java.util.Optional;
@@ -44,13 +47,15 @@ class ModerationServiceTest {
     @Mock ReportRepository reportRepository;
     @Mock MemberBlockRepository memberBlockRepository;
     @Mock ImageService imageService;
+    @Mock OutboxEventPublisher outboxEventPublisher;
 
     private ModerationService service;
 
     @BeforeEach
     void setUp() {
         service = new ModerationService(memberRepository, meetingRepository, chatMessageRepository,
-                chatAccessPolicy, reportRepository, memberBlockRepository, imageService);
+                chatAccessPolicy, reportRepository, memberBlockRepository, imageService,
+                outboxEventPublisher);
     }
 
     @Test
@@ -60,7 +65,7 @@ class ModerationServiceTest {
         given(memberRepository.findById(1L)).willReturn(Optional.of(reporter));
         given(memberRepository.findById(2L)).willReturn(Optional.of(target));
         given(reportRepository.save(org.mockito.ArgumentMatchers.any(Report.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
+                .willAnswer(invocation -> reportWithId(invocation.getArgument(0), 10L));
 
         service.createReport(1L, new CreateReportRequest(
                 ReportTargetType.MEMBER, 2L, ReportReason.SPAM, null
@@ -70,6 +75,24 @@ class ModerationServiceTest {
         verify(reportRepository).save(captor.capture());
         org.assertj.core.api.Assertions.assertThat(captor.getValue().getReporter()).isSameAs(reporter);
         org.assertj.core.api.Assertions.assertThat(captor.getValue().getTargetId()).isEqualTo(2L);
+
+        ArgumentCaptor<OutboxEventRequest> eventCaptor =
+                ArgumentCaptor.forClass(OutboxEventRequest.class);
+        verify(outboxEventPublisher).publish(eventCaptor.capture());
+        OutboxEventRequest event = eventCaptor.getValue();
+        org.assertj.core.api.Assertions.assertThat(event.aggregateType()).isEqualTo("report");
+        org.assertj.core.api.Assertions.assertThat(event.aggregateId()).isEqualTo("10");
+        org.assertj.core.api.Assertions.assertThat(event.eventType())
+                .isEqualTo("REPORT_ANALYSIS_REQUESTED");
+        org.assertj.core.api.Assertions.assertThat(event.eventKey()).isEqualTo("report:10");
+        org.assertj.core.api.Assertions.assertThat(event.topic())
+                .isEqualTo(OutboxEventTopic.REPORT_ANALYSIS);
+        org.assertj.core.api.Assertions.assertThat(event.schemaVersion()).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(event.deduplicationKey())
+                .isEqualTo("report-analysis-requested:10:v1");
+        org.assertj.core.api.Assertions.assertThat(event.data())
+                .extracting("reportId")
+                .isEqualTo(10L);
     }
 
     @Test
@@ -130,7 +153,7 @@ class ModerationServiceTest {
         given(message.getSender()).willReturn(sender);
         given(chatAccessPolicy.getAccessibleMeeting(1L, 10L)).willReturn(meeting);
         given(reportRepository.save(org.mockito.ArgumentMatchers.any(Report.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
+                .willAnswer(invocation -> reportWithId(invocation.getArgument(0), 11L));
 
         service.createReport(1L, new CreateReportRequest(
                 ReportTargetType.CHAT_MESSAGE, 100L, ReportReason.SPAM, null
@@ -164,5 +187,10 @@ class ModerationServiceTest {
         Member member = Member.createUser(nickname + "@example.com", "password", nickname, null);
         ReflectionTestUtils.setField(member, "id", id);
         return member;
+    }
+
+    private Report reportWithId(Report report, Long id) {
+        ReflectionTestUtils.setField(report, "id", id);
+        return report;
     }
 }
