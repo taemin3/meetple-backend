@@ -4,6 +4,7 @@ import static com.meetple.backend.domain.moderation.analysis.ReportAnalysisContr
 
 import com.meetple.backend.domain.moderation.analysis.ReportAnalysisRepository.AnalysisLock;
 import com.meetple.backend.domain.moderation.entity.ReportTargetType;
+import com.meetple.backend.domain.moderation.warning.AutomaticWarningService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.NotFoundException;
@@ -26,15 +27,24 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReportAnalysisService {
     private static final Map<RiskLevel, Set<RecommendedAction>> ALLOWED_ACTIONS = allowedActions();
     private final ReportAnalysisRepository repository;
+    private final AutomaticWarningService automaticWarningService;
     private final Clock clock;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public ReportAnalysisService(ReportAnalysisRepository repository) {
-        this(repository, Clock.system(ZoneId.of("Asia/Seoul")));
+    public ReportAnalysisService(
+            ReportAnalysisRepository repository,
+            AutomaticWarningService automaticWarningService
+    ) {
+        this(repository, automaticWarningService, Clock.system(ZoneId.of("Asia/Seoul")));
     }
 
-    ReportAnalysisService(ReportAnalysisRepository repository, Clock clock) {
+    ReportAnalysisService(
+            ReportAnalysisRepository repository,
+            AutomaticWarningService automaticWarningService,
+            Clock clock
+    ) {
         this.repository = repository;
+        this.automaticWarningService = automaticWarningService;
         this.clock = clock;
     }
 
@@ -84,6 +94,7 @@ public class ReportAnalysisService {
             throw new BadRequestException("신고 대상에 적용할 수 없는 운영 정책이 포함되어 있습니다.");
         }
         repository.complete(reportId, request, resultHash, policyIds);
+        automaticWarningService.issueIfEligible(reportId, request);
         return new Completion(reportId, AnalysisStatus.COMPLETED, false);
     }
 

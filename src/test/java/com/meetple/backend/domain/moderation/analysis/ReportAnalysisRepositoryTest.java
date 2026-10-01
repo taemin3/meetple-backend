@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.meetple.backend.domain.moderation.entity.ReportTargetType;
+import com.meetple.backend.domain.moderation.warning.AutomaticWarningRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -29,6 +30,7 @@ class ReportAnalysisRepositoryTest {
 
     private JdbcTemplate jdbc;
     private ReportAnalysisRepository repository;
+    private AutomaticWarningRepository warningRepository;
 
     @BeforeEach
     void prepare() {
@@ -38,6 +40,7 @@ class ReportAnalysisRepositoryTest {
         Flyway.configure().dataSource(datasource).locations("classpath:db/migration").load().migrate();
         jdbc = new JdbcTemplate(datasource);
         repository = new ReportAnalysisRepository(new NamedParameterJdbcTemplate(datasource));
+        warningRepository = new AutomaticWarningRepository(new NamedParameterJdbcTemplate(datasource));
         jdbc.execute("TRUNCATE members, moderation_policies CASCADE");
         insertFixtures();
     }
@@ -112,19 +115,55 @@ class ReportAnalysisRepositoryTest {
         )).isEmpty();
     }
 
+    @Test
+    void automaticWarningResolvesTargetMemberAndIsIdempotent() {
+        assertThat(warningRepository.insertIfAbsent(10L)).contains(2L);
+        assertThat(warningRepository.insertIfAbsent(10L)).isEmpty();
+        assertThat(warningRepository.insertIfAbsent(11L)).contains(2L);
+        assertThat(warningRepository.insertIfAbsent(12L)).contains(2L);
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM report_warnings",
+                Integer.class
+        )).isEqualTo(3);
+    }
+
     private void insertFixtures() {
         jdbc.update("""
                 INSERT INTO members
                     (id, email, password, nickname, role, created_at, updated_at)
-                VALUES (1, 'reporter@example.com', 'password', 'reporter', 'USER',
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES
+                    (1, 'reporter@example.com', 'password', 'reporter', 'USER',
+                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                    (2, 'target@example.com', 'password', 'target', 'USER',
+                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """);
+        jdbc.update("""
+                INSERT INTO meetings
+                    (id, title, content, location_name, address, latitude, longitude,
+                     max_people, current_people, meeting_date, status, host_id, category_id,
+                     created_at, updated_at)
+                VALUES
+                    (20, '테스트 모임', '테스트 내용', '서울', '서울', 37.5, 127.0,
+                     10, 1, TIMESTAMP '2026-10-02 12:00:00', 'RECRUITING', 2, 1,
+                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """);
+        jdbc.update("""
+                INSERT INTO chat_messages
+                    (id, meeting_id, sender_id, room_sequence, client_message_id, content,
+                     created_at, updated_at)
+                VALUES
+                    (100, 20, 2, 1, '00000000-0000-0000-0000-000000000100', '광고 메시지',
+                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """);
         jdbc.update("""
                 INSERT INTO reports
                     (id, reporter_member_id, target_type, target_id, reason,
                      created_at, updated_at)
-                VALUES (10, 1, 'CHAT_MESSAGE', 100, 'ABUSE_OR_HARASSMENT',
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES
+                    (10, 1, 'CHAT_MESSAGE', 100, 'ABUSE_OR_HARASSMENT',
+                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                    (11, 1, 'MEMBER', 2, 'SPAM', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                    (12, 1, 'MEETING', 20, 'SPAM', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """);
         jdbc.update("""
                 INSERT INTO moderation_policies

@@ -42,7 +42,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(27);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(28);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
@@ -71,12 +71,13 @@ class FreshDatabaseMigrationTest {
                     "moderation_policy_chunks",
                     "moderation_policy_embeddings",
                     "report_analyses",
-                    "report_analysis_policies"
+                    "report_analysis_policies",
+                    "report_warnings"
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
                     "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-                    "20", "21", "22", "23", "24", "25", "26"
+                    "20", "21", "22", "23", "24", "25", "26", "27"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder(
                     "운동", "스터디", "취미", "친목", "여행", "맛집", "비즈니스", "반려동물"
