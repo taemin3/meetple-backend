@@ -42,7 +42,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(25);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(26);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
@@ -66,12 +66,15 @@ class FreshDatabaseMigrationTest {
                     "debezium_heartbeat",
                     "reports",
                     "member_blocks",
-                    "meeting_embeddings"
+                    "meeting_embeddings",
+                    "moderation_policies",
+                    "moderation_policy_chunks",
+                    "moderation_policy_embeddings"
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
                     "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-                    "20", "21", "22", "23", "24"
+                    "20", "21", "22", "23", "24", "25"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder(
                     "운동", "스터디", "취미", "친목", "여행", "맛집", "비즈니스", "반려동물"
@@ -95,11 +98,20 @@ class FreshDatabaseMigrationTest {
             assertThat(columnType(connection, "meeting_embeddings", "embedding")).isEqualTo("vector");
             assertThat(formattedColumnType(connection, "meeting_embeddings", "embedding"))
                     .isEqualTo("vector(1536)");
+            assertThat(formattedColumnType(
+                    connection,
+                    "moderation_policy_embeddings",
+                    "embedding"
+            )).isEqualTo("vector(1536)");
             assertThat(columnGeneration(connection, "meetings", "location")).isEqualTo("ALWAYS");
             assertThat(indexDefinition(connection, "idx_meetings_location_gist"))
                     .contains("USING gist (location)");
             assertThat(indexDefinition(connection, "idx_meeting_embeddings_embedding_hnsw"))
                     .contains("USING hnsw (embedding vector_cosine_ops)");
+            assertThat(indexDefinition(
+                    connection,
+                    "idx_moderation_policy_embeddings_embedding_hnsw"
+            )).contains("USING hnsw (embedding vector_cosine_ops)");
             assertThat(installedExtensions(connection)).contains("postgis", "pg_bigm", "vector");
             assertThat(columnIsNullable(connection, "members", "email_verified_at")).isTrue();
             assertThat(columnIsNullable(connection, "members", "profile_image_object_key")).isTrue();
@@ -117,6 +129,13 @@ class FreshDatabaseMigrationTest {
                     .contains("uk_meeting_bookmarks_meeting_member");
             assertThat(uniqueConstraints(connection, "member_blocks"))
                     .contains("uk_member_blocks_relationship");
+            assertThat(uniqueConstraints(connection, "moderation_policies"))
+                    .contains("uk_moderation_policies_code_version");
+            assertThat(uniqueConstraints(connection, "moderation_policy_chunks"))
+                    .contains(
+                            "uk_moderation_policy_chunks_clause",
+                            "uk_moderation_policy_chunks_order"
+                    );
             assertThat(uniqueConstraints(connection, "chat_messages"))
                     .contains("uk_chat_messages_room_sequence", "uk_chat_messages_client_message");
         }

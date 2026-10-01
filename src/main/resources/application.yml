@@ -149,6 +149,9 @@ ai:
     service-token: ${AI_SEARCH_SERVICE_TOKEN:}
     capability-secret: ${AI_SEARCH_CAPABILITY_SECRET:}
     timeout: ${AI_SEARCH_TIMEOUT:45s}
+  moderation:
+    enabled: ${AI_MODERATION_ENABLED:false}
+    service-token: ${AI_MODERATION_SERVICE_TOKEN:}
 
 image:
   deletion:
