@@ -52,6 +52,16 @@ public record ChatSessionInvalidationEvent(
         );
     }
 
+    public static ChatSessionInvalidationEvent memberSuspended(Long memberId) {
+        return create(
+                ChatSessionInvalidationTarget.MEMBER,
+                memberId,
+                null,
+                null,
+                ChatAccessRevocationReason.MEMBER_SUSPENDED
+        );
+    }
+
     public static ChatSessionInvalidationEvent participationCanceled(
             Long roomId,
             Long memberId

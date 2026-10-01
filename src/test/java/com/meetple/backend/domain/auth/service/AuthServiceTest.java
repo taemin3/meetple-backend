@@ -27,12 +27,14 @@ import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.push.service.PushDeviceTokenService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
+import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.exception.UnauthorizedException;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
 import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -214,6 +216,21 @@ class AuthServiceTest {
     }
 
     @Test
+    void loginRejectsSuspendedMemberAfterPasswordVerification() {
+        LoginRequest request = new LoginRequest("user@meetple.com", "password123");
+        Member member = Member.createUser(request.email(), "encoded-password", "tester", null);
+        member.suspendUntil(1L, LocalDateTime.now().plusDays(1));
+        given(memberRepository.findByEmailForUpdate(request.email())).willReturn(Optional.of(member));
+        given(passwordEncoder.matches(request.password(), member.getPassword())).willReturn(true);
+
+        assertThatThrownBy(() -> authService.login(request))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessage(ErrorStatus.ACCOUNT_SUSPENDED.getMessage());
+
+        verify(jwtTokenProvider, never()).createAccessToken(any(), anyString());
+    }
+
+    @Test
     void reissueRotatesRefreshTokenWhenStoredTokenMatches() {
         ReissueRequest request = new ReissueRequest("old-refresh-token");
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
@@ -232,6 +249,23 @@ class AuthServiceTest {
         assertThat(response.accessToken()).isEqualTo("new-access-token");
         assertThat(response.refreshToken()).isEqualTo("new-refresh-token");
         verify(refreshTokenRepository).save(1L, "session-id", "new-refresh-token", Duration.ofSeconds(1209600L));
+    }
+
+    @Test
+    void reissueRejectsPermanentlySuspendedMember() {
+        ReissueRequest request = new ReissueRequest("old-refresh-token");
+        Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
+        member.suspendPermanently(1L, LocalDateTime.now());
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken()))
+                .willReturn(new JwtTokenSession(1L, "session-id"));
+        given(refreshTokenRepository.matches(1L, "session-id", request.refreshToken())).willReturn(true);
+        given(memberRepository.findByIdForUpdate(1L)).willReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> authService.reissue(request))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessage(ErrorStatus.ACCOUNT_SUSPENDED.getMessage());
+
+        verify(refreshTokenRepository, never()).save(any(), anyString(), anyString(), any());
     }
 
     @Test

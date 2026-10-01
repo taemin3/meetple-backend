@@ -15,6 +15,7 @@ import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.push.service.PushDeviceTokenService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
+import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.exception.UnauthorizedException;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.security.JwtTokenProvider;
@@ -23,6 +24,7 @@ import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import io.jsonwebtoken.JwtException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -99,6 +101,8 @@ public class AuthService {
             throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
         }
 
+        validateAccountAccess(member);
+
         return issueTokens(member);
     }
 
@@ -118,6 +122,8 @@ public class AuthService {
         if (!refreshTokenRepository.matches(memberId, sessionId, request.refreshToken())) {
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
+
+        validateAccountAccess(member);
 
         return issueTokens(member, sessionId);
     }
@@ -191,6 +197,12 @@ public class AuthService {
 
     private LoginResponse issueTokens(Member member) {
         return issueTokens(member, UUID.randomUUID().toString());
+    }
+
+    private void validateAccountAccess(Member member) {
+        if (member.isSuspendedAt(LocalDateTime.now())) {
+            throw new ForbiddenException(ErrorStatus.ACCOUNT_SUSPENDED);
+        }
     }
 
     private LoginResponse issueTokens(Member member, String sessionId) {

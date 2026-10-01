@@ -60,6 +60,15 @@ public class Member extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "suspended_until")
+    private LocalDateTime suspendedUntil;
+
+    @Column(name = "permanently_suspended_at")
+    private LocalDateTime permanentlySuspendedAt;
+
+    @Column(name = "suspension_report_id")
+    private Long suspensionReportId;
+
     private Member(String email, String password, String nickname, String region, MemberRole role) {
         this.email = email;
         this.password = password;
@@ -106,5 +115,29 @@ public class Member extends BaseTimeEntity {
 
     public boolean isDeleted() {
         return deletedAt != null;
+    }
+
+    public LocalDateTime suspendUntil(Long reportId, LocalDateTime requestedUntil) {
+        this.permanentlySuspendedAt = null;
+        this.suspendedUntil = requestedUntil;
+        this.suspensionReportId = reportId;
+        return this.suspendedUntil;
+    }
+
+    public void suspendPermanently(Long reportId, LocalDateTime suspendedAt) {
+        this.suspendedUntil = null;
+        this.permanentlySuspendedAt = suspendedAt;
+        this.suspensionReportId = reportId;
+    }
+
+    public void releaseSuspension() {
+        this.suspendedUntil = null;
+        this.permanentlySuspendedAt = null;
+        this.suspensionReportId = null;
+    }
+
+    public boolean isSuspendedAt(LocalDateTime now) {
+        return permanentlySuspendedAt != null
+                || (suspendedUntil != null && suspendedUntil.isAfter(now));
     }
 }

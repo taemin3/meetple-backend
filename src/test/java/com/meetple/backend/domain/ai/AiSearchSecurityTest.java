@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.meetple.backend.domain.auth.repository.AccessTokenValidationRepository;
 import com.meetple.backend.global.config.JacksonConfig;
 import com.meetple.backend.global.security.JwtAuthenticationEntryPoint;
+import com.meetple.backend.global.security.JwtAccessDeniedHandler;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.SecurityConfig;
 import java.util.List;
@@ -18,7 +19,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest({AiSearchController.class, AiSearchToolController.class})
-@Import({SecurityConfig.class, JwtAuthenticationEntryPoint.class, JacksonConfig.class})
+@Import({SecurityConfig.class, JwtAuthenticationEntryPoint.class, JwtAccessDeniedHandler.class, JacksonConfig.class})
 class AiSearchSecurityTest {
     @Autowired MockMvc mvc;
     @MockitoBean AiSearchService service;
