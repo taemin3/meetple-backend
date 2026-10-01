@@ -42,7 +42,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(26);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(27);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
@@ -69,12 +69,18 @@ class FreshDatabaseMigrationTest {
                     "meeting_embeddings",
                     "moderation_policies",
                     "moderation_policy_chunks",
-                    "moderation_policy_embeddings"
+                    "moderation_policy_embeddings",
+                    "report_analysis_evidence",
+                    "moderation_policy_retrievals",
+                    "moderation_policy_retrieval_items",
+                    "report_analyses",
+                    "report_analysis_evidence_selections",
+                    "report_analysis_policy_selections"
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
                     "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-                    "20", "21", "22", "23", "24", "25"
+                    "20", "21", "22", "23", "24", "25", "26"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder(
                     "운동", "스터디", "취미", "친목", "여행", "맛집", "비즈니스", "반려동물"
@@ -136,6 +142,10 @@ class FreshDatabaseMigrationTest {
                             "uk_moderation_policy_chunks_clause",
                             "uk_moderation_policy_chunks_order"
                     );
+            assertThat(uniqueConstraints(connection, "report_analysis_evidence"))
+                    .contains("uk_report_analysis_evidence_source");
+            assertThat(uniqueConstraints(connection, "moderation_policy_retrieval_items"))
+                    .contains("uk_moderation_policy_retrieval_items_rank");
             assertThat(uniqueConstraints(connection, "chat_messages"))
                     .contains("uk_chat_messages_room_sequence", "uk_chat_messages_client_message");
         }
