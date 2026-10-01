@@ -50,6 +50,8 @@ public class SecurityConfig {
             // 로그인 JWT 대신 AiSearchCapability의 서비스 키 + 단기 서명을 확인한다.
             "/internal/ai/search/categories",
             "/internal/ai/search/meetings",
+            // 로그인 JWT 대신 AiModerationAuthenticator가 전용 서비스 키를 확인한다.
+            "/internal/ai/moderation/policies/**",
             "/ws",
             "/swagger-ui.html",
             "/swagger-ui/**",
