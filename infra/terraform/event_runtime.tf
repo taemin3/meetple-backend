@@ -26,15 +26,22 @@ locals {
     "meetple.email.delivery.v1.retry-1",
     "meetple.email.delivery.v1.retry-2",
     "meetple.email.delivery.v1.dlq",
+    "meetple.ai.meeting-embedding.v1",
+    "meetple.ai.meeting-embedding.v1.retry-0",
+    "meetple.ai.meeting-embedding.v1.retry-1",
+    "meetple.ai.meeting-embedding.v1.retry-2",
+    "meetple.ai.meeting-embedding.v1.retry-3",
+    "meetple.ai.meeting-embedding.v1.dlq",
     "__debezium-heartbeat.meetple-outbox",
     "meetple-outbox.public.debezium_heartbeat",
   ]
 
   kafka_email_topics           = [for topic in local.kafka_topics : topic if startswith(topic, "meetple.email.delivery.v1")]
+  kafka_ai_embedding_topics    = [for topic in local.kafka_topics : topic if startswith(topic, "meetple.ai.meeting-embedding.v1")]
   kafka_heartbeat_topics       = [for topic in local.kafka_topics : topic if startswith(topic, "__debezium-heartbeat.") || endswith(topic, ".debezium_heartbeat")]
   kafka_push_dlq_topics        = [for topic in local.kafka_topics : topic if startswith(topic, "meetple.push.") && endswith(topic, ".dlq")]
   kafka_push_main_retry_topics = [for topic in local.kafka_topics : topic if startswith(topic, "meetple.push.") && !endswith(topic, ".dlq")]
-  kafka_one_day_topics         = distinct(concat(local.kafka_email_topics, local.kafka_heartbeat_topics, local.kafka_push_main_retry_topics))
+  kafka_one_day_topics         = distinct(concat(local.kafka_email_topics, local.kafka_ai_embedding_topics, local.kafka_heartbeat_topics, local.kafka_push_main_retry_topics))
   debezium_connector_config = jsondecode(
     file("${path.module}/../../docker/debezium/connectors/meetple-outbox-connector.json")
   ).config

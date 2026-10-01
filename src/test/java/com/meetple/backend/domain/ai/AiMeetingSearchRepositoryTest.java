@@ -26,13 +26,16 @@ class AiMeetingSearchRepositoryTest {
             .withCommand("postgres", "-c", "shared_preload_libraries=pg_bigm,pg_stat_statements");
     private JdbcTemplate jdbc;
     private AiMeetingSearchRepository repository;
+    private MeetingEmbeddingStore embeddingStore;
     private final LocalDateTime start = LocalDateTime.of(2026, 10, 3, 0, 0);
 
     @BeforeEach void prepare() {
         var datasource = new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Flyway.configure().dataSource(datasource).locations("classpath:db/migration").load().migrate();
         jdbc = new JdbcTemplate(datasource);
-        repository = new AiMeetingSearchRepository(new NamedParameterJdbcTemplate(datasource));
+        var namedJdbc = new NamedParameterJdbcTemplate(datasource);
+        repository = new AiMeetingSearchRepository(namedJdbc);
+        embeddingStore = new MeetingEmbeddingStore(namedJdbc);
         jdbc.execute("TRUNCATE meetings, members CASCADE");
         jdbc.execute("""
                 INSERT INTO members (id,email,password,nickname,role,created_at,updated_at)
@@ -149,5 +152,24 @@ class AiMeetingSearchRepositoryTest {
         assertThat(repository.findEligibleByIds(1, filters("러닝"), List.of(10L)))
                 .extracting(AiSearchContracts.Candidate::id)
                 .containsExactly(10L);
+    }
+
+    @Test void storesCurrentEmbeddingAndIgnoresStaleMeetingDocument() {
+        insert(10, "주말 초보 러닝", 2, "RECRUITING", 2, 37.5, start.plusHours(15));
+        MeetingEmbeddingDocument current = MeetingEmbeddingDocument.from(
+                10L, "주말 초보 러닝", "운동", "가상 공원", "가상 주소", "처음 달리는 분 환영");
+
+        assertThat(embeddingStore.upsertIfCurrent(
+                current, "test-embedding-model", embedding(0))).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT content_hash FROM meeting_embeddings WHERE meeting_id=10", String.class))
+                .isEqualTo(current.contentHash());
+
+        jdbc.update("UPDATE meetings SET title='수정된 러닝 모임' WHERE id=10");
+        assertThat(embeddingStore.upsertIfCurrent(
+                current, "test-embedding-model", embedding(1))).isZero();
+        assertThat(jdbc.queryForObject(
+                "SELECT content_hash FROM meeting_embeddings WHERE meeting_id=10", String.class))
+                .isEqualTo(current.contentHash());
     }
 }

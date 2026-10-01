@@ -149,6 +149,14 @@ ai:
     service-token: ${AI_SEARCH_SERVICE_TOKEN:}
     capability-secret: ${AI_SEARCH_CAPABILITY_SECRET:}
     timeout: ${AI_SEARCH_TIMEOUT:45s}
+  embedding:
+    enabled: ${AI_EMBEDDING_ENABLED:false}
+    kafka:
+      consumer-enabled: ${AI_EMBEDDING_KAFKA_CONSUMER_ENABLED:false}
+      retry:
+        initial-delay-ms: ${AI_EMBEDDING_KAFKA_RETRY_INITIAL_DELAY_MS:10000}
+        multiplier: ${AI_EMBEDDING_KAFKA_RETRY_MULTIPLIER:3.0}
+        max-delay-ms: ${AI_EMBEDDING_KAFKA_RETRY_MAX_DELAY_MS:600000}
 
 image:
   deletion:

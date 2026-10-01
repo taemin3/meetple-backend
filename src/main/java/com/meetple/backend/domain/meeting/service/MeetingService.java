@@ -1,5 +1,6 @@
 package com.meetple.backend.domain.meeting.service;
 
+import com.meetple.backend.domain.ai.MeetingEmbeddingEventPublisher;
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
 import com.meetple.backend.domain.chat.entity.ChatRoomSequence;
@@ -89,6 +90,7 @@ public class MeetingService {
     private final ApplicationEventPublisher eventPublisher;
     private final ImageService imageService;
     private final ImageDeletionService imageDeletionService;
+    private final MeetingEmbeddingEventPublisher meetingEmbeddingEventPublisher;
 
     @Transactional
     public MeetingResponse createMeeting(Long memberId, CreateMeetingRequest request) {
@@ -115,6 +117,7 @@ public class MeetingService {
         Meeting savedMeeting = meetingRepository.save(meeting);
         chatRoomSequenceRepository.save(ChatRoomSequence.initialize(savedMeeting.getId()));
         saveMeetingImages(savedMeeting, images);
+        meetingEmbeddingEventPublisher.publishCreated(savedMeeting);
 
         return toResponse(savedMeeting, images);
     }
@@ -221,6 +224,7 @@ public class MeetingService {
         Meeting meeting = getMeetingEntityForUpdate(meetingId);
         ensureHost(meeting, memberId);
         ensureOpen(meeting);
+        String previousEmbeddingContentHash = meetingEmbeddingEventPublisher.contentHash(meeting);
 
         boolean imagesProvided = request.getImageObjectKeys() != null;
         List<ImageReference> images = imagesProvided
@@ -249,6 +253,7 @@ public class MeetingService {
                 chooseDateTime(request.getScheduledAt(), meeting.getMeetingDate()),
                 resolveUpdatedEndDate(meeting, request)
         );
+        meetingEmbeddingEventPublisher.publishIfChanged(meeting, previousEmbeddingContentHash);
 
         if (images != null) {
             meeting.changeThumbnailImageObjectKey(firstImageObjectKey(images));

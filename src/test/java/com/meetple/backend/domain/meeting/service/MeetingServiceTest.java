@@ -10,6 +10,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.meetple.backend.domain.ai.MeetingEmbeddingEventPublisher;
 import com.meetple.backend.domain.category.entity.Category;
 import com.meetple.backend.domain.category.repository.CategoryRepository;
 import com.meetple.backend.domain.chat.entity.ChatRoomSequence;
@@ -91,6 +92,9 @@ class MeetingServiceTest {
     @Mock
     private ImageDeletionService imageDeletionService;
 
+    @Mock
+    private MeetingEmbeddingEventPublisher meetingEmbeddingEventPublisher;
+
     @InjectMocks
     private MeetingService meetingService;
 
@@ -167,6 +171,7 @@ class MeetingServiceTest {
                         "images/meeting/1/first.png",
                         "images/meeting/1/second.png"
                 );
+        verify(meetingEmbeddingEventPublisher).publishCreated(any(Meeting.class));
     }
 
     @Test
@@ -231,6 +236,7 @@ class MeetingServiceTest {
         verify(meetingRepository).findByIdForUpdate(10L);
         verify(meetingImageRepository).deleteByMeetingId(10L);
         verify(imageDeletionService).schedule(List.of("images/meeting/1/old.png"));
+        verify(meetingEmbeddingEventPublisher).publishIfChanged(eq(meeting), any());
     }
 
     @Test

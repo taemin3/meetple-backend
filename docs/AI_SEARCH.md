@@ -20,12 +20,23 @@ Python AI 서버는 독립 저장소 [meetple-ai](https://github.com/taemin3/mee
 | `AI_SEARCH_SERVICE_TOKEN` | AI 서버의 `AI_SERVICE_TOKEN`과 같은 32자 이상 키 |
 | `AI_SEARCH_CAPABILITY_SECRET` | 서비스 키와 다른 32자 이상 서명 키. Spring에만 설정 |
 | `AI_SEARCH_TIMEOUT` | `45s`, 최대 `60s` |
+| `AI_EMBEDDING_ENABLED` | `false`; 모임 생성·수정 트랜잭션에서 임베딩 Outbox 이벤트 발행 |
+| `AI_EMBEDDING_KAFKA_CONSUMER_ENABLED` | `false`; 임베딩 Kafka consumer 실행 |
+| `AI_EMBEDDING_KAFKA_CONSUMER_GROUP` | `meetple-ai-meeting-embedding-v1` |
 
 AI 서버의 `AI_BACKEND_URL`에는 이 Spring 서버의 주소를 지정한다. 폴더 위치와 관계없이 HTTP로 연결한다. Spring은 AI 레포의 `.env`를 자동으로 읽지 않는다.
 
 사용자 JWT는 AI 서버에 전달하지 않는다. 서명 권한은 90초간 유효하다. Python 및 내부 조회 경로는 사설 네트워크로 연결하고 공개 ingress에서 차단한다.
 
-`queryEmbedding`이 있으면 같은 모델로 저장된 벡터 중 HNSW 상위 200개를 먼저 제한하고 전체 키워드 후보와 합친다. 그 뒤 구조 조건을 적용하고 키워드 일치 점수 45%와 pgvector 코사인 유사도 55%로 후보를 정렬한다. 임베딩이 없는 모임도 키워드가 일치하면 후보에서 제외하지 않는다. 최종 추천은 순위를 다시 계산하지 않고 추천 ID의 현재 모집 상태·차단·날짜·시간·거리와 원문 근거를 재검증한다. 모임 생성·수정 시 임베딩 갱신과 기존 데이터 백필은 후속 범위이므로, 그 작업 전에는 저장된 벡터가 있는 모임에만 의미 점수가 적용된다. 운영 활성화 전 사용자별 요청/비용 제한이 필요하다.
+`queryEmbedding`이 있으면 같은 모델로 저장된 벡터 중 HNSW 상위 200개를 먼저 제한하고 전체 키워드 후보와 합친다. 그 뒤 구조 조건을 적용하고 키워드 일치 점수 45%와 pgvector 코사인 유사도 55%로 후보를 정렬한다. 임베딩이 없는 모임도 키워드가 일치하면 후보에서 제외하지 않는다. 최종 추천은 순위를 다시 계산하지 않고 추천 ID의 현재 모집 상태·차단·날짜·시간·거리와 원문 근거를 재검증한다. 운영 활성화 전 사용자별 요청/비용 제한이 필요하다.
+
+## 모임 임베딩 갱신
+
+모임 생성 또는 제목·카테고리·장소·주소·소개글 수정 시 같은 DB 트랜잭션에 `meetple.ai.meeting-embedding.v1` Outbox 이벤트를 기록한다. Debezium이 이벤트를 Kafka로 전달하면 Spring consumer가 AI 서버의 `POST /v1/embeddings/meetings`를 호출하고 `meeting_embeddings`에 저장한다. 생성·수정 API는 OpenAI 응답을 기다리지 않는다.
+
+이벤트 문서는 제목·카테고리·장소·주소·소개글로 만들며 SHA-256 `contentHash`를 함께 보낸다. consumer는 저장 직전에 이벤트의 필드가 현재 모임 데이터와 모두 같은지 확인한다. 수정 전 이벤트가 늦게 도착하면 저장하지 않으므로 최신 임베딩을 이전 값으로 덮지 않는다. 실패는 최대 5회 처리 후 `.dlq`로 이동한다. 문서 내용과 서비스 키는 로그에 남기지 않는다.
+
+두 기능 플래그는 기본값이 `false`다. AI 서버 배포, Kafka topic 생성, 같은 `AI_SEARCH_SERVICE_TOKEN` 설정을 확인한 뒤 publisher와 consumer를 활성화한다. 기존 모임은 자동으로 채워지지 않으며 별도 백필 작업이 필요하다.
 
 검색은 대화 상태를 저장하지 않는 단일 요청 방식이다. 일반적인 선호 표현은 AI가 자연스럽게 해석하고, Spring은 날짜·시간·거리와 권한을 다시 검증한다. 오전은 06:00~12:00, 오후는 12:00~18:00, 저녁은 18:00 이후다. 위치가 없으면 `INPUT_REQUIRED`, 다른 지역·일정 충돌·생성/참여 요청은 `UNSUPPORTED`를 반환한다.
 

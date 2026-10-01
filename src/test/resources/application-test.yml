@@ -40,6 +40,12 @@ jwt:
 chat:
   session-invalidation:
     redis-enabled: false
+
+ai:
+  embedding:
+    enabled: false
+    kafka:
+      consumer-enabled: false
   message-fan-out:
     redis-enabled: false
 
