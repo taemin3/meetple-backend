@@ -17,7 +17,7 @@ $uri = $AiBaseUrl.TrimEnd('/') + "/v1/moderation/policies/embeddings/sync"
 $headers = @{ "X-AI-Service-Token" = $serviceToken }
 $totalEmbedded = 0
 
-for ($batch = 1; $batch -le $MaxBatches; $batch++) {
+for ($batch = 1; $batch -le ($MaxBatches + 1); $batch++) {
     $response = Invoke-RestMethod `
         -Method Post `
         -Uri $uri `
@@ -25,13 +25,17 @@ for ($batch = 1; $batch -le $MaxBatches; $batch++) {
         -ContentType "application/json" `
         -Body (@{ limit = $BatchSize } | ConvertTo-Json)
 
-    $totalEmbedded += [int]$response.embeddedCount
-    Write-Host "배치 $batch 완료: $($response.embeddedCount)개 임베딩 저장"
-
     if ([int]$response.requestedCount -eq 0) {
         Write-Host "정책 임베딩 동기화 완료: 총 $totalEmbedded개"
         exit 0
     }
+
+    $totalEmbedded += [int]$response.embeddedCount
+    Write-Host "배치 $batch 완료: $($response.embeddedCount)개 임베딩 저장"
+
+    if ($batch -gt $MaxBatches) {
+        break
+    }
 }
 
-throw "최대 배치 수($MaxBatches)에 도달했습니다. 남은 작업을 확인한 뒤 다시 실행하세요."
+throw "최대 배치 수($MaxBatches)에 도달했고 추가 작업이 확인되었습니다. 다시 실행하세요."

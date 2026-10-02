@@ -89,6 +89,43 @@ class AdminModerationPolicyRepositoryTest {
                 .satisfies(clause -> assertThat(clause.embedded()).isTrue());
     }
 
+    @Test
+    void deactivatesOtherVersionAndReturnsChangedPolicyIds() {
+        LocalDateTime now = LocalDateTime.of(2026, 10, 2, 9, 0);
+        long previousPolicyId = repository.insertPolicy(
+                "COMMUNITY-SPAM",
+                "스팸 금지",
+                ModerationPolicyType.SPAM,
+                ModerationPolicyTargetType.ALL,
+                LocalDate.of(2026, 10, 1),
+                null,
+                1,
+                now
+        );
+        long nextPolicyId = repository.insertPolicy(
+                "COMMUNITY-SPAM",
+                "스팸 금지 개정",
+                ModerationPolicyType.SPAM,
+                ModerationPolicyTargetType.ALL,
+                LocalDate.of(2026, 10, 2),
+                null,
+                2,
+                now
+        );
+        jdbc.update("UPDATE moderation_policies SET active = TRUE WHERE id = ?", previousPolicyId);
+
+        List<Long> deactivatedPolicyIds = repository.deactivateOtherVersions(
+                nextPolicyId,
+                "COMMUNITY-SPAM",
+                now.plusHours(1)
+        );
+
+        assertThat(deactivatedPolicyIds).containsExactly(previousPolicyId);
+        assertThat(repository.findById(previousPolicyId)).get()
+                .extracting(AdminModerationPolicyRepository.PolicyRow::active)
+                .isEqualTo(false);
+    }
+
     private static String vectorLiteral() {
         return java.util.stream.IntStream.range(0, ModerationPolicyContracts.EMBEDDING_DIMENSIONS)
                 .mapToObj(index -> index == 0 ? "1" : "0")

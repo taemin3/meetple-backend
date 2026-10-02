@@ -1,22 +1,24 @@
-INSERT INTO moderation_policies (
-    policy_code, title, policy_type, target_type,
-    effective_from, effective_to, active, version, created_at, updated_at
+WITH inserted_policies AS (
+    INSERT INTO moderation_policies (
+        policy_code, title, policy_type, target_type,
+        effective_from, effective_to, active, version, created_at, updated_at
+    )
+    VALUES
+        ('COMMUNITY-SPAM', '스팸 및 반복 홍보 금지', 'SPAM', 'ALL',
+         DATE '2026-10-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('COMMUNITY-HARASSMENT', '괴롭힘 및 모욕 금지', 'ABUSE_OR_HARASSMENT', 'ALL',
+         DATE '2026-10-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('COMMUNITY-CONTENT', '부적절한 콘텐츠 금지', 'INAPPROPRIATE_CONTENT', 'ALL',
+         DATE '2026-10-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('COMMUNITY-FRAUD', '허위 정보 및 사기 금지', 'FRAUD_OR_FALSE_INFORMATION', 'ALL',
+         DATE '2026-10-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('COMMUNITY-SAFETY', '안전한 모임 운영', 'SAFETY', 'MEETING',
+         DATE '2026-10-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('COMMUNITY-PRIVACY', '개인정보 보호', 'GENERAL', 'ALL',
+         DATE '2026-10-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ON CONFLICT (policy_code, version) DO NOTHING
+    RETURNING id, policy_code
 )
-VALUES
-    ('COMMUNITY-SPAM', '스팸 및 반복 홍보 금지', 'SPAM', 'ALL',
-     DATE '2026-10-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('COMMUNITY-HARASSMENT', '괴롭힘 및 모욕 금지', 'ABUSE_OR_HARASSMENT', 'ALL',
-     DATE '2026-10-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('COMMUNITY-CONTENT', '부적절한 콘텐츠 금지', 'INAPPROPRIATE_CONTENT', 'ALL',
-     DATE '2026-10-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('COMMUNITY-FRAUD', '허위 정보 및 사기 금지', 'FRAUD_OR_FALSE_INFORMATION', 'ALL',
-     DATE '2026-10-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('COMMUNITY-SAFETY', '안전한 모임 운영', 'SAFETY', 'MEETING',
-     DATE '2026-10-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('COMMUNITY-PRIVACY', '개인정보 보호', 'GENERAL', 'ALL',
-     DATE '2026-10-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-ON CONFLICT (policy_code, version) DO NOTHING;
-
 INSERT INTO moderation_policy_chunks (
     policy_id, clause_code, chunk_order, content, content_hash, created_at, updated_at
 )
@@ -49,7 +51,5 @@ FROM (
          '타인의 개인정보를 동의 없이 공개하거나 서비스 목적과 다르게 이용해서는 안 됩니다.',
          '0a098531ca1c148fefae112bb12e7a9ab2a7d08cb4cde51496930f024bce3957')
 ) AS seed(policy_code, clause_code, chunk_order, content, content_hash)
-JOIN moderation_policies policy
-  ON policy.policy_code = seed.policy_code
- AND policy.version = 1
-ON CONFLICT (policy_id, clause_code) DO NOTHING;
+JOIN inserted_policies policy
+  ON policy.policy_code = seed.policy_code;

@@ -190,6 +190,8 @@ class AdminModerationPolicyServiceTest {
                 10L,
                 AdminModerationPolicyService.EMBEDDING_MODEL
         )).willReturn(0);
+        given(repository.deactivateOtherVersions(10L, "COMMUNITY-SPAM", NOW))
+                .willReturn(List.of(9L));
         given(repository.findClauses(10L, AdminModerationPolicyService.EMBEDDING_MODEL))
                 .willReturn(List.of());
         given(repository.findAudits(10L)).willReturn(List.of());
@@ -197,6 +199,7 @@ class AdminModerationPolicyServiceTest {
         PolicyDetail result = service.updateActivation(7L, 10L, new ActivationRequest(true));
 
         verify(repository).deactivateOtherVersions(10L, "COMMUNITY-SPAM", NOW);
+        verify(repository).insertAudit(9L, 7L, PolicyAuditAction.DEACTIVATED, NOW);
         verify(repository).updateActivation(10L, true, NOW);
         verify(repository).insertAudit(10L, 7L, PolicyAuditAction.ACTIVATED, NOW);
         assertThat(result.active()).isTrue();

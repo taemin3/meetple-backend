@@ -1,3 +1,19 @@
+WITH ranked_active_policies AS (
+    SELECT id,
+           ROW_NUMBER() OVER (
+               PARTITION BY policy_code
+               ORDER BY version DESC, id DESC
+           ) AS active_rank
+    FROM moderation_policies
+    WHERE active = TRUE
+)
+UPDATE moderation_policies policy
+SET active = FALSE,
+    updated_at = CURRENT_TIMESTAMP
+FROM ranked_active_policies ranked
+WHERE policy.id = ranked.id
+  AND ranked.active_rank > 1;
+
 CREATE UNIQUE INDEX uk_moderation_policies_single_active_code
     ON moderation_policies (policy_code)
     WHERE active = TRUE;

@@ -244,17 +244,19 @@ public class AdminModerationPolicyRepository {
         return count == null ? 0 : count;
     }
 
-    public void deactivateOtherVersions(long policyId, String policyCode, LocalDateTime now) {
-        jdbc.update("""
+    public List<Long> deactivateOtherVersions(long policyId, String policyCode, LocalDateTime now) {
+        return jdbc.query("""
                 UPDATE moderation_policies
                 SET active = FALSE, updated_at = :now
                 WHERE policy_code = :policyCode
                   AND id <> :policyId
                   AND active = TRUE
+                RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("policyId", policyId)
                 .addValue("policyCode", policyCode)
-                .addValue("now", now));
+                .addValue("now", now),
+                (rs, rowNum) -> rs.getLong("id"));
     }
 
     public void updateActivation(long policyId, boolean active, LocalDateTime now) {

@@ -165,7 +165,17 @@ public class AdminModerationPolicyService {
         }
         LocalDateTime now = LocalDateTime.now(clock);
         if (active) {
-            repository.deactivateOtherVersions(policyId, policy.policyCode(), now);
+            List<Long> deactivatedPolicyIds = repository.deactivateOtherVersions(
+                    policyId,
+                    policy.policyCode(),
+                    now
+            );
+            deactivatedPolicyIds.forEach(deactivatedPolicyId -> repository.insertAudit(
+                    deactivatedPolicyId,
+                    administratorMemberId,
+                    PolicyAuditAction.DEACTIVATED,
+                    now
+            ));
         }
         repository.updateActivation(policyId, active, now);
         repository.insertAudit(

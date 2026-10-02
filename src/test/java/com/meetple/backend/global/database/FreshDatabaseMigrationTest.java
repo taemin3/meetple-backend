@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -38,6 +39,7 @@ class FreshDatabaseMigrationTest {
         Flyway flyway = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
+                .cleanDisabled(false)
                 .load();
 
         var firstMigration = flyway.migrate();
@@ -158,6 +160,56 @@ class FreshDatabaseMigrationTest {
         }
 
         assertThat(flyway.migrate().migrationsExecuted).isZero();
+
+        verifyPolicyManagementUpgrade(flyway);
+    }
+
+    private void verifyPolicyManagementUpgrade(Flyway flyway) throws Exception {
+        flyway.clean();
+        Flyway beforePolicyManagement = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .target(MigrationVersion.fromVersion("28"))
+                .load();
+        beforePolicyManagement.migrate();
+
+        try (var connection = openConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    INSERT INTO moderation_policies (
+                        policy_code, title, policy_type, target_type,
+                        effective_from, effective_to, active, version, created_at, updated_at
+                    ) VALUES
+                        ('LEGACY-SPAM', '기존 정책 1', 'SPAM', 'ALL',
+                         DATE '2026-09-01', NULL, TRUE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                        ('LEGACY-SPAM', '기존 정책 2', 'SPAM', 'ALL',
+                         DATE '2026-10-01', NULL, TRUE, 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                        ('COMMUNITY-SPAM', '사용자 정의 스팸 정책', 'SPAM', 'ALL',
+                         DATE '2026-09-01', NULL, FALSE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """);
+            statement.executeUpdate("""
+                    INSERT INTO moderation_policy_chunks (
+                        policy_id, clause_code, chunk_order, content, content_hash,
+                        created_at, updated_at
+                    )
+                    SELECT id, 'CUSTOM-1', 0, '기존 사용자 정의 조항',
+                           'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    FROM moderation_policies
+                    WHERE policy_code = 'COMMUNITY-SPAM' AND version = 1
+                    """);
+        }
+
+        Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+
+        try (var connection = openConnection()) {
+            assertThat(activePolicyVersions(connection, "LEGACY-SPAM")).containsExactly(2);
+            assertThat(policyChunkContents(connection, "COMMUNITY-SPAM", 1))
+                    .containsExactly("기존 사용자 정의 조항");
+        }
     }
 
     private Connection openConnection() throws SQLException {
@@ -208,6 +260,49 @@ class FreshDatabaseMigrationTest {
                 names.add(resultSet.getString("name"));
             }
             return names;
+        }
+    }
+
+    private List<Integer> activePolicyVersions(Connection connection, String policyCode)
+            throws SQLException {
+        try (var statement = connection.prepareStatement("""
+                SELECT version
+                FROM moderation_policies
+                WHERE policy_code = ? AND active = TRUE
+                ORDER BY version
+                """)) {
+            statement.setString(1, policyCode);
+            try (var resultSet = statement.executeQuery()) {
+                var versions = new ArrayList<Integer>();
+                while (resultSet.next()) {
+                    versions.add(resultSet.getInt("version"));
+                }
+                return versions;
+            }
+        }
+    }
+
+    private List<String> policyChunkContents(
+            Connection connection,
+            String policyCode,
+            int version
+    ) throws SQLException {
+        try (var statement = connection.prepareStatement("""
+                SELECT chunk.content
+                FROM moderation_policy_chunks chunk
+                JOIN moderation_policies policy ON policy.id = chunk.policy_id
+                WHERE policy.policy_code = ? AND policy.version = ?
+                ORDER BY chunk.chunk_order
+                """)) {
+            statement.setString(1, policyCode);
+            statement.setInt(2, version);
+            try (var resultSet = statement.executeQuery()) {
+                var contents = new ArrayList<String>();
+                while (resultSet.next()) {
+                    contents.add(resultSet.getString("content"));
+                }
+                return contents;
+            }
         }
     }
 
