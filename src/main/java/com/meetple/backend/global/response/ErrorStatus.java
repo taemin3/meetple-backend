@@ -33,6 +33,7 @@ public enum ErrorStatus {
     // 403 FORBIDDEN
     FORBIDDEN(HttpStatus.FORBIDDEN, "접근 권한이 없습니다.",10301),
     ACCESS_DENIED(HttpStatus.FORBIDDEN,"접근 권한이 없어 접근이 거부되었습니다.",10302),
+    ACCOUNT_SUSPENDED(HttpStatus.FORBIDDEN, "이용이 제한된 계정입니다.",10303),
 
     // 404 NOT_FOUND
     NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다.",10401),

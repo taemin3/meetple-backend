@@ -1,6 +1,7 @@
 package com.meetple.backend.domain.moderation.entity;
 
 import com.meetple.backend.domain.member.entity.Member;
+import com.meetple.backend.domain.moderation.admin.AdminModerationActionType;
 import com.meetple.backend.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,6 +14,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -45,6 +47,20 @@ public class Report extends BaseTimeEntity {
     @Column(name = "other_description", length = 500)
     private String otherDescription;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "review_status", nullable = false, length = 20)
+    private ReportReviewStatus reviewStatus = ReportReviewStatus.PENDING;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "resolution_action", length = 40)
+    private AdminModerationActionType resolutionAction;
+
+    @Column(name = "resolved_by_member_id")
+    private Long resolvedByMemberId;
+
+    @Column(name = "resolved_at")
+    private LocalDateTime resolvedAt;
+
     private Report(Member reporter, ReportTargetType targetType, Long targetId,
                    ReportReason reason, String otherDescription) {
         this.reporter = reporter;
@@ -57,5 +73,22 @@ public class Report extends BaseTimeEntity {
     public static Report create(Member reporter, ReportTargetType targetType, Long targetId,
                                 ReportReason reason, String otherDescription) {
         return new Report(reporter, targetType, targetId, reason, otherDescription);
+    }
+
+    public void resolve(
+            AdminModerationActionType action,
+            Long administratorMemberId,
+            LocalDateTime resolvedAt
+    ) {
+        if (reviewStatus == ReportReviewStatus.RESOLVED) {
+            throw new IllegalStateException("Report is already resolved.");
+        }
+        if (!action.isInitialResolution()) {
+            throw new IllegalArgumentException("Follow-up action cannot resolve a report.");
+        }
+        this.reviewStatus = ReportReviewStatus.RESOLVED;
+        this.resolutionAction = action;
+        this.resolvedByMemberId = administratorMemberId;
+        this.resolvedAt = resolvedAt;
     }
 }

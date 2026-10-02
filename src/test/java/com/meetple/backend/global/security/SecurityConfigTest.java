@@ -183,6 +183,43 @@ class SecurityConfigTest {
     }
 
     @Test
+    void adminEndpointRejectsNormalMemberWithApiResponse() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/test")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(ErrorStatus.ACCESS_DENIED.getCode()));
+    }
+
+    @Test
+    void adminEndpointAllowsAdminRole() throws Exception {
+        Member administrator = Member.createUser(
+                "admin@meetple.com",
+                "encoded-password",
+                "administrator",
+                "Seoul"
+        );
+        ReflectionTestUtils.setField(administrator, "id", MEMBER_ID_SEQUENCE.getAndIncrement());
+        ReflectionTestUtils.setField(
+                administrator,
+                "role",
+                com.meetple.backend.domain.member.entity.MemberRole.ADMIN
+        );
+        String sessionId = "admin-security-config-test-session";
+        String adminAccessToken = jwtTokenProvider.createAccessToken(administrator, sessionId);
+        refreshTokenRepository.save(
+                administrator.getId(),
+                sessionId,
+                "admin-refresh-token",
+                Duration.ofMinutes(10)
+        );
+
+        mockMvc.perform(get("/api/v1/admin/test")
+                        .header("Authorization", "Bearer " + adminAccessToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void controllerIllegalArgumentExceptionIsNotConvertedToInvalidToken() throws Exception {
         mockMvc.perform(get("/test/protected/illegal-argument")
                         .header("Authorization", "Bearer " + accessToken))
@@ -202,6 +239,10 @@ class SecurityConfigTest {
 
     @RestController
     static class ProtectedTestController {
+
+        @GetMapping("/api/v1/admin/test")
+        void adminOnly() {
+        }
 
         @GetMapping("/test/protected/illegal-argument")
         void throwIllegalArgumentException() {

@@ -27,21 +27,26 @@ import com.meetple.backend.domain.member.repository.MemberRepository;
 import com.meetple.backend.domain.push.service.PushDeviceTokenService;
 import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
+import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.exception.UnauthorizedException;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.JwtTokenSession;
 import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -51,6 +56,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
+    private static final Clock CLOCK = Clock.fixed(
+            Instant.parse("2026-10-02T00:00:00Z"),
+            ZoneId.of("Asia/Seoul")
+    );
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 2, 9, 0);
 
     @Mock
     private MemberRepository memberRepository;
@@ -79,8 +89,23 @@ class AuthServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
-    @InjectMocks
     private AuthService authService;
+
+    @BeforeEach
+    void setUp() {
+        authService = new AuthService(
+                memberRepository,
+                passwordEncoder,
+                jwtTokenProvider,
+                refreshTokenRepository,
+                accessTokenBlacklistRepository,
+                pushDeviceTokenService,
+                legalDocumentService,
+                emailVerificationService,
+                eventPublisher,
+                CLOCK
+        );
+    }
 
     @Test
     void signupEncodesPasswordAndSavesMember() {
@@ -214,6 +239,37 @@ class AuthServiceTest {
     }
 
     @Test
+    void loginRejectsSuspendedMemberAfterPasswordVerification() {
+        LoginRequest request = new LoginRequest("user@meetple.com", "password123");
+        Member member = Member.createUser(request.email(), "encoded-password", "tester", null);
+        member.suspendUntil(1L, NOW.plusDays(1));
+        given(memberRepository.findByEmailForUpdate(request.email())).willReturn(Optional.of(member));
+        given(passwordEncoder.matches(request.password(), member.getPassword())).willReturn(true);
+
+        assertThatThrownBy(() -> authService.login(request))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessage(ErrorStatus.ACCOUNT_SUSPENDED.getMessage());
+
+        verify(jwtTokenProvider, never()).createAccessToken(any(), anyString());
+    }
+
+    @Test
+    void loginAllowsMemberWhoseSuspensionExpiredInModerationTimeZone() {
+        LoginRequest request = new LoginRequest("user@meetple.com", "password123");
+        Member member = Member.createUser(request.email(), "encoded-password", "tester", null);
+        ReflectionTestUtils.setField(member, "id", 1L);
+        member.suspendUntil(1L, NOW.minusSeconds(1));
+        given(memberRepository.findByEmailForUpdate(request.email())).willReturn(Optional.of(member));
+        given(passwordEncoder.matches(request.password(), member.getPassword())).willReturn(true);
+        given(jwtTokenProvider.createAccessToken(eq(member), anyString())).willReturn("access-token");
+        given(jwtTokenProvider.createRefreshToken(eq(member), anyString())).willReturn("refresh-token");
+
+        authService.login(request);
+
+        verify(jwtTokenProvider).createAccessToken(eq(member), anyString());
+    }
+
+    @Test
     void reissueRotatesRefreshTokenWhenStoredTokenMatches() {
         ReissueRequest request = new ReissueRequest("old-refresh-token");
         Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
@@ -232,6 +288,23 @@ class AuthServiceTest {
         assertThat(response.accessToken()).isEqualTo("new-access-token");
         assertThat(response.refreshToken()).isEqualTo("new-refresh-token");
         verify(refreshTokenRepository).save(1L, "session-id", "new-refresh-token", Duration.ofSeconds(1209600L));
+    }
+
+    @Test
+    void reissueRejectsPermanentlySuspendedMember() {
+        ReissueRequest request = new ReissueRequest("old-refresh-token");
+        Member member = Member.createUser("user@meetple.com", "encoded-password", "tester", null);
+        member.suspendPermanently(1L, NOW);
+        given(jwtTokenProvider.getRefreshTokenSession(request.refreshToken()))
+                .willReturn(new JwtTokenSession(1L, "session-id"));
+        given(refreshTokenRepository.matches(1L, "session-id", request.refreshToken())).willReturn(true);
+        given(memberRepository.findByIdForUpdate(1L)).willReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> authService.reissue(request))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessage(ErrorStatus.ACCOUNT_SUSPENDED.getMessage());
+
+        verify(refreshTokenRepository, never()).save(any(), anyString(), anyString(), any());
     }
 
     @Test

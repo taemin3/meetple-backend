@@ -76,6 +76,9 @@ public class Meeting extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "moderation_deleted_by_report_id")
+    private Long moderationDeletedByReportId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private MeetingStatus status;

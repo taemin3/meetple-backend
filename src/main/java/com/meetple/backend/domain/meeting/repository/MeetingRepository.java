@@ -397,6 +397,7 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
                     select m.id
                     from meetings m
                     where m.deleted_at is not null
+                      and m.moderation_deleted_by_report_id is null
                       and m.deleted_at <= :cutoff
                     order by m.deleted_at asc, m.id asc
                     """,

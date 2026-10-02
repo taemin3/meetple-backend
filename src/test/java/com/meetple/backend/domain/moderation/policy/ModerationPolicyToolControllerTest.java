@@ -13,6 +13,7 @@ import com.meetple.backend.global.config.JacksonConfig;
 import com.meetple.backend.global.exception.BaseException;
 import com.meetple.backend.global.response.ErrorStatus;
 import com.meetple.backend.global.security.JwtAuthenticationEntryPoint;
+import com.meetple.backend.global.security.JwtAccessDeniedHandler;
 import com.meetple.backend.global.security.JwtTokenProvider;
 import com.meetple.backend.global.security.SecurityConfig;
 import java.util.List;
@@ -24,7 +25,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(ModerationPolicyToolController.class)
-@Import({SecurityConfig.class, JwtAuthenticationEntryPoint.class, JacksonConfig.class})
+@Import({SecurityConfig.class, JwtAuthenticationEntryPoint.class, JwtAccessDeniedHandler.class, JacksonConfig.class})
 class ModerationPolicyToolControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean AiModerationAuthenticator authenticator;
