@@ -20,7 +20,9 @@ import com.meetple.backend.domain.moderation.repository.ReportRepository;
 import com.meetple.backend.domain.notification.service.NotificationService;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.ForbiddenException;
+import com.meetple.backend.global.websocket.ChatAccessRevocationReason;
 import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
+import com.meetple.backend.global.websocket.ChatSessionInvalidationTarget;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -29,6 +31,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -149,7 +152,58 @@ class AdminModerationServiceTest {
                 new ActionRequest(AdminModerationActionType.RESTORE_MEETING, "복구 근거 부족")
         )).isInstanceOf(ConflictException.class);
 
-        verify(queryRepository, never()).updateMeetingDeletion(any(Long.class), any(), any());
+        verify(queryRepository, never()).restoreMeeting(any(Long.class), any());
+    }
+
+    @Test
+    void forceDeleteMeetingInvalidatesActiveChatSessions() {
+        Report report = report(10L, ReportTargetType.MEETING, 20L);
+        Member host = member(2L, MemberRole.USER);
+        given(reportRepository.findByIdForUpdate(10L)).willReturn(Optional.of(report));
+        given(queryRepository.lockMeeting(20L)).willReturn(Optional.of(
+                new AdminModerationQueryRepository.MeetingModerationState(null, null)
+        ));
+        given(queryRepository.findTargetMemberId(10L)).willReturn(Optional.of(2L));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(host));
+        stubSavedAction();
+
+        service.applyAction(
+                1L,
+                10L,
+                new ActionRequest(AdminModerationActionType.FORCE_DELETE_MEETING, "정책 위반 모임 삭제")
+        );
+
+        ArgumentCaptor<ChatSessionInvalidationEvent> eventCaptor =
+                ArgumentCaptor.forClass(ChatSessionInvalidationEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().target()).isEqualTo(ChatSessionInvalidationTarget.ROOM);
+        assertThat(eventCaptor.getValue().roomId()).isEqualTo(20L);
+        assertThat(eventCaptor.getValue().reason()).isEqualTo(ChatAccessRevocationReason.MEETING_CANCELED);
+    }
+
+    @Test
+    void restoreMeetingUsesCurrentTimeToCompleteEndedMeetingAtomically() {
+        Report report = report(10L, ReportTargetType.MEETING, 20L);
+        report.resolve(AdminModerationActionType.FORCE_DELETE_MEETING, 1L, NOW.minusDays(1));
+        Member host = member(2L, MemberRole.USER);
+        given(reportRepository.findByIdForUpdate(10L)).willReturn(Optional.of(report));
+        given(queryRepository.lockMeeting(20L)).willReturn(Optional.of(
+                new AdminModerationQueryRepository.MeetingModerationState(NOW.minusDays(1), 10L)
+        ));
+        given(actionRepository.existsByReportIdAndActionTypeAndTargetMeetingId(
+                10L, AdminModerationActionType.FORCE_DELETE_MEETING, 20L
+        )).willReturn(true);
+        given(queryRepository.findTargetMemberId(10L)).willReturn(Optional.of(2L));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(host));
+        stubSavedAction();
+
+        service.applyAction(
+                1L,
+                10L,
+                new ActionRequest(AdminModerationActionType.RESTORE_MEETING, "오판 확인 후 복구")
+        );
+
+        verify(queryRepository).restoreMeeting(20L, NOW);
     }
 
     @Test
@@ -198,5 +252,14 @@ class AdminModerationServiceTest {
         );
         ReflectionTestUtils.setField(report, "id", id);
         return report;
+    }
+
+    private void stubSavedAction() {
+        given(actionRepository.saveAndFlush(any(ModerationAction.class))).willAnswer(invocation -> {
+            ModerationAction action = invocation.getArgument(0);
+            ReflectionTestUtils.setField(action, "id", 100L);
+            ReflectionTestUtils.setField(action, "createdAt", NOW);
+            return action;
+        });
     }
 }

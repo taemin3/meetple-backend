@@ -231,6 +231,27 @@ public class AdminModerationQueryRepository {
         }
     }
 
+    public void restoreMeeting(long meetingId, LocalDateTime now) {
+        int updated = jdbc.update("""
+                UPDATE meetings
+                SET deleted_at = NULL,
+                    moderation_deleted_by_report_id = NULL,
+                    status = CASE
+                        WHEN status IN ('RECRUITING', 'FULL')
+                         AND COALESCE(end_date, meeting_date) <= :now
+                        THEN 'COMPLETED'
+                        ELSE status
+                    END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :meetingId
+                """, new MapSqlParameterSource()
+                .addValue("meetingId", meetingId)
+                .addValue("now", now));
+        if (updated != 1) {
+            throw new IllegalStateException("모임 제재 상태를 변경할 수 없습니다.");
+        }
+    }
+
     public boolean wasAutomaticallyWarned(long reportId) {
         Boolean found = jdbc.queryForObject("""
                 SELECT EXISTS (SELECT 1 FROM report_warnings WHERE report_id = :reportId)

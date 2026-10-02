@@ -23,12 +23,14 @@ import com.meetple.backend.global.security.JwtTokenSession;
 import com.meetple.backend.global.websocket.ChatSessionInvalidationEvent;
 import io.jsonwebtoken.JwtException;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -37,7 +39,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
-@RequiredArgsConstructor
 public class AuthService {
 
     private static final String INVALID_LOGIN_MESSAGE = "이메일 또는 비밀번호가 올바르지 않습니다.";
@@ -59,6 +60,57 @@ public class AuthService {
     private final LegalDocumentService legalDocumentService;
     private final EmailVerificationService emailVerificationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
+
+    @Autowired
+    public AuthService(
+            MemberRepository memberRepository,
+            PasswordEncoder passwordEncoder,
+            JwtTokenProvider jwtTokenProvider,
+            RefreshTokenRepository refreshTokenRepository,
+            AccessTokenBlacklistRepository accessTokenBlacklistRepository,
+            PushDeviceTokenService pushDeviceTokenService,
+            LegalDocumentService legalDocumentService,
+            EmailVerificationService emailVerificationService,
+            ApplicationEventPublisher eventPublisher
+    ) {
+        this(
+                memberRepository,
+                passwordEncoder,
+                jwtTokenProvider,
+                refreshTokenRepository,
+                accessTokenBlacklistRepository,
+                pushDeviceTokenService,
+                legalDocumentService,
+                emailVerificationService,
+                eventPublisher,
+                Clock.system(ZoneId.of("Asia/Seoul"))
+        );
+    }
+
+    AuthService(
+            MemberRepository memberRepository,
+            PasswordEncoder passwordEncoder,
+            JwtTokenProvider jwtTokenProvider,
+            RefreshTokenRepository refreshTokenRepository,
+            AccessTokenBlacklistRepository accessTokenBlacklistRepository,
+            PushDeviceTokenService pushDeviceTokenService,
+            LegalDocumentService legalDocumentService,
+            EmailVerificationService emailVerificationService,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock
+    ) {
+        this.memberRepository = memberRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtTokenProvider = jwtTokenProvider;
+        this.refreshTokenRepository = refreshTokenRepository;
+        this.accessTokenBlacklistRepository = accessTokenBlacklistRepository;
+        this.pushDeviceTokenService = pushDeviceTokenService;
+        this.legalDocumentService = legalDocumentService;
+        this.emailVerificationService = emailVerificationService;
+        this.eventPublisher = eventPublisher;
+        this.clock = clock;
+    }
 
     @Transactional
     public AuthMemberResponse signup(SignupRequest request) {
@@ -200,7 +252,7 @@ public class AuthService {
     }
 
     private void validateAccountAccess(Member member) {
-        if (member.isSuspendedAt(LocalDateTime.now())) {
+        if (member.isSuspendedAt(LocalDateTime.now(clock))) {
             throw new ForbiddenException(ErrorStatus.ACCOUNT_SUSPENDED);
         }
     }

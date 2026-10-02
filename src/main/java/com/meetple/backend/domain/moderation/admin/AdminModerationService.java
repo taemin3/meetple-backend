@@ -252,6 +252,7 @@ public class AdminModerationService {
                 throw new ConflictException(ACTION_CONFLICT_MESSAGE);
             }
             queryRepository.updateMeetingDeletion(meetingId, now, report.getId());
+            eventPublisher.publishEvent(ChatSessionInvalidationEvent.meetingCanceled(meetingId));
             notifyMeetingHost(report.getId(), "모임 강제 삭제 안내",
                     "운영 정책 위반이 확인되어 모임이 관리자에 의해 삭제되었습니다.");
             return meetingId;
@@ -263,7 +264,7 @@ public class AdminModerationService {
                     report.getId(), AdminModerationActionType.FORCE_DELETE_MEETING, meetingId)) {
                 throw new ConflictException(ACTION_CONFLICT_MESSAGE);
             }
-            queryRepository.updateMeetingDeletion(meetingId, null, null);
+            queryRepository.restoreMeeting(meetingId, now);
             notifyMeetingHost(report.getId(), "모임 복구 안내",
                     "관리자 검토로 삭제된 모임이 복구되었습니다.");
             return meetingId;

@@ -4,6 +4,10 @@ import static com.meetple.backend.domain.moderation.admin.AdminModerationContrac
 import static com.meetple.backend.domain.moderation.analysis.ReportAnalysisContracts.AnalysisStatus;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.meetple.backend.domain.category.entity.Category;
+import com.meetple.backend.domain.category.repository.CategoryRepository;
+import com.meetple.backend.domain.meeting.entity.Meeting;
+import com.meetple.backend.domain.meeting.repository.MeetingRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.entity.MemberRole;
 import com.meetple.backend.domain.member.repository.MemberRepository;
@@ -12,6 +16,8 @@ import com.meetple.backend.domain.moderation.entity.ReportReason;
 import com.meetple.backend.domain.moderation.entity.ReportReviewStatus;
 import com.meetple.backend.domain.moderation.entity.ReportTargetType;
 import com.meetple.backend.domain.moderation.repository.ReportRepository;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +39,8 @@ class AdminModerationQueryRepositoryTest {
     @Autowired MemberRepository memberRepository;
     @Autowired ReportRepository reportRepository;
     @Autowired ModerationActionRepository actionRepository;
+    @Autowired CategoryRepository categoryRepository;
+    @Autowired MeetingRepository meetingRepository;
 
     @BeforeEach
     void prepareJdbcModerationTables() {
@@ -156,5 +164,44 @@ class AdminModerationQueryRepositoryTest {
             assertThat(action.administratorNickname()).isEqualTo("관리자");
             assertThat(action.reason()).isEqualTo("정책 위반 확인");
         });
+    }
+
+    @Test
+    void restoreMeetingCompletesEndedOpenMeetingInSameUpdate() {
+        LocalDateTime now = LocalDateTime.of(2026, 10, 2, 9, 0);
+        Member host = memberRepository.save(Member.createUser(
+                "host@meetple.com", "password", "모임장", null));
+        Category category = categoryRepository.save(Category.create("운동"));
+        Meeting meeting = meetingRepository.saveAndFlush(Meeting.create(
+                host,
+                category,
+                "아침 러닝",
+                "함께 달려요",
+                "한강공원",
+                "서울시 영등포구",
+                new BigDecimal("37.528300"),
+                new BigDecimal("126.932600"),
+                5,
+                now.minusHours(2),
+                now.minusHours(1),
+                null
+        ));
+        jdbc.update("""
+                UPDATE meetings
+                SET deleted_at = :deletedAt,
+                    moderation_deleted_by_report_id = 10
+                WHERE id = :meetingId
+                """, Map.of("deletedAt", now.minusMinutes(30), "meetingId", meeting.getId()));
+
+        repository.restoreMeeting(meeting.getId(), now);
+
+        Map<String, Object> state = jdbc.queryForMap("""
+                SELECT status, deleted_at, moderation_deleted_by_report_id
+                FROM meetings
+                WHERE id = :meetingId
+                """, Map.of("meetingId", meeting.getId()));
+        assertThat(state.get("status")).isEqualTo("COMPLETED");
+        assertThat(state.get("deleted_at")).isNull();
+        assertThat(state.get("moderation_deleted_by_report_id")).isNull();
     }
 }
