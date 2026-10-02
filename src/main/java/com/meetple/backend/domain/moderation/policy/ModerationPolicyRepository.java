@@ -164,7 +164,14 @@ public class ModerationPolicyRepository {
                 LEFT JOIN moderation_policy_embeddings embedding
                   ON embedding.policy_chunk_id = chunk.id
                  AND embedding.embedding_model = :embeddingModel
-                WHERE policy.active = TRUE
+                WHERE (
+                        policy.active = TRUE
+                        OR policy.version = (
+                            SELECT MAX(latest.version)
+                            FROM moderation_policies latest
+                            WHERE latest.policy_code = policy.policy_code
+                        )
+                      )
                   AND (policy.effective_to IS NULL OR policy.effective_to >= :effectiveDate)
                   AND (embedding.policy_chunk_id IS NULL
                        OR embedding.content_hash <> chunk.content_hash)

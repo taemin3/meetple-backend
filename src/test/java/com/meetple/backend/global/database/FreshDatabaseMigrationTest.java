@@ -42,7 +42,7 @@ class FreshDatabaseMigrationTest {
 
         var firstMigration = flyway.migrate();
 
-        assertThat(firstMigration.migrationsExecuted).isEqualTo(29);
+        assertThat(firstMigration.migrationsExecuted).isEqualTo(31);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = openConnection()) {
@@ -73,12 +73,13 @@ class FreshDatabaseMigrationTest {
                     "report_analyses",
                     "report_analysis_policies",
                     "report_warnings",
-                    "moderation_actions"
+                    "moderation_actions",
+                    "moderation_policy_audits"
             );
             assertThat(appliedMigrationVersions(connection)).containsExactly(
                     "0.1", "1", "2", "3", "4", "5", "6",
                     "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-                    "20", "21", "22", "23", "24", "25", "26", "27", "28"
+                    "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"
             );
             assertThat(categoryNames(connection)).containsExactlyInAnyOrder(
                     "운동", "스터디", "취미", "친목", "여행", "맛집", "비즈니스", "반려동물"
@@ -94,6 +95,8 @@ class FreshDatabaseMigrationTest {
                             "meetple99@gmail.com"
                     );
             assertThat(rowCount(connection, "debezium_heartbeat")).isEqualTo(1);
+            assertThat(rowCount(connection, "moderation_policies")).isEqualTo(6);
+            assertThat(rowCount(connection, "moderation_policy_chunks")).isEqualTo(8);
 
             assertThat(columnType(connection, "outbox_events", "payload")).isEqualTo("jsonb");
             assertThat(columnType(connection, "outbox_events", "id")).isEqualTo("uuid");
@@ -239,7 +242,12 @@ class FreshDatabaseMigrationTest {
     }
 
     private int rowCount(Connection connection, String tableName) throws SQLException {
-        if (!Set.of("legal_documents", "debezium_heartbeat").contains(tableName)) {
+        if (!Set.of(
+                "legal_documents",
+                "debezium_heartbeat",
+                "moderation_policies",
+                "moderation_policy_chunks"
+        ).contains(tableName)) {
             throw new IllegalArgumentException("Unsupported table: " + tableName);
         }
         try (var statement = connection.createStatement();
