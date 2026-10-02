@@ -146,7 +146,7 @@ class ModerationPolicyRepositoryTest {
     }
 
     @Test
-    void returnsOnlyMissingOrStaleEmbeddingJobsForCurrentPolicies() {
+    void returnsMissingOrStaleJobsForActiveAndLatestDraftPolicies() {
         insertEmbedding(1001, embedding(0), MODEL, "1".repeat(64));
         insertEmbedding(1002, embedding(0), MODEL, "0".repeat(64));
         jdbc.update("UPDATE moderation_policies SET active=FALSE WHERE id=103");
@@ -155,7 +155,7 @@ class ModerationPolicyRepositoryTest {
 
         assertThat(jobs.items())
                 .extracting(ModerationPolicyContracts.EmbeddingJob::policyChunkId)
-                .containsExactly(1002L);
+                .containsExactly(1002L, 1003L);
     }
 
     @Test
