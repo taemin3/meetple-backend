@@ -3,7 +3,6 @@ package com.meetple.backend.domain.moderation.admin;
 import static com.meetple.backend.domain.moderation.admin.AdminModerationContracts.*;
 import static com.meetple.backend.domain.moderation.analysis.ReportAnalysisContracts.AnalysisStatus;
 
-import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.entity.MemberRole;
 import com.meetple.backend.domain.member.repository.MemberRepository;
@@ -40,7 +39,6 @@ public class AdminModerationService {
     private final MemberRepository memberRepository;
     private final ModerationActionRepository actionRepository;
     private final AdminModerationQueryRepository queryRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
@@ -51,7 +49,6 @@ public class AdminModerationService {
             MemberRepository memberRepository,
             ModerationActionRepository actionRepository,
             AdminModerationQueryRepository queryRepository,
-            RefreshTokenRepository refreshTokenRepository,
             NotificationService notificationService,
             ApplicationEventPublisher eventPublisher
     ) {
@@ -60,7 +57,6 @@ public class AdminModerationService {
                 memberRepository,
                 actionRepository,
                 queryRepository,
-                refreshTokenRepository,
                 notificationService,
                 eventPublisher,
                 Clock.system(ZoneId.of("Asia/Seoul"))
@@ -72,7 +68,6 @@ public class AdminModerationService {
             MemberRepository memberRepository,
             ModerationActionRepository actionRepository,
             AdminModerationQueryRepository queryRepository,
-            RefreshTokenRepository refreshTokenRepository,
             NotificationService notificationService,
             ApplicationEventPublisher eventPublisher,
             Clock clock
@@ -81,7 +76,6 @@ public class AdminModerationService {
         this.memberRepository = memberRepository;
         this.actionRepository = actionRepository;
         this.queryRepository = queryRepository;
-        this.refreshTokenRepository = refreshTokenRepository;
         this.notificationService = notificationService;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
@@ -376,7 +370,6 @@ public class AdminModerationService {
     }
 
     private void revokeSessions(Long memberId) {
-        refreshTokenRepository.deleteAllByMemberId(memberId);
         eventPublisher.publishEvent(ChatSessionInvalidationEvent.memberSuspended(memberId));
     }
 

@@ -9,7 +9,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import com.meetple.backend.domain.member.entity.Member;
 import com.meetple.backend.domain.member.entity.MemberRole;
 import com.meetple.backend.domain.member.repository.MemberRepository;
@@ -51,7 +50,6 @@ class AdminModerationServiceTest {
     @Mock MemberRepository memberRepository;
     @Mock ModerationActionRepository actionRepository;
     @Mock AdminModerationQueryRepository queryRepository;
-    @Mock RefreshTokenRepository refreshTokenRepository;
     @Mock NotificationService notificationService;
     @Mock ApplicationEventPublisher eventPublisher;
 
@@ -65,7 +63,6 @@ class AdminModerationServiceTest {
                 memberRepository,
                 actionRepository,
                 queryRepository,
-                refreshTokenRepository,
                 notificationService,
                 eventPublisher,
                 CLOCK
@@ -99,7 +96,6 @@ class AdminModerationServiceTest {
         assertThat(result.effectiveUntil()).isEqualTo(NOW.plusDays(3));
         assertThat(target.getSuspendedUntil()).isEqualTo(NOW.plusDays(3));
         assertThat(report.getResolutionAction()).isEqualTo(AdminModerationActionType.SUSPEND_3_DAYS);
-        verify(refreshTokenRepository).deleteAllByMemberId(2L);
         verify(eventPublisher).publishEvent(any(ChatSessionInvalidationEvent.class));
     }
 
@@ -222,7 +218,7 @@ class AdminModerationServiceTest {
         assertThat(report.getResolutionAction()).isEqualTo(AdminModerationActionType.FORCE_DELETE_MEETING);
         assertThat(host.getSuspendedUntil()).isEqualTo(NOW.plusDays(3));
         verify(queryRepository).updateMeetingDeletion(20L, NOW, 10L);
-        verify(refreshTokenRepository).deleteAllByMemberId(2L);
+        verify(eventPublisher, times(2)).publishEvent(any(ChatSessionInvalidationEvent.class));
 
         ArgumentCaptor<ModerationAction> actionCaptor = ArgumentCaptor.forClass(ModerationAction.class);
         verify(actionRepository, times(2)).saveAndFlush(actionCaptor.capture());
