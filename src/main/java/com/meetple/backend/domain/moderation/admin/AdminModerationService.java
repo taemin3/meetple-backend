@@ -122,8 +122,20 @@ public class AdminModerationService {
                 .orElseThrow(() -> new NotFoundException("신고를 찾을 수 없습니다."));
         AdminModerationActionType action = request.action();
         validateActionPhase(report, action);
+        validateAdditionalAction(report, action, request.additionalAction());
 
         LocalDateTime now = LocalDateTime.now(clock);
+        if (request.additionalAction() != null) {
+            return applyCombinedMeetingAction(
+                    administratorMemberId,
+                    report,
+                    action,
+                    request.additionalAction(),
+                    request.reason().strip(),
+                    now
+            );
+        }
+
         Long targetMemberId = null;
         Long targetMeetingId = null;
         LocalDateTime effectiveUntil = null;
@@ -160,7 +172,75 @@ public class AdminModerationService {
                 targetMemberId,
                 targetMeetingId,
                 effectiveUntil,
+                null,
+                null,
                 saved.getCreatedAt()
+        );
+    }
+
+    private ActionResult applyCombinedMeetingAction(
+            long administratorMemberId,
+            Report report,
+            AdminModerationActionType action,
+            AdminModerationActionType additionalAction,
+            String reason,
+            LocalDateTime now
+    ) {
+        Long targetMemberId = queryRepository.findTargetMemberId(report.getId())
+                .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
+        Member targetMember = memberRepository.findByIdForUpdate(targetMemberId)
+                .orElseThrow(() -> new NotFoundException(MEMBER_NOT_FOUND_MESSAGE));
+        validateModeratableMember(targetMember);
+        if (targetMember.isSuspendedAt(now)) {
+            throw new ConflictException(ACTION_CONFLICT_MESSAGE);
+        }
+
+        Long targetMeetingId = report.getTargetId();
+        AdminModerationQueryRepository.MeetingModerationState meetingState =
+                queryRepository.lockMeeting(targetMeetingId)
+                        .orElseThrow(() -> new NotFoundException("모임을 찾을 수 없습니다."));
+        if (meetingState.deletedAt() != null) {
+            throw new ConflictException(ACTION_CONFLICT_MESSAGE);
+        }
+
+        applyForceDeleteMeeting(report, targetMeetingId, now);
+        LocalDateTime effectiveUntil = applyMemberAction(
+                report,
+                additionalAction,
+                targetMember,
+                now
+        );
+        report.resolve(action, administratorMemberId, now);
+
+        ModerationAction primarySaved = actionRepository.saveAndFlush(ModerationAction.create(
+                report.getId(),
+                administratorMemberId,
+                action,
+                null,
+                targetMeetingId,
+                reason,
+                null
+        ));
+        ModerationAction additionalSaved = actionRepository.saveAndFlush(ModerationAction.create(
+                report.getId(),
+                administratorMemberId,
+                additionalAction,
+                targetMemberId,
+                null,
+                reason,
+                effectiveUntil
+        ));
+        return new ActionResult(
+                primarySaved.getId(),
+                report.getId(),
+                report.getReviewStatus(),
+                action,
+                targetMemberId,
+                targetMeetingId,
+                effectiveUntil,
+                additionalSaved.getId(),
+                additionalAction,
+                primarySaved.getCreatedAt()
         );
     }
 
@@ -251,10 +331,7 @@ public class AdminModerationService {
             if (state.deletedAt() != null) {
                 throw new ConflictException(ACTION_CONFLICT_MESSAGE);
             }
-            queryRepository.updateMeetingDeletion(meetingId, now, report.getId());
-            eventPublisher.publishEvent(ChatSessionInvalidationEvent.meetingCanceled(meetingId));
-            notifyMeetingHost(report.getId(), "모임 강제 삭제 안내",
-                    "운영 정책 위반이 확인되어 모임이 관리자에 의해 삭제되었습니다.");
+            applyForceDeleteMeeting(report, meetingId, now);
             return meetingId;
         }
         if (action == AdminModerationActionType.RESTORE_MEETING) {
@@ -270,6 +347,13 @@ public class AdminModerationService {
             return meetingId;
         }
         throw new BadRequestException("모임 대상 처리 유형이 아닙니다.");
+    }
+
+    private void applyForceDeleteMeeting(Report report, Long meetingId, LocalDateTime now) {
+        queryRepository.updateMeetingDeletion(meetingId, now, report.getId());
+        eventPublisher.publishEvent(ChatSessionInvalidationEvent.meetingCanceled(meetingId));
+        notifyMeetingHost(report.getId(), "모임 강제 삭제 안내",
+                "운영 정책 위반이 확인되어 모임이 관리자에 의해 삭제되었습니다.");
     }
 
     private void notifyMeetingHost(long reportId, String title, String message) {
@@ -302,6 +386,21 @@ public class AdminModerationService {
         }
         if (!action.isInitialResolution() && report.getReviewStatus() != ReportReviewStatus.RESOLVED) {
             throw new ConflictException(ACTION_CONFLICT_MESSAGE);
+        }
+    }
+
+    private void validateAdditionalAction(
+            Report report,
+            AdminModerationActionType action,
+            AdminModerationActionType additionalAction
+    ) {
+        if (additionalAction == null) {
+            return;
+        }
+        if (report.getTargetType() != ReportTargetType.MEETING
+                || action != AdminModerationActionType.FORCE_DELETE_MEETING
+                || !additionalAction.isSuspension()) {
+            throw new BadRequestException("모임 강제 삭제에는 모임장 정지만 추가할 수 있습니다.");
         }
     }
 

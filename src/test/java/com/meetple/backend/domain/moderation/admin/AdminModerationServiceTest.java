@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
@@ -18,6 +19,7 @@ import com.meetple.backend.domain.moderation.entity.ReportReviewStatus;
 import com.meetple.backend.domain.moderation.entity.ReportTargetType;
 import com.meetple.backend.domain.moderation.repository.ReportRepository;
 import com.meetple.backend.domain.notification.service.NotificationService;
+import com.meetple.backend.global.exception.BadRequestException;
 import com.meetple.backend.global.exception.ConflictException;
 import com.meetple.backend.global.exception.ForbiddenException;
 import com.meetple.backend.global.websocket.ChatAccessRevocationReason;
@@ -179,6 +181,76 @@ class AdminModerationServiceTest {
         assertThat(eventCaptor.getValue().target()).isEqualTo(ChatSessionInvalidationTarget.ROOM);
         assertThat(eventCaptor.getValue().roomId()).isEqualTo(20L);
         assertThat(eventCaptor.getValue().reason()).isEqualTo(ChatAccessRevocationReason.MEETING_CANCELED);
+    }
+
+    @Test
+    void forceDeleteMeetingCanSuspendHostInSameDecision() {
+        Report report = report(10L, ReportTargetType.MEETING, 20L);
+        Member host = member(2L, MemberRole.USER);
+        given(reportRepository.findByIdForUpdate(10L)).willReturn(Optional.of(report));
+        given(queryRepository.findTargetMemberId(10L)).willReturn(Optional.of(2L));
+        given(memberRepository.findByIdForUpdate(2L)).willReturn(Optional.of(host));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(host));
+        given(queryRepository.lockMeeting(20L)).willReturn(Optional.of(
+                new AdminModerationQueryRepository.MeetingModerationState(null, null)
+        ));
+        given(actionRepository.saveAndFlush(any(ModerationAction.class))).willAnswer(invocation -> {
+            ModerationAction saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id",
+                    saved.getActionType() == AdminModerationActionType.FORCE_DELETE_MEETING ? 100L : 101L);
+            ReflectionTestUtils.setField(saved, "createdAt", NOW);
+            return saved;
+        });
+
+        ActionResult result = service.applyAction(
+                1L,
+                10L,
+                new ActionRequest(
+                        AdminModerationActionType.FORCE_DELETE_MEETING,
+                        AdminModerationActionType.SUSPEND_3_DAYS,
+                        "허위 비용 안내 확인"
+                )
+        );
+
+        assertThat(result.reviewStatus()).isEqualTo(ReportReviewStatus.RESOLVED);
+        assertThat(result.action()).isEqualTo(AdminModerationActionType.FORCE_DELETE_MEETING);
+        assertThat(result.additionalAction()).isEqualTo(AdminModerationActionType.SUSPEND_3_DAYS);
+        assertThat(result.additionalActionId()).isEqualTo(101L);
+        assertThat(result.targetMeetingId()).isEqualTo(20L);
+        assertThat(result.targetMemberId()).isEqualTo(2L);
+        assertThat(result.effectiveUntil()).isEqualTo(NOW.plusDays(3));
+        assertThat(report.getResolutionAction()).isEqualTo(AdminModerationActionType.FORCE_DELETE_MEETING);
+        assertThat(host.getSuspendedUntil()).isEqualTo(NOW.plusDays(3));
+        verify(queryRepository).updateMeetingDeletion(20L, NOW, 10L);
+        verify(refreshTokenRepository).deleteAllByMemberId(2L);
+
+        ArgumentCaptor<ModerationAction> actionCaptor = ArgumentCaptor.forClass(ModerationAction.class);
+        verify(actionRepository, times(2)).saveAndFlush(actionCaptor.capture());
+        assertThat(actionCaptor.getAllValues())
+                .extracting(ModerationAction::getActionType)
+                .containsExactly(
+                        AdminModerationActionType.FORCE_DELETE_MEETING,
+                        AdminModerationActionType.SUSPEND_3_DAYS
+                );
+    }
+
+    @Test
+    void additionalSuspensionIsRejectedWithoutMeetingForceDelete() {
+        Report report = report(10L, ReportTargetType.MEMBER, 2L);
+        given(reportRepository.findByIdForUpdate(10L)).willReturn(Optional.of(report));
+
+        assertThatThrownBy(() -> service.applyAction(
+                1L,
+                10L,
+                new ActionRequest(
+                        AdminModerationActionType.WARNING,
+                        AdminModerationActionType.SUSPEND_3_DAYS,
+                        "잘못된 복합 처리"
+                )
+        )).isInstanceOf(BadRequestException.class)
+                .hasMessage("모임 강제 삭제에는 모임장 정지만 추가할 수 있습니다.");
+
+        verify(actionRepository, never()).saveAndFlush(any());
     }
 
     @Test

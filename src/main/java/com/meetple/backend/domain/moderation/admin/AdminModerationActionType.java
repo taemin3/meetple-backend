@@ -42,4 +42,8 @@ public enum AdminModerationActionType {
     public boolean targetsMeeting() {
         return this == FORCE_DELETE_MEETING || this == RESTORE_MEETING;
     }
+
+    public boolean isSuspension() {
+        return suspensionDuration != null || this == PERMANENT_SUSPENSION;
+    }
 }
