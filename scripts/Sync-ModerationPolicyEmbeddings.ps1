@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 $serviceToken = $env:AI_MODERATION_SERVICE_TOKEN
 if ([string]::IsNullOrWhiteSpace($serviceToken) -or $serviceToken.Length -lt 32) {
-    throw "AI_MODERATION_SERVICE_TOKEN 환경변수에 32자 이상의 서비스 키가 필요합니다."
+    throw "AI_MODERATION_SERVICE_TOKEN must contain at least 32 characters."
 }
 
 $uri = $AiBaseUrl.TrimEnd('/') + "/v1/moderation/policies/embeddings/sync"
@@ -26,16 +26,16 @@ for ($batch = 1; $batch -le ($MaxBatches + 1); $batch++) {
         -Body (@{ limit = $BatchSize } | ConvertTo-Json)
 
     if ([int]$response.requestedCount -eq 0) {
-        Write-Host "정책 임베딩 동기화 완료: 총 $totalEmbedded개"
+        Write-Host "Policy embedding sync completed: $totalEmbedded embedded."
         exit 0
     }
 
     $totalEmbedded += [int]$response.embeddedCount
-    Write-Host "배치 $batch 완료: $($response.embeddedCount)개 임베딩 저장"
+    Write-Host "Batch $batch completed: $($response.embeddedCount) embedded."
 
     if ($batch -gt $MaxBatches) {
         break
     }
 }
 
-throw "최대 배치 수($MaxBatches)에 도달했고 추가 작업이 확인되었습니다. 다시 실행하세요."
+throw "Reached the maximum batch count ($MaxBatches) with remaining work. Run the script again."

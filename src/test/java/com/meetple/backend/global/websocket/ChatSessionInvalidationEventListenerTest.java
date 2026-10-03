@@ -2,8 +2,11 @@ package com.meetple.backend.global.websocket;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.same;
+import static org.mockito.Mockito.verify;
 
+import com.meetple.backend.domain.auth.repository.RefreshTokenRepository;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +24,9 @@ class ChatSessionInvalidationEventListenerTest {
 
     @Mock
     private ChatSessionInvalidationRedisPublisher redisPublisher;
+
+    @Mock
+    private RefreshTokenRepository refreshTokenRepository;
 
     @InjectMocks
     private ChatSessionInvalidationEventListener listener;
@@ -46,5 +52,15 @@ class ChatSessionInvalidationEventListenerTest {
         assertThat(committedEvent.target()).isEqualTo(event.target());
         assertThat(committedEvent.reason()).isEqualTo(event.reason());
         assertThat(committedEvent.occurredAt()).isAfter(event.occurredAt());
+        verify(refreshTokenRepository, never()).deleteAllByMemberId(10L);
+    }
+
+    @Test
+    void deletesRefreshSessionsAfterSuspensionTransactionCommits() {
+        ChatSessionInvalidationEvent event = ChatSessionInvalidationEvent.memberSuspended(7L);
+
+        listener.handle(event);
+
+        verify(refreshTokenRepository).deleteAllByMemberId(7L);
     }
 }

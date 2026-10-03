@@ -56,7 +56,10 @@ public class AdminModerationController {
     }
 
     @PostMapping("/{reportId}/actions")
-    @Operation(summary = "관리자 신고 처리 승인", description = "관리자가 신고 처리, 제재, 해제 또는 복구를 승인합니다.")
+    @Operation(
+            summary = "관리자 신고 처리 승인",
+            description = "관리자가 신고 처리, 제재, 해제 또는 복구를 승인합니다. 모임 강제 삭제에는 모임장 정지를 함께 적용할 수 있습니다."
+    )
     public ResponseEntity<ApiResponse<ActionResult>> applyAction(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable long reportId,

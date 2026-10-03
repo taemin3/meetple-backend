@@ -105,8 +105,12 @@ public final class AdminModerationContracts {
 
     public record ActionRequest(
             @NotNull AdminModerationActionType action,
+            AdminModerationActionType additionalAction,
             @NotBlank @Size(max = 500) String reason
     ) {
+        public ActionRequest(AdminModerationActionType action, String reason) {
+            this(action, null, reason);
+        }
     }
 
     public record ActionResult(
@@ -117,6 +121,8 @@ public final class AdminModerationContracts {
             Long targetMemberId,
             Long targetMeetingId,
             LocalDateTime effectiveUntil,
+            Long additionalActionId,
+            AdminModerationActionType additionalAction,
             LocalDateTime createdAt
     ) {
     }
