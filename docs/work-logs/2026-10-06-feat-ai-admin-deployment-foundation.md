@@ -76,6 +76,9 @@ git diff --check: 성공
 - Container Insights 없이 task 0개 장애를 감지하도록 실행 중 task가 없을 때 누락되는 기본 ECS CPU metric을 Backend/AI/Event Runtime별로 2분간 감시한다.
 - Backend가 고객 관리형 KMS key로 암호화된 공유 AI secret을 읽을 수 있도록 조건부 `kms:Decrypt` 권한을 추가하고, Service Connect의 AI 요청 timeout을 60초로 늘렸다.
 - Terraform baseline 설정을 바꾼 뒤 활성 ECS revision을 갱신하도록 최초 배포 순서에 AI와 Backend workflow 재실행 단계를 명시했다.
+- 기존 alarm과 IAM policy를 제거하는 최초 plan에서 ECS service 직접 참조가 destroy 순환 의존성을 만들지 않도록, 모니터링 dimension과 Dashboard에는 결정적인 cluster/service 이름을 사용한다.
+- 기존 Backend service가 명시적으로 의존하던 application metric IAM policy는 비용 없는 전환 리소스로 한 번 유지하고 service 의존성을 먼저 제거한다. custom metric 발행은 비활성화된 상태이며 policy는 후속 apply에서 삭제한다.
+- 기존 task 실행 알람 주소 2개는 기본 ECS CPU metric 누락 감지에 재사용하고, CPU·memory·RDS 알람 6개는 첫 apply에서 state 의존성을 갱신하기 위한 전환 리소스로 유지한 뒤 후속 apply에서 삭제한다.
 - Admin 인증 API 응답이 CloudFront에 남지 않도록 `/api/*` behavior는 caching disabled로 고정했다.
 - AI 자동 경고는 기본 비활성화하며 AI service가 먼저 정상 기동된 뒤 별도 적용한다.
 

@@ -2,6 +2,11 @@ locals {
   monitoring_metric_namespace                    = "${title(var.project_name)}/${title(local.environment)}/Logs"
   monitoring_alarm_actions                       = [aws_sns_topic.monitoring.arn]
   rds_replication_slot_lag_alarm_threshold_bytes = var.rds_replication_slot_lag_alarm_threshold_mb * 1024 * 1024
+  monitoring_ecs_cluster_name                    = "${local.name_prefix}-cluster"
+  monitoring_backend_service_name                = "${local.name_prefix}-backend"
+  monitoring_event_runtime_service_name          = "${local.name_prefix}-event-runtime"
+  monitoring_ai_service_name                     = "${local.name_prefix}-ai"
+  monitoring_rds_instance_identifier             = "${local.name_prefix}-postgres"
 
   # Keep only signals that require prompt action in low-cost staging.
   # Standard AWS/ECS, ALB, RDS, and ASG metrics remain available in CloudWatch without Container Insights.
@@ -85,11 +90,110 @@ locals {
     }
   }
 
+  # Transition-only alarms: keep their existing state addresses for the first apply.
+  # After that apply records dependency-free dimensions, remove this map in a follow-up change.
+  monitoring_transition_alarms = {
+    backend_cpu_high = {
+      description         = "Backend ECS CPU utilization is at least 85 percent."
+      namespace           = "AWS/ECS"
+      metric_name         = "CPUUtilization"
+      statistic           = "Average"
+      comparison_operator = "GreaterThanOrEqualToThreshold"
+      threshold           = 85
+      period              = 300
+      evaluation_periods  = 2
+      datapoints_to_alarm = 2
+      treat_missing_data  = "notBreaching"
+      dimensions = {
+        ClusterName = local.monitoring_ecs_cluster_name
+        ServiceName = local.monitoring_backend_service_name
+      }
+    }
+    backend_memory_high = {
+      description         = "Backend ECS memory utilization is at least 85 percent."
+      namespace           = "AWS/ECS"
+      metric_name         = "MemoryUtilization"
+      statistic           = "Average"
+      comparison_operator = "GreaterThanOrEqualToThreshold"
+      threshold           = 85
+      period              = 300
+      evaluation_periods  = 2
+      datapoints_to_alarm = 2
+      treat_missing_data  = "notBreaching"
+      dimensions = {
+        ClusterName = local.monitoring_ecs_cluster_name
+        ServiceName = local.monitoring_backend_service_name
+      }
+    }
+    event_runtime_cpu_high = {
+      description         = "Event runtime ECS CPU utilization is at least 85 percent."
+      namespace           = "AWS/ECS"
+      metric_name         = "CPUUtilization"
+      statistic           = "Average"
+      comparison_operator = "GreaterThanOrEqualToThreshold"
+      threshold           = 85
+      period              = 300
+      evaluation_periods  = 2
+      datapoints_to_alarm = 2
+      treat_missing_data  = "notBreaching"
+      dimensions = {
+        ClusterName = local.monitoring_ecs_cluster_name
+        ServiceName = local.monitoring_event_runtime_service_name
+      }
+    }
+    event_runtime_memory_high = {
+      description         = "Event runtime ECS memory utilization is at least 85 percent."
+      namespace           = "AWS/ECS"
+      metric_name         = "MemoryUtilization"
+      statistic           = "Average"
+      comparison_operator = "GreaterThanOrEqualToThreshold"
+      threshold           = 85
+      period              = 300
+      evaluation_periods  = 2
+      datapoints_to_alarm = 2
+      treat_missing_data  = "notBreaching"
+      dimensions = {
+        ClusterName = local.monitoring_ecs_cluster_name
+        ServiceName = local.monitoring_event_runtime_service_name
+      }
+    }
+    rds_cpu_high = {
+      description         = "RDS CPU utilization is at least 80 percent."
+      namespace           = "AWS/RDS"
+      metric_name         = "CPUUtilization"
+      statistic           = "Average"
+      comparison_operator = "GreaterThanOrEqualToThreshold"
+      threshold           = 80
+      period              = 300
+      evaluation_periods  = 2
+      datapoints_to_alarm = 2
+      treat_missing_data  = "notBreaching"
+      dimensions = {
+        DBInstanceIdentifier = local.monitoring_rds_instance_identifier
+      }
+    }
+    rds_freeable_memory_low = {
+      description         = "RDS freeable memory is below the previous 64 MiB staging threshold."
+      namespace           = "AWS/RDS"
+      metric_name         = "FreeableMemory"
+      statistic           = "Minimum"
+      comparison_operator = "LessThanThreshold"
+      threshold           = 67108864
+      period              = 300
+      evaluation_periods  = 2
+      datapoints_to_alarm = 2
+      treat_missing_data  = "notBreaching"
+      dimensions = {
+        DBInstanceIdentifier = local.monitoring_rds_instance_identifier
+      }
+    }
+  }
+
   # ECS publishes service CPU metrics only while at least one task is RUNNING.
   # Missing CPU samples therefore provide a low-cost task-presence signal without Container Insights.
   monitoring_ecs_task_presence_alarms = merge(
     {
-      event_runtime_tasks_missing = {
+      event_runtime_running_tasks = {
         description         = "Event Runtime has reported no running-task CPU samples for two minutes."
         namespace           = "AWS/ECS"
         metric_name         = "CPUUtilization"
@@ -101,13 +205,13 @@ locals {
         datapoints_to_alarm = 2
         treat_missing_data  = "breaching"
         dimensions = {
-          ClusterName = aws_ecs_cluster.this.name
-          ServiceName = aws_ecs_service.event_runtime.name
+          ClusterName = local.monitoring_ecs_cluster_name
+          ServiceName = local.monitoring_event_runtime_service_name
         }
       }
     },
     var.backend_desired_count > 0 ? {
-      backend_tasks_missing = {
+      backend_running_tasks = {
         description         = "Backend has reported no running-task CPU samples for two minutes."
         namespace           = "AWS/ECS"
         metric_name         = "CPUUtilization"
@@ -119,8 +223,8 @@ locals {
         datapoints_to_alarm = 2
         treat_missing_data  = "breaching"
         dimensions = {
-          ClusterName = aws_ecs_cluster.this.name
-          ServiceName = aws_ecs_service.backend.name
+          ClusterName = local.monitoring_ecs_cluster_name
+          ServiceName = local.monitoring_backend_service_name
         }
       }
     } : {},
@@ -137,8 +241,8 @@ locals {
         datapoints_to_alarm = 2
         treat_missing_data  = "breaching"
         dimensions = {
-          ClusterName = aws_ecs_cluster.this.name
-          ServiceName = aws_ecs_service.ai.name
+          ClusterName = local.monitoring_ecs_cluster_name
+          ServiceName = local.monitoring_ai_service_name
         }
       }
     } : {},
@@ -192,7 +296,11 @@ resource "aws_sns_topic_subscription" "monitoring_email" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "infrastructure" {
-  for_each = merge(local.monitoring_infrastructure_alarms, local.monitoring_ecs_task_presence_alarms)
+  for_each = merge(
+    local.monitoring_infrastructure_alarms,
+    local.monitoring_transition_alarms,
+    local.monitoring_ecs_task_presence_alarms,
+  )
 
   alarm_name                = "${local.name_prefix}-${replace(each.key, "_", "-")}"
   alarm_description         = each.value.description
@@ -271,11 +379,11 @@ resource "aws_cloudwatch_dashboard" "staging" {
           stat   = "Average"
           yAxis  = { left = { min = 0, max = 100 } }
           metrics = [
-            ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", aws_ecs_service.backend.name, { label = "Backend CPU" }],
+            ["AWS/ECS", "CPUUtilization", "ClusterName", local.monitoring_ecs_cluster_name, "ServiceName", local.monitoring_backend_service_name, { label = "Backend CPU" }],
             [".", "MemoryUtilization", ".", ".", ".", ".", { label = "Backend memory" }],
-            ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", aws_ecs_service.event_runtime.name, { label = "Event runtime CPU" }],
+            ["AWS/ECS", "CPUUtilization", "ClusterName", local.monitoring_ecs_cluster_name, "ServiceName", local.monitoring_event_runtime_service_name, { label = "Event runtime CPU" }],
             [".", "MemoryUtilization", ".", ".", ".", ".", { label = "Event runtime memory" }],
-            ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", aws_ecs_service.ai.name, { label = "AI CPU" }],
+            ["AWS/ECS", "CPUUtilization", "ClusterName", local.monitoring_ecs_cluster_name, "ServiceName", local.monitoring_ai_service_name, { label = "AI CPU" }],
             [".", "MemoryUtilization", ".", ".", ".", ".", { label = "AI memory" }],
           ]
         }
