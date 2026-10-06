@@ -73,6 +73,15 @@ resource "aws_vpc_security_group_ingress_rule" "ecs_instances_from_alb" {
   ip_protocol                  = "tcp"
 }
 
+resource "aws_vpc_security_group_ingress_rule" "ecs_instances_service_connect" {
+  security_group_id            = aws_security_group.ecs_instances.id
+  description                  = "Service Connect traffic between bridge-mode ECS tasks"
+  referenced_security_group_id = aws_security_group.ecs_instances.id
+  from_port                    = 32768
+  to_port                      = 65535
+  ip_protocol                  = "tcp"
+}
+
 resource "aws_security_group" "rds" {
   name_prefix = "${local.name_prefix}-rds-"
   description = "PostgreSQL access from ECS application tasks only"

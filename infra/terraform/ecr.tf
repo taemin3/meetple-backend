@@ -31,3 +31,37 @@ resource "aws_ecr_lifecycle_policy" "backend" {
     ]
   })
 }
+
+resource "aws_ecr_repository" "ai" {
+  name                 = "${local.name_prefix}-ai"
+  image_tag_mutability = "IMMUTABLE"
+
+  encryption_configuration {
+    encryption_type = "AES256"
+  }
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+resource "aws_ecr_lifecycle_policy" "ai" {
+  repository = aws_ecr_repository.ai.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep the latest 20 AI release images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 20
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}

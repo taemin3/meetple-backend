@@ -60,6 +60,17 @@ data "aws_iam_policy_document" "backend_execution_secrets" {
   }
 
   dynamic "statement" {
+    for_each = var.ai_integration_enabled && var.ai_application_secret_arn != null ? [1] : []
+
+    content {
+      sid       = "ReadSharedAiServiceToken"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [var.ai_application_secret_arn]
+    }
+  }
+
+  dynamic "statement" {
     for_each = length(var.backend_secret_kms_key_arns) == 0 ? [] : [1]
 
     content {
@@ -161,6 +172,7 @@ resource "aws_ecs_task_definition" "backend" {
       containerPort = 8080
       hostPort      = 0
       protocol      = "tcp"
+      appProtocol   = "http"
     }]
     environment = [
       { name = "SPRING_PROFILES_ACTIVE", value = "prod" },
@@ -189,6 +201,13 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "MAIL_SMTP_AUTH", value = "true" },
       { name = "MAIL_STARTTLS_ENABLED", value = "true" },
       { name = "MAIL_STARTTLS_REQUIRED", value = "true" },
+      { name = "AI_SEARCH_ENABLED", value = tostring(var.ai_integration_enabled) },
+      { name = "AI_SEARCH_BASE_URL", value = "http://ai:8001" },
+      { name = "AI_SEARCH_TIMEOUT", value = "45s" },
+      { name = "AI_MODERATION_ENABLED", value = tostring(var.ai_integration_enabled) },
+      { name = "MODERATION_AUTO_WARNING_ENABLED", value = tostring(var.moderation_auto_warning_enabled) },
+      { name = "MODERATION_AUTO_WARNING_MIN_CONFIDENCE", value = "0.95" },
+      { name = "MODERATION_AUTO_WARNING_ALLOWED_REPORT_TYPES", value = "SPAM" },
     ]
     secrets = concat(
       [for secret_name in local.backend_application_secret_keys : {
@@ -208,7 +227,21 @@ resource "aws_ecs_task_definition" "backend" {
           name      = "FIREBASE_CREDENTIALS_JSON"
           valueFrom = data.aws_secretsmanager_secret.firebase_credentials.arn
         },
-      ]
+      ],
+      var.ai_integration_enabled && var.ai_application_secret_arn != null ? [
+        {
+          name      = "AI_SEARCH_SERVICE_TOKEN"
+          valueFrom = "${var.ai_application_secret_arn}:AI_SERVICE_TOKEN::"
+        },
+        {
+          name      = "AI_MODERATION_SERVICE_TOKEN"
+          valueFrom = "${var.ai_application_secret_arn}:AI_SERVICE_TOKEN::"
+        },
+        {
+          name      = "AI_SEARCH_CAPABILITY_SECRET"
+          valueFrom = "${data.aws_secretsmanager_secret.backend_application.arn}:AI_SEARCH_CAPABILITY_SECRET::"
+        },
+      ] : []
     )
     healthCheck = {
       command     = ["CMD-SHELL", "curl --fail --silent http://localhost:8080/livez >/dev/null"]
@@ -251,6 +284,21 @@ resource "aws_ecs_service" "backend" {
     container_port   = 8080
   }
 
+  service_connect_configuration {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.this.arn
+
+    service {
+      port_name      = "http"
+      discovery_name = "backend"
+
+      client_alias {
+        dns_name = "backend"
+        port     = 8080
+      }
+    }
+  }
+
   deployment_circuit_breaker {
     enable   = true
     rollback = true
@@ -272,6 +320,11 @@ resource "aws_ecs_service" "backend" {
     precondition {
       condition     = var.backend_desired_count == 0 || var.ecs_desired_capacity >= 1
       error_message = "Running the backend requires at least one ECS container instance."
+    }
+
+    precondition {
+      condition     = !var.ai_integration_enabled || var.ai_application_secret_arn != null
+      error_message = "ai_integration_enabled requires ai_application_secret_arn."
     }
   }
 

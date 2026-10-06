@@ -1,6 +1,6 @@
 # AWS ECS EC2 + RDS 애플리케이션 배포
 
-Meetple 백엔드와 `Outbox -> Debezium -> Kafka -> Consumer` 파이프라인을 AWS에 배포하는 Terraform 구성입니다. 기본값은 비용을 낮춘 `staging` 환경이며, 실제 AWS 변경은 `terraform plan` 검토 후 별도 `apply`로 수행합니다.
+Meetple 백엔드, AI 신고 분석 서비스, Admin SPA와 `Outbox -> Debezium -> Kafka -> Consumer` 파이프라인을 AWS에 배포하는 Terraform 구성입니다. 기본값은 비용을 낮춘 `staging` 환경이며, 실제 AWS 변경은 `terraform plan` 검토 후 별도 `apply`로 수행합니다.
 
 ## 생성 대상
 
@@ -8,6 +8,8 @@ Meetple 백엔드와 `Outbox -> Debezium -> Kafka -> Consumer` 파이프라인�
 - ALB와 `/readyz` target group
 - ECS EC2 cluster, Auto Scaling Group, Capacity Provider
 - Spring Boot ECS task/service와 ECR repository
+- FastAPI AI ECS task/service, 별도 ECR repository와 ECS Service Connect private endpoint
+- Admin SPA용 private S3 bucket, CloudFront OAC와 `/api/*` HTTPS origin
 - PostgreSQL 16 RDS와 RDS 관리형 master secret
 - 단일 ECS task의 Redis, Kafka, Kafka Connect/Debezium, connector manager
 - application/retry/DLQ Kafka topic과 Outbox connector 자동 등록
@@ -17,7 +19,7 @@ Meetple 백엔드와 `Outbox -> Debezium -> Kafka -> Consumer` 파이프라인�
 
 Terraform이 만들지 않는 항목:
 
-- 애플리케이션/Firebase secret 값
+- 애플리케이션/Firebase/AI secret 값
 - ECR image build와 push
 - Route 53 record와 ACM certificate 발급
 - GitHub Environment와 repository variable
@@ -26,7 +28,7 @@ Terraform이 만들지 않는 항목:
 ## 배치 구조
 
 ```text
-Flutter/Web
+Flutter
     |
     v
 ALB (public subnet x 2, /readyz)
@@ -37,7 +39,18 @@ Spring Boot ECS service (EC2 bridge mode, dynamic host port)
     |-- Redis/Kafka ---------------> event-runtime.<environment>.internal
     |-- presigned PUT/Delete ------> private S3 image bucket
     |-- image read URL ------------> CloudFront -> S3 (OAC)
+    |-- Service Connect -----------> AI FastAPI ECS service (private, ai:8001)
     `-- FCM/Naver/SMTP ------------> Internet
+
+AI FastAPI ECS service (EC2 bridge mode, public endpoint 없음)
+    |-- Service Connect -----------> Spring Boot (private, backend:8080)
+    |-- Kafka ---------------------> event-runtime.<environment>.internal:9092
+    `-- OpenAI API ----------------> Internet
+
+Admin browser
+    `-- CloudFront
+        |-- /* --------------------> private S3 admin bucket (OAC)
+        `-- /api/* ----------------> HTTPS backend API origin (no cache)
 
 event-runtime ECS task (awsvpc, public inbound 없음)
     |-- Redis
@@ -47,13 +60,13 @@ event-runtime ECS task (awsvpc, public inbound 없음)
     `-- connector manager ----------> RDS logical replication
 ```
 
-NAT Gateway 고정 비용을 피하기 위해 ECS EC2는 public subnet에 배치됩니다. EC2에는 public IPv4가 생기지만 SSH는 열지 않고 SSM으로만 접근합니다. Spring Boot는 `bridge` mode와 동적 host port를 사용하며 외부 inbound는 ALB security group에서만 허용합니다. Redis와 Kafka는 Cloud Map private DNS와 security-group 참조로만 접근합니다.
+NAT Gateway 고정 비용을 피하기 위해 ECS EC2는 public subnet에 배치됩니다. EC2에는 public IPv4가 생기지만 SSH는 열지 않고 SSM으로만 접근합니다. Spring Boot와 AI는 `bridge` mode와 동적 host port를 사용합니다. Spring Boot의 외부 inbound는 ALB security group에서만 허용하고, 두 서비스 간 호출은 기존 private namespace의 ECS Service Connect 이름 `backend:8080`, `ai:8001`을 사용합니다. AI에는 public load balancer를 연결하지 않습니다. Redis와 Kafka는 Cloud Map private DNS와 security-group 참조로만 접근합니다.
 
 기본 `t3.large` 한 대에 Spring Boot, Kafka, Kafka Connect, Redis를 함께 두는 구성이라 저비용 staging 절충안입니다. Kafka/Redis volume은 같은 EC2에서 task가 재시작될 때는 남지만 EC2 교체나 장애 시 유실될 수 있습니다. Kafka가 단일 broker이므로 고가용성 production 구성은 아닙니다.
 
 ## secret 준비
 
-Terraform에는 secret 값이 아니라 기존 Secrets Manager ARN 두 개만 전달합니다. `terraform.tfvars`나 Terraform state에 비밀번호와 API key를 넣지 않습니다.
+Terraform에는 secret 값이 아니라 기존 Secrets Manager ARN만 전달합니다. `terraform.tfvars`나 Terraform state에 비밀번호와 API key를 넣지 않습니다.
 
 `backend_application_secret_arn`은 다음 key를 가진 JSON secret이어야 합니다.
 
@@ -70,6 +83,19 @@ Terraform에는 secret 값이 아니라 기존 Secrets Manager ARN 두 개만 �
   "NAVER_MAPS_CLIENT_SECRET": "replace-me"
 }
 ```
+
+AI 검색을 활성화할 때 위 backend application secret에 `AI_SEARCH_CAPABILITY_SECRET` key도 추가합니다. 이 값은 브라우저에 노출하지 않으며 Spring Boot가 AI 검색 요청에 capability token을 만들 때만 사용합니다.
+
+`ai_application_secret_arn`은 다음 key를 가진 별도 JSON secret이어야 합니다. 같은 `AI_SERVICE_TOKEN`을 AI와 Spring Boot 양쪽에 주입하므로 양방향 내부 API 인증 값이 일치합니다.
+
+```json
+{
+  "AI_SERVICE_TOKEN": "replace-with-at-least-32-random-bytes",
+  "AI_OPENAI_API_KEY": "replace-me"
+}
+```
+
+AI secret이 고객 관리형 KMS key를 사용한다면 `ai_secret_kms_key_arns`에 key ARN을 추가합니다. secret의 `AWSCURRENT`가 변경되면 EventBridge가 AI와 Spring Boot service를 모두 강제 재배포해 새 값을 읽게 합니다.
 
 `firebase_credentials_secret_arn`은 key로 감싼 JSON이 아니라 Firebase service-account JSON 문서 전체를 secret value로 저장합니다. ECS는 이를 `FIREBASE_CREDENTIALS_JSON`으로 주입하고 애플리케이션은 파일을 만들지 않고 메모리에서 읽습니다. 로컬의 기존 `GOOGLE_APPLICATION_CREDENTIALS` 파일 방식도 그대로 사용할 수 있습니다.
 
@@ -104,14 +130,16 @@ terraform plan -out=meetple-staging.tfplan
 
 ## 최초 배포 순서
 
-ECR repository, GitHub 배포 role, 실제 image가 동시에 처음 생기므로 다음 순서를 지킵니다. `backend_desired_count`를 올리기 전에 GitHub Actions가 실제 image revision을 ECS service에 활성화해야 합니다.
+ECR repository, GitHub 배포 role, 실제 image가 동시에 처음 생기므로 서비스별로 `bootstrap -> image 배포 -> desired_count 증가` 순서를 지킵니다. placeholder image가 없는 상태에서 task를 먼저 시작하지 않습니다.
 
-1. `terraform.tfvars`에 실제 secret ARN과 `github_actions_deploy_enabled=true`를 넣고 `backend_image_tag="bootstrap"`, `backend_desired_count=0`으로 plan/apply합니다.
-2. Terraform output의 배포 role ARN을 GitHub `staging` Environment에 등록합니다.
-3. `Actions -> Deploy staging backend -> Run workflow`를 수동 실행합니다. workflow가 commit SHA image를 ECR에 push하고, desired count가 0인 ECS service에 실제 task definition revision을 활성화합니다.
-4. workflow가 성공한 뒤 `backend_desired_count=1`로 올려 다시 plan/apply합니다. Terraform은 활성 task definition revision을 변경하지 않으므로 ECS가 앞 단계의 실제 image로 기동됩니다.
+1. `terraform.tfvars`에 실제 secret ARN을 넣고 backend/AI image tag는 `bootstrap`, 두 `desired_count`는 `0`, `ai_integration_enabled=false`로 둡니다. Admin까지 준비한다면 `admin_hosting_enabled=true`, `admin_api_origin_domain_name`도 설정합니다.
+2. 필요한 `github_actions_*_deploy_enabled=true`를 켜 plan/apply하고 Terraform output의 배포 role ARN 및 배포 대상을 각 GitHub `staging` Environment에 등록합니다.
+3. backend와 AI의 staging workflow를 각각 한 번 수동 실행해 commit SHA image와 실제 task definition revision을 활성화합니다. Admin workflow는 build 결과를 S3에 동기화하고 CloudFront를 무효화합니다.
+4. backend/AI workflow가 성공하면 `backend_desired_count=1`, `ai_desired_count=1`, 실제 `ai_openai_model`을 적용합니다. 두 서비스의 health와 AI Kafka consumer를 확인한 뒤 마지막으로 `ai_integration_enabled=true`를 적용합니다.
 
-두 번째 apply가 끝나면 다음을 확인합니다.
+`moderation_auto_warning_enabled`는 AI 연동 확인과 관리자 검토 흐름 검증 후 별도로 켭니다. AI 분석 전체를 자동 제재하는 옵션이 아니라 현재 백엔드의 제한된 경고 규칙만 활성화합니다.
+
+서비스 기동 apply가 끝나면 다음을 확인합니다.
 
 ```powershell
 $Alb = terraform output -raw alb_dns_name
@@ -121,9 +149,13 @@ curl.exe "http://$Alb/readyz"
 
 HTTPS certificate를 연결했다면 `https://`로 확인합니다. `/livez`는 프로세스 생존 여부, `/readyz`는 DB와 Redis까지 요청을 받을 준비가 됐는지를 확인합니다. ECS container health check는 `/livez`, ALB target health check는 `/readyz`를 사용합니다.
 
+AI는 public endpoint가 없으므로 ECS task 상태, `/ecs/<prefix>/ai` 로그와 Service Connect discovery를 확인합니다. Admin은 `admin_cloudfront_domain_name` output으로 접속하고 새로고침 시 SPA rewrite, 로그인 API가 `/api/*` origin으로 전달되는지 확인합니다.
+
 ## GitHub Actions staging 배포
 
 `.github/workflows/deploy-staging.yml`은 PR에서 테스트를 실행하고, 승인된 staging workflow가 다음 순서로 Spring Boot를 배포합니다.
+
+이 단계에서는 AI/Admin이 사용할 AWS 리소스와 least-privilege OIDC role까지만 준비합니다. `meetple-ai`, `meetple-admin` repository의 실제 배포 workflow는 각 repository에서 별도 PR로 추가합니다.
 
 1. Java 21로 Gradle test 실행
 2. GitHub OIDC로 단기 AWS 자격 증명 발급
@@ -141,6 +173,11 @@ staging의 로컬 `terraform.tfvars`에 다음 값을 추가합니다.
 ```hcl
 github_actions_deploy_enabled = true
 github_actions_repository     = "taemin3/meetple-backend"
+github_actions_ai_deploy_enabled    = true
+github_actions_ai_repository        = "taemin3/meetple-ai"
+admin_hosting_enabled               = true
+github_actions_admin_deploy_enabled = true
+github_actions_admin_repository     = "taemin3/meetple-admin"
 ```
 
 AWS 계정에 `token.actions.githubusercontent.com` OIDC provider가 이미 다른 Terraform state로 관리되고 있다면 중복 생성하지 않고 해당 ARN을 전달합니다.
@@ -155,17 +192,21 @@ github_actions_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/toke
 terraform plan -out=meetple-staging-github-oidc.tfplan
 terraform apply meetple-staging-github-oidc.tfplan
 terraform output -raw github_actions_deploy_role_arn
+terraform output -raw github_actions_ai_deploy_role_arn
+terraform output -raw github_actions_admin_deploy_role_arn
 ```
 
 OIDC trust는 `staging` GitHub Environment로 한정됩니다. OIDC provider는 AWS 계정 전체에서 하나만 생성해야 하므로 다른 workspace나 Terraform state에서 재사용할 때는 output ARN을 `github_actions_oidc_provider_arn`에 전달합니다.
 
 ### 2. GitHub 설정
 
-GitHub repository의 `Settings -> Environments`에서 `staging` Environment를 만들고 deployment branch를 `main`으로 제한합니다. 해당 Environment variable을 추가합니다.
+각 GitHub repository의 `Settings -> Environments`에서 `staging` Environment를 만들고 deployment branch를 `main`으로 제한합니다. repository별 role ARN을 같은 이름의 Environment variable로 추가합니다.
 
 ```text
 AWS_DEPLOY_ROLE_ARN=<terraform output github_actions_deploy_role_arn>
 ```
+
+AI repository에는 `github_actions_ai_deploy_role_arn`, Admin repository에는 `github_actions_admin_deploy_role_arn` 값을 사용합니다. AI에는 ECS cluster/service/task family/ECR output을, Admin에는 bucket/distribution output을 다음 repository 작업의 배포 workflow 변수로 연결합니다.
 
 최초 배포 순서의 수동 workflow와 `backend_desired_count=1` 적용을 완료한 뒤 health endpoint를 확인합니다. 검증이 끝나면 repository variable을 추가해 이후 `main` 애플리케이션 변경을 자동 배포합니다.
 
@@ -173,7 +214,7 @@ AWS_DEPLOY_ROLE_ARN=<terraform output github_actions_deploy_role_arn>
 AUTO_DEPLOY_ENABLED=true
 ```
 
-배포 role에는 backend ECR push, backend ECS service update, task definition register, backend task role의 `iam:PassRole`만 허용합니다. 장기 AWS access key를 GitHub Secret에 저장하지 않습니다. 동일 commit을 재실행하면 immutable ECR tag가 이미 있는지 확인하고 기존 image를 재사용합니다.
+배포 role은 repository별로 분리됩니다. Backend/AI role은 자신의 ECR push, ECS service update, task definition register, 자신의 task role `iam:PassRole`만 허용합니다. Admin role은 자신의 S3 object 동기화와 CloudFront invalidation만 허용합니다. 장기 AWS access key를 GitHub Secret에 저장하지 않습니다. 동일 commit을 재실행하면 immutable ECR tag를 재사용하도록 각 workflow를 구성합니다.
 
 ### 3. 배포 실패와 rollback
 
@@ -193,7 +234,13 @@ staging 기본 listener concurrency는 각 consumer당 `1`입니다. 같은 task
 
 RDS parameter group은 logical replication과 replication slot/WAL 상한을 설정합니다. RDS가 먼저 생기고 Flyway가 `outbox_events`를 만들기 전에는 connector가 실패할 수 있지만 connector manager가 30초마다 idempotent `PUT`으로 복구를 시도합니다. connector와 source task가 모두 `RUNNING`인지 ECS log와 Kafka Connect 상태로 확인합니다.
 
-RDS master secret의 `AWSCURRENT`가 바뀌면 event runtime과 backend service를 각각 강제 재배포합니다. application 또는 Firebase secret의 현재 버전이 바뀌면 backend만 재배포합니다. staging에서 secret을 한 번 회전해 EventBridge -> Systems Manager Automation -> ECS deployment 순서를 검증해야 합니다.
+RDS master secret의 `AWSCURRENT`가 바뀌면 event runtime과 backend service를 각각 강제 재배포합니다. application 또는 Firebase secret의 현재 버전이 바뀌면 backend만, AI secret이 바뀌면 AI와 backend를 재배포합니다. staging에서 secret을 한 번 회전해 EventBridge -> Systems Manager Automation -> ECS deployment 순서를 검증해야 합니다.
+
+## Admin 정적 호스팅
+
+Admin build 결과는 public website bucket이 아니라 public access를 차단한 S3 bucket에 저장하며 CloudFront OAC만 읽을 수 있습니다. 확장자가 없는 경로는 CloudFront Function이 `/index.html`로 rewrite해 React Router 새로고침을 처리합니다. `/api/*`는 `admin_api_origin_domain_name`의 HTTPS origin으로 전달하고 AWS managed `CachingDisabled`, `AllViewerExceptHostHeader` policy를 사용해 인증 응답을 캐시하지 않으면서 `Authorization`, cookie, query string을 전달합니다.
+
+custom admin domain을 쓰면 `admin_domain_names`와 **us-east-1**에서 발급한 `admin_certificate_arn`을 함께 설정합니다. Route 53 record와 certificate 발급/검증은 이 구성에서 만들지 않습니다. Admin frontend에는 AWS credential이나 AI/OpenAI secret을 넣지 않습니다.
 
 ## 이미지 저장소
 
@@ -224,13 +271,13 @@ image_upload_allowed_origins = ["https://app.example.com"]
 `monitoring.tf`는 별도 모니터링 서버 없이 기존 ECS Container Insights와 CloudWatch Logs를 사용해 다음 항목을 구성합니다.
 
 - `meetple-<environment>-operations` Dashboard
-- ECS backend/event-runtime의 CPU, memory, 실행 task 수
+- ECS backend/AI/event-runtime의 CPU, memory, 실행 task 수
 - ECS Auto Scaling Group의 실행 중 EC2 instance 수
 - ALB unhealthy target, target HTTP 5xx, p95 응답 시간
 - RDS CPU, connection, freeable memory, free storage
 - PostgreSQL oldest logical replication slot lag, transaction log disk usage
 - 별도로 설정한 안전 기준에 도달한 replication slot 사전 경고
-- Backend `ERROR`, Kafka consumer `moved to DLQ`, Debezium connector failed-task 로그 지표와 알람
+- Backend/AI `ERROR`, AI moderation consumer restart, Kafka consumer `moved to DLQ`, Debezium connector failed-task 로그 지표와 알람
 - ALARM과 복구(OK)를 전달하는 SNS topic
 
 이메일 알림이 필요하면 로컬 `terraform.tfvars`에 주소를 추가합니다. 주소는 Git에 커밋하지 않습니다.

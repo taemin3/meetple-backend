@@ -70,6 +70,38 @@ locals {
         ServiceName = aws_ecs_service.backend.name
       }
     }
+    ai_cpu_high = {
+      description         = "AI ECS CPU utilization is at least 85 percent."
+      namespace           = "AWS/ECS"
+      metric_name         = "CPUUtilization"
+      statistic           = "Average"
+      comparison_operator = "GreaterThanOrEqualToThreshold"
+      threshold           = 85
+      period              = 300
+      evaluation_periods  = 2
+      datapoints_to_alarm = 2
+      treat_missing_data  = "notBreaching"
+      dimensions = {
+        ClusterName = aws_ecs_cluster.this.name
+        ServiceName = aws_ecs_service.ai.name
+      }
+    }
+    ai_memory_high = {
+      description         = "AI ECS memory utilization is at least 85 percent."
+      namespace           = "AWS/ECS"
+      metric_name         = "MemoryUtilization"
+      statistic           = "Average"
+      comparison_operator = "GreaterThanOrEqualToThreshold"
+      threshold           = 85
+      period              = 300
+      evaluation_periods  = 2
+      datapoints_to_alarm = 2
+      treat_missing_data  = "notBreaching"
+      dimensions = {
+        ClusterName = aws_ecs_cluster.this.name
+        ServiceName = aws_ecs_service.ai.name
+      }
+    }
     event_runtime_cpu_high = {
       description         = "Event runtime ECS CPU utilization is at least 85 percent."
       namespace           = "AWS/ECS"
@@ -225,6 +257,18 @@ locals {
       metric_name    = "ConsumerDlqCount"
       pattern        = "\"moved to DLQ\""
     }
+    ai_error = {
+      description    = "AI service ERROR log detected."
+      log_group_name = aws_cloudwatch_log_group.ai.name
+      metric_name    = "AiErrorCount"
+      pattern        = "\"ERROR\""
+    }
+    ai_moderation_consumer_restart = {
+      description    = "AI moderation Kafka consumer restarted after an error."
+      log_group_name = aws_cloudwatch_log_group.ai.name
+      metric_name    = "AiModerationConsumerRestartCount"
+      pattern        = "\"moderation_consumer_restart\""
+    }
     debezium_failed = {
       description    = "The Debezium connector manager detected a failed connector task."
       log_group_name = aws_cloudwatch_log_group.event_runtime.name
@@ -278,6 +322,31 @@ resource "aws_cloudwatch_metric_alarm" "infrastructure" {
   datapoints_to_alarm = each.value.datapoints_to_alarm
   treat_missing_data  = each.value.treat_missing_data
   dimensions          = each.value.dimensions
+}
+
+resource "aws_cloudwatch_metric_alarm" "ai_running_tasks" {
+  count = var.ai_desired_count > 0 ? 1 : 0
+
+  alarm_name                = "${local.name_prefix}-ai-running-tasks"
+  alarm_description         = "AI ECS service has no running task."
+  actions_enabled           = var.monitoring_alarm_actions_enabled
+  alarm_actions             = local.monitoring_alarm_actions
+  ok_actions                = local.monitoring_alarm_actions
+  insufficient_data_actions = []
+
+  namespace           = "ECS/ContainerInsights"
+  metric_name         = "RunningTaskCount"
+  statistic           = "Minimum"
+  comparison_operator = "LessThanThreshold"
+  threshold           = 1
+  period              = 60
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  treat_missing_data  = "breaching"
+  dimensions = {
+    ClusterName = aws_ecs_cluster.this.name
+    ServiceName = aws_ecs_service.ai.name
+  }
 }
 
 resource "aws_cloudwatch_log_metric_filter" "monitoring" {
@@ -342,6 +411,8 @@ resource "aws_cloudwatch_dashboard" "staging" {
             [".", "MemoryUtilization", ".", ".", ".", ".", { label = "Backend memory" }],
             ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", aws_ecs_service.event_runtime.name, { label = "Event runtime CPU" }],
             [".", "MemoryUtilization", ".", ".", ".", ".", { label = "Event runtime memory" }],
+            ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", aws_ecs_service.ai.name, { label = "AI CPU" }],
+            [".", "MemoryUtilization", ".", ".", ".", ".", { label = "AI memory" }],
           ]
         }
       },
@@ -360,6 +431,7 @@ resource "aws_cloudwatch_dashboard" "staging" {
           metrics = [
             ["ECS/ContainerInsights", "RunningTaskCount", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", aws_ecs_service.backend.name, { label = "Backend running tasks" }],
             [".", ".", ".", ".", ".", aws_ecs_service.event_runtime.name, { label = "Event runtime running tasks" }],
+            [".", ".", ".", ".", ".", aws_ecs_service.ai.name, { label = "AI running tasks" }],
             ["AWS/AutoScaling", "GroupInServiceInstances", "AutoScalingGroupName", aws_autoscaling_group.ecs.name, { label = "In-service EC2 instances" }],
           ]
         }
@@ -444,6 +516,8 @@ resource "aws_cloudwatch_dashboard" "staging" {
           metrics = [
             [local.monitoring_metric_namespace, "BackendErrorCount", { label = "Backend ERROR" }],
             [".", "ConsumerDlqCount", { label = "Consumer DLQ" }],
+            [".", "AiErrorCount", { label = "AI ERROR" }],
+            [".", "AiModerationConsumerRestartCount", { label = "AI moderation consumer restart" }],
             [".", "DebeziumFailedCount", { label = "Debezium failed" }],
             [".", "DebeziumRestartingCount", { label = "Debezium restarting" }],
             [".", "DebeziumInvalidSlotCount", { label = "Debezium invalid slot" }],
