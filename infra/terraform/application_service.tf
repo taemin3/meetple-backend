@@ -18,7 +18,6 @@ locals {
   }
   # Retained for one transition apply so Terraform can remove the ECS service's
   # previous explicit dependency before this no-cost IAM policy is deleted later.
-  backend_application_metric_namespace = "${title(var.project_name)}/${title(local.environment)}/Application"
 }
 
 data "aws_secretsmanager_secret" "backend_application" {
@@ -150,27 +149,6 @@ resource "aws_iam_role_policy" "backend_images" {
   name   = "image-storage"
   role   = aws_iam_role.backend_task.id
   policy = data.aws_iam_policy_document.backend_images.json
-}
-
-data "aws_iam_policy_document" "backend_application_metrics" {
-  statement {
-    sid       = "PublishApplicationMetrics"
-    effect    = "Allow"
-    actions   = ["cloudwatch:PutMetricData"]
-    resources = ["*"]
-
-    condition {
-      test     = "StringEquals"
-      variable = "cloudwatch:namespace"
-      values   = [local.backend_application_metric_namespace]
-    }
-  }
-}
-
-resource "aws_iam_role_policy" "backend_application_metrics" {
-  name   = "application-metrics"
-  role   = aws_iam_role.backend_task.id
-  policy = data.aws_iam_policy_document.backend_application_metrics.json
 }
 
 resource "aws_ecs_task_definition" "backend" {
