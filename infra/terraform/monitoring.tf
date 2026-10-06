@@ -6,7 +6,6 @@ locals {
   monitoring_backend_service_name                = "${local.name_prefix}-backend"
   monitoring_event_runtime_service_name          = "${local.name_prefix}-event-runtime"
   monitoring_ai_service_name                     = "${local.name_prefix}-ai"
-  monitoring_rds_instance_identifier             = "${local.name_prefix}-postgres"
 
   # Keep only signals that require prompt action in low-cost staging.
   # Standard AWS/ECS, ALB, RDS, and ASG metrics remain available in CloudWatch without Container Insights.
@@ -86,105 +85,6 @@ locals {
       treat_missing_data  = "breaching"
       dimensions = {
         DBInstanceIdentifier = aws_db_instance.postgres.identifier
-      }
-    }
-  }
-
-  # Transition-only alarms: keep their existing state addresses for the first apply.
-  # After that apply records dependency-free dimensions, remove this map in a follow-up change.
-  monitoring_transition_alarms = {
-    backend_cpu_high = {
-      description         = "Backend ECS CPU utilization is at least 85 percent."
-      namespace           = "AWS/ECS"
-      metric_name         = "CPUUtilization"
-      statistic           = "Average"
-      comparison_operator = "GreaterThanOrEqualToThreshold"
-      threshold           = 85
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        ClusterName = local.monitoring_ecs_cluster_name
-        ServiceName = local.monitoring_backend_service_name
-      }
-    }
-    backend_memory_high = {
-      description         = "Backend ECS memory utilization is at least 85 percent."
-      namespace           = "AWS/ECS"
-      metric_name         = "MemoryUtilization"
-      statistic           = "Average"
-      comparison_operator = "GreaterThanOrEqualToThreshold"
-      threshold           = 85
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        ClusterName = local.monitoring_ecs_cluster_name
-        ServiceName = local.monitoring_backend_service_name
-      }
-    }
-    event_runtime_cpu_high = {
-      description         = "Event runtime ECS CPU utilization is at least 85 percent."
-      namespace           = "AWS/ECS"
-      metric_name         = "CPUUtilization"
-      statistic           = "Average"
-      comparison_operator = "GreaterThanOrEqualToThreshold"
-      threshold           = 85
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        ClusterName = local.monitoring_ecs_cluster_name
-        ServiceName = local.monitoring_event_runtime_service_name
-      }
-    }
-    event_runtime_memory_high = {
-      description         = "Event runtime ECS memory utilization is at least 85 percent."
-      namespace           = "AWS/ECS"
-      metric_name         = "MemoryUtilization"
-      statistic           = "Average"
-      comparison_operator = "GreaterThanOrEqualToThreshold"
-      threshold           = 85
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        ClusterName = local.monitoring_ecs_cluster_name
-        ServiceName = local.monitoring_event_runtime_service_name
-      }
-    }
-    rds_cpu_high = {
-      description         = "RDS CPU utilization is at least 80 percent."
-      namespace           = "AWS/RDS"
-      metric_name         = "CPUUtilization"
-      statistic           = "Average"
-      comparison_operator = "GreaterThanOrEqualToThreshold"
-      threshold           = 80
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        DBInstanceIdentifier = local.monitoring_rds_instance_identifier
-      }
-    }
-    rds_freeable_memory_low = {
-      description         = "RDS freeable memory is below the previous 64 MiB staging threshold."
-      namespace           = "AWS/RDS"
-      metric_name         = "FreeableMemory"
-      statistic           = "Minimum"
-      comparison_operator = "LessThanThreshold"
-      threshold           = 67108864
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        DBInstanceIdentifier = local.monitoring_rds_instance_identifier
       }
     }
   }
@@ -298,7 +198,6 @@ resource "aws_sns_topic_subscription" "monitoring_email" {
 resource "aws_cloudwatch_metric_alarm" "infrastructure" {
   for_each = merge(
     local.monitoring_infrastructure_alarms,
-    local.monitoring_transition_alarms,
     local.monitoring_ecs_task_presence_alarms,
   )
 
