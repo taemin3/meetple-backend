@@ -93,7 +93,7 @@ resource "aws_iam_role_policy" "event_runtime_secret" {
 
 resource "aws_cloudwatch_log_group" "event_runtime" {
   name              = "/ecs/${local.name_prefix}/event-runtime"
-  retention_in_days = 14
+  retention_in_days = 7
 }
 
 resource "aws_service_discovery_private_dns_namespace" "this" {
@@ -163,7 +163,7 @@ resource "aws_ecs_task_definition" "event_runtime" {
       name              = "kafka"
       image             = var.kafka_image
       essential         = true
-      cpu               = 512
+      cpu               = 384
       memoryReservation = 2048
       memory            = 3072
       portMappings = [{
@@ -215,9 +215,8 @@ resource "aws_ecs_task_definition" "event_runtime" {
       name              = "kafka-init"
       image             = var.kafka_image
       essential         = false
-      cpu               = 64
-      memoryReservation = 64
-      memory            = 512
+      memoryReservation = 32
+      memory            = 256
       entryPoint        = ["/bin/bash", "-ec"]
       command = [<<-SCRIPT
         existing_topics="$(/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list)"
@@ -239,7 +238,7 @@ resource "aws_ecs_task_definition" "event_runtime" {
         { name = "KAFKA_ONE_DAY_RETENTION_TOPICS", value = join(" ", local.kafka_one_day_topics) },
         { name = "KAFKA_FOURTEEN_DAY_RETENTION_TOPICS", value = join(" ", local.kafka_fourteen_day_topics) },
         { name = "KAFKA_TOPIC_PARTITIONS", value = tostring(var.kafka_topic_partitions) },
-        { name = "KAFKA_HEAP_OPTS", value = "-Xms64m -Xmx256m" },
+        { name = "KAFKA_HEAP_OPTS", value = "-Xms32m -Xmx128m" },
       ]
       dependsOn = [{
         containerName = "kafka"
@@ -254,8 +253,8 @@ resource "aws_ecs_task_definition" "event_runtime" {
       name              = "redis"
       image             = var.redis_image
       essential         = true
-      cpu               = 128
-      memoryReservation = 256
+      cpu               = 64
+      memoryReservation = 128
       memory            = 512
       command           = ["redis-server", "--appendonly", "yes"]
       portMappings = [{
@@ -337,8 +336,8 @@ resource "aws_ecs_task_definition" "event_runtime" {
       name              = "connector-manager"
       image             = var.debezium_connect_image
       essential         = true
-      cpu               = 64
-      memoryReservation = 64
+      cpu               = 32
+      memoryReservation = 32
       memory            = 128
       entryPoint        = ["/bin/bash", "-ec"]
       command = [<<-SCRIPT

@@ -73,6 +73,41 @@ output "ecr_repository_url" {
   value       = aws_ecr_repository.backend.repository_url
 }
 
+output "ai_ecr_repository_url" {
+  description = "ECR repository URL for immutable AI service images."
+  value       = aws_ecr_repository.ai.repository_url
+}
+
+output "ai_service_name" {
+  description = "ECS service running the private Meetple AI application."
+  value       = aws_ecs_service.ai.name
+}
+
+output "ai_task_definition_arn" {
+  description = "AI ECS task definition ARN."
+  value       = aws_ecs_task_definition.ai.arn
+}
+
+output "ai_log_group_name" {
+  description = "CloudWatch log group for the AI ECS task."
+  value       = aws_cloudwatch_log_group.ai.name
+}
+
+output "admin_bucket_name" {
+  description = "Private S3 bucket used for the admin SPA, or null when admin hosting is disabled."
+  value       = var.admin_hosting_enabled ? aws_s3_bucket.admin[0].id : null
+}
+
+output "admin_cloudfront_distribution_id" {
+  description = "Admin CloudFront distribution ID, or null when admin hosting is disabled."
+  value       = var.admin_hosting_enabled ? aws_cloudfront_distribution.admin[0].id : null
+}
+
+output "admin_cloudfront_domain_name" {
+  description = "Admin CloudFront domain name, or null when admin hosting is disabled."
+  value       = var.admin_hosting_enabled ? aws_cloudfront_distribution.admin[0].domain_name : null
+}
+
 output "rds_endpoint" {
   description = "RDS PostgreSQL endpoint including port."
   value       = aws_db_instance.postgres.endpoint
@@ -134,9 +169,24 @@ output "backend_secret_rotation_event_rule_name" {
   value       = aws_cloudwatch_event_rule.backend_secrets_rotated.name
 }
 
+output "ai_secret_rotation_event_rule_name" {
+  description = "EventBridge rule that redeploys AI secret consumers, or null when no AI secret is configured."
+  value       = var.ai_application_secret_arn == null ? null : aws_cloudwatch_event_rule.ai_secret_rotated[0].name
+}
+
 output "github_actions_deploy_role_arn" {
   description = "IAM role ARN to configure as the staging GitHub Environment variable AWS_DEPLOY_ROLE_ARN."
   value       = var.github_actions_deploy_enabled ? aws_iam_role.github_actions_deploy[0].arn : null
+}
+
+output "github_actions_ai_deploy_role_arn" {
+  description = "IAM role ARN to configure in the AI repository staging Environment."
+  value       = var.github_actions_ai_deploy_enabled ? aws_iam_role.github_actions_ai_deploy[0].arn : null
+}
+
+output "github_actions_admin_deploy_role_arn" {
+  description = "IAM role ARN to configure in the admin repository staging Environment."
+  value       = local.github_actions_admin_role_enabled ? aws_iam_role.github_actions_admin_deploy[0].arn : null
 }
 
 output "monitoring_dashboard_name" {

@@ -154,6 +154,130 @@ variable "backend_desired_count" {
   }
 }
 
+variable "ai_image_tag" {
+  description = "Baseline ECR image tag for the AI task definition. GitHub Actions activates an immutable Git SHA revision before tasks start."
+  type        = string
+  default     = "bootstrap"
+
+  validation {
+    condition = (
+      var.ai_image_tag != "latest" &&
+      can(regex("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$", var.ai_image_tag))
+    )
+    error_message = "ai_image_tag must be a valid immutable Docker tag and cannot be latest."
+  }
+}
+
+variable "ai_desired_count" {
+  description = "Desired FastAPI task count. Keep 0 until the AI deployment workflow activates a real image revision, then set 1."
+  type        = number
+  default     = 0
+
+  validation {
+    condition = (
+      var.ai_desired_count >= 0 &&
+      var.ai_desired_count <= 2 &&
+      floor(var.ai_desired_count) == var.ai_desired_count
+    )
+    error_message = "ai_desired_count must be an integer between 0 and 2."
+  }
+}
+
+variable "ai_integration_enabled" {
+  description = "Enable Spring Boot search/moderation calls to the private AI ECS service. Enable only after the AI service is healthy."
+  type        = bool
+  default     = false
+}
+
+variable "ai_application_secret_arn" {
+  description = "Existing Secrets Manager ARN for a JSON secret containing AI_SERVICE_TOKEN and AI_OPENAI_API_KEY."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.ai_application_secret_arn == null || can(regex("^arn:aws[a-z-]*:secretsmanager:", var.ai_application_secret_arn))
+    error_message = "ai_application_secret_arn must be null or a Secrets Manager ARN."
+  }
+}
+
+variable "ai_secret_kms_key_arns" {
+  description = "Customer-managed KMS key ARNs used by the AI application secret. Leave empty for the AWS managed Secrets Manager key."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for arn in var.ai_secret_kms_key_arns : can(regex("^arn:aws[a-z-]*:kms:[^:]+:[0-9]{12}:key/", arn))
+    ])
+    error_message = "ai_secret_kms_key_arns must contain only customer-managed KMS key ARNs."
+  }
+}
+
+variable "ai_openai_model" {
+  description = "OpenAI model ID used by the AI service. Required before ai_desired_count is greater than zero."
+  type        = string
+  default     = ""
+}
+
+variable "moderation_auto_warning_enabled" {
+  description = "Allow the backend to apply the narrowly scoped automatic warning rule after AI integration is enabled."
+  type        = bool
+  default     = false
+}
+
+variable "admin_hosting_enabled" {
+  description = "Create the private S3 bucket and CloudFront distribution used to host the Meetple admin SPA."
+  type        = bool
+  default     = false
+}
+
+variable "admin_bucket_force_destroy" {
+  description = "Allow Terraform to delete a non-empty admin web bucket. Keep false unless disposable staging artifacts are intended."
+  type        = bool
+  default     = false
+}
+
+variable "admin_api_origin_domain_name" {
+  description = "HTTPS API domain used by the admin CloudFront /api/* origin, for example api.meetple.shop. Required when admin hosting is enabled."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = (
+      var.admin_api_origin_domain_name == null ||
+      can(regex("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$", var.admin_api_origin_domain_name))
+    )
+    error_message = "admin_api_origin_domain_name must be null or a DNS hostname without a scheme or path."
+  }
+}
+
+variable "admin_domain_names" {
+  description = "Optional custom domain aliases for the admin CloudFront distribution."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for domain in var.admin_domain_names : can(regex("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$", domain))
+    ])
+    error_message = "admin_domain_names must contain only DNS hostnames."
+  }
+}
+
+variable "admin_certificate_arn" {
+  description = "Optional us-east-1 ACM certificate ARN for admin_domain_names. CloudFront requires its viewer certificate in us-east-1."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.admin_certificate_arn == null || can(regex("^arn:aws[a-z-]*:acm:us-east-1:[0-9]{12}:certificate/", var.admin_certificate_arn))
+    error_message = "admin_certificate_arn must be null or an ACM certificate ARN from us-east-1."
+  }
+}
+
 variable "enable_push_retry_measurement" {
   description = "Temporarily enable the authenticated staging Push Retry/DLQ measurement endpoints and sender."
   type        = bool
@@ -282,20 +406,6 @@ variable "rds_replication_slot_lag_alarm_threshold_mb" {
   }
 }
 
-variable "rds_freeable_memory_alarm_threshold_mb" {
-  description = "CloudWatch warning threshold for RDS freeable memory in MiB. Set from the observed baseline for the selected DB instance class."
-  type        = number
-  default     = 64
-
-  validation {
-    condition = (
-      var.rds_freeable_memory_alarm_threshold_mb >= 64 &&
-      floor(var.rds_freeable_memory_alarm_threshold_mb) == var.rds_freeable_memory_alarm_threshold_mb
-    )
-    error_message = "rds_freeable_memory_alarm_threshold_mb must be an integer of at least 64 MiB."
-  }
-}
-
 variable "ecs_min_size" {
   description = "Minimum number of ECS container instances."
   type        = number
@@ -411,6 +521,45 @@ variable "github_actions_repository" {
   validation {
     condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_actions_repository))
     error_message = "github_actions_repository must use owner/repository format."
+  }
+}
+
+variable "github_actions_ai_deploy_enabled" {
+  description = "Create the GitHub OIDC role used to deploy the staging AI ECS service."
+  type        = bool
+  default     = false
+}
+
+variable "github_actions_ai_repository" {
+  description = "GitHub AI repository allowed to assume its deployment role, in owner/repository format."
+  type        = string
+  default     = "taemin3/meetple-ai"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_actions_ai_repository))
+    error_message = "github_actions_ai_repository must use owner/repository format."
+  }
+}
+
+variable "github_actions_admin_deploy_enabled" {
+  description = "Create the GitHub OIDC role used to upload the staging admin SPA and invalidate CloudFront."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.github_actions_admin_deploy_enabled || var.admin_hosting_enabled
+    error_message = "github_actions_admin_deploy_enabled requires admin_hosting_enabled."
+  }
+}
+
+variable "github_actions_admin_repository" {
+  description = "GitHub admin repository allowed to assume its deployment role, in owner/repository format."
+  type        = string
+  default     = "taemin3/meetple-admin"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_actions_admin_repository))
+    error_message = "github_actions_admin_repository must use owner/repository format."
   }
 }
 

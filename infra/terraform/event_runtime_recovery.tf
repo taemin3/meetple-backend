@@ -6,9 +6,15 @@ data "aws_secretsmanager_secret" "rds_master" {
   arn = aws_db_instance.postgres.master_user_secret[0].secret_arn
 }
 
+data "aws_secretsmanager_secret" "ai_application" {
+  count = var.ai_application_secret_arn == null ? 0 : 1
+  arn   = var.ai_application_secret_arn
+}
+
 locals {
   event_runtime_service_arn             = "arn:${data.aws_partition.current.partition}:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/${aws_ecs_cluster.this.name}/${aws_ecs_service.event_runtime.name}"
   backend_service_arn                   = "arn:${data.aws_partition.current.partition}:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/${aws_ecs_cluster.this.name}/${aws_ecs_service.backend.name}"
+  ai_service_arn                        = "arn:${data.aws_partition.current.partition}:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/${aws_ecs_cluster.this.name}/${aws_ecs_service.ai.name}"
   event_runtime_redeploy_automation_arn = "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:automation-definition/${aws_ssm_document.event_runtime_redeploy.name}"
 }
 
@@ -36,6 +42,7 @@ data "aws_iam_policy_document" "event_runtime_redeploy_automation" {
     resources = [
       local.event_runtime_service_arn,
       local.backend_service_arn,
+      local.ai_service_arn,
     ]
   }
 }
@@ -165,6 +172,22 @@ resource "aws_cloudwatch_event_rule" "backend_secrets_rotated" {
   })
 }
 
+resource "aws_cloudwatch_event_rule" "ai_secret_rotated" {
+  count = var.ai_application_secret_arn == null ? 0 : 1
+
+  name        = "${local.name_prefix}-ai-secret-rotated"
+  description = "Redeploy the AI service and backend when the shared AI secret AWSCURRENT version changes"
+
+  event_pattern = jsonencode({
+    source      = ["aws.secretsmanager"]
+    detail-type = ["Secret Label Updated"]
+    detail = {
+      name         = [data.aws_secretsmanager_secret.ai_application[0].name]
+      labelUpdated = ["AWSCURRENT"]
+    }
+  })
+}
+
 resource "aws_cloudwatch_event_target" "event_runtime_redeploy" {
   rule      = aws_cloudwatch_event_rule.rds_master_secret_rotated.name
   target_id = "RedeployEventRuntime"
@@ -213,6 +236,56 @@ resource "aws_cloudwatch_event_target" "backend_redeploy_on_rds_secret" {
 
 resource "aws_cloudwatch_event_target" "backend_redeploy_on_application_secret" {
   rule      = aws_cloudwatch_event_rule.backend_secrets_rotated.name
+  target_id = "RedeployBackend"
+  arn       = local.event_runtime_redeploy_automation_arn
+  role_arn  = aws_iam_role.event_runtime_redeploy_event.arn
+
+  input = jsonencode({
+    AutomationAssumeRole = [aws_iam_role.event_runtime_redeploy_automation.arn]
+    ClusterName          = [aws_ecs_cluster.this.name]
+    ServiceName          = [aws_ecs_service.backend.name]
+  })
+
+  retry_policy {
+    maximum_event_age_in_seconds = 3600
+    maximum_retry_attempts       = 3
+  }
+
+  depends_on = [
+    aws_iam_role_policy.event_runtime_redeploy_automation,
+    aws_iam_role_policy.event_runtime_redeploy_event,
+  ]
+}
+
+resource "aws_cloudwatch_event_target" "ai_redeploy_on_application_secret" {
+  count = var.ai_application_secret_arn == null ? 0 : 1
+
+  rule      = aws_cloudwatch_event_rule.ai_secret_rotated[0].name
+  target_id = "RedeployAi"
+  arn       = local.event_runtime_redeploy_automation_arn
+  role_arn  = aws_iam_role.event_runtime_redeploy_event.arn
+
+  input = jsonencode({
+    AutomationAssumeRole = [aws_iam_role.event_runtime_redeploy_automation.arn]
+    ClusterName          = [aws_ecs_cluster.this.name]
+    ServiceName          = [aws_ecs_service.ai.name]
+  })
+
+  retry_policy {
+    maximum_event_age_in_seconds = 3600
+    maximum_retry_attempts       = 3
+  }
+
+  depends_on = [
+    aws_iam_role_policy.event_runtime_redeploy_automation,
+    aws_iam_role_policy.event_runtime_redeploy_event,
+  ]
+}
+
+resource "aws_cloudwatch_event_target" "backend_redeploy_on_ai_secret" {
+  count = var.ai_application_secret_arn == null ? 0 : 1
+
+  rule      = aws_cloudwatch_event_rule.ai_secret_rotated[0].name
   target_id = "RedeployBackend"
   arn       = local.event_runtime_redeploy_automation_arn
   role_arn  = aws_iam_role.event_runtime_redeploy_event.arn

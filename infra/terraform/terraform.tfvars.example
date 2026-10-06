@@ -12,6 +12,12 @@ firebase_credentials_secret_arn = "arn:aws:secretsmanager:ap-northeast-2:1234567
 # Add key ARNs only when either secret uses a customer-managed KMS key.
 backend_secret_kms_key_arns = []
 
+# AI secret is a JSON document containing AI_SERVICE_TOKEN and AI_OPENAI_API_KEY.
+# Keep the AI task stopped and integration disabled until a real image and model are configured.
+ai_application_secret_arn = null
+ai_secret_kms_key_arns     = []
+ai_openai_model            = ""
+
 # Cost-conscious staging defaults. Review these before production.
 ecs_instance_type    = "t3.large"
 ecs_root_volume_size = 50
@@ -23,6 +29,10 @@ ecs_max_size         = 2
 # Run the staging workflow once so it activates a Git-SHA revision, then apply desired_count=1.
 backend_image_tag          = "bootstrap"
 backend_desired_count      = 0
+ai_image_tag               = "bootstrap"
+ai_desired_count           = 0
+ai_integration_enabled     = false
+moderation_auto_warning_enabled = false
 kafka_consumer_concurrency = 1
 enable_push_retry_measurement = false
 enable_kafka_ui               = false
@@ -30,6 +40,14 @@ enable_kafka_ui               = false
 # Native Flutter uploads do not need CORS. Add only trusted web origins when needed.
 image_upload_allowed_origins = []
 image_bucket_force_destroy    = false
+
+# Admin uses a private S3 bucket behind CloudFront. /api/* is proxied to the HTTPS API domain.
+admin_hosting_enabled        = false
+admin_bucket_force_destroy   = false
+admin_api_origin_domain_name = null
+admin_domain_names           = []
+# CloudFront viewer certificates must be issued in us-east-1.
+admin_certificate_arn = null
 
 # Single-broker staging defaults. Keep kafka_cluster_id stable after the first apply.
 kafka_cluster_id       = "4L6g3nShT-eMCtK--X86sw"
@@ -53,10 +71,13 @@ additional_tags = {
 # If another Terraform state already owns the provider, pass its ARN instead of creating a duplicate.
 github_actions_deploy_enabled       = false
 github_actions_repository           = "taemin3/meetple-backend"
+github_actions_ai_deploy_enabled    = false
+github_actions_ai_repository        = "taemin3/meetple-ai"
+github_actions_admin_deploy_enabled = false
+github_actions_admin_repository     = "taemin3/meetple-admin"
 github_actions_oidc_provider_arn    = null
 
 # CloudWatch alarms remain visible when actions are disabled, but SNS email notifications stop.
 # After apply, confirm the subscription from the email sent by AWS SNS.
 monitoring_notification_email     = null
 monitoring_alarm_actions_enabled = true
-rds_freeable_memory_alarm_threshold_mb = 128

@@ -60,6 +60,17 @@ data "aws_iam_policy_document" "backend_execution_secrets" {
   }
 
   dynamic "statement" {
+    for_each = var.ai_integration_enabled && var.ai_application_secret_arn != null ? [1] : []
+
+    content {
+      sid       = "ReadSharedAiServiceToken"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [var.ai_application_secret_arn]
+    }
+  }
+
+  dynamic "statement" {
     for_each = length(var.backend_secret_kms_key_arns) == 0 ? [] : [1]
 
     content {
@@ -67,6 +78,23 @@ data "aws_iam_policy_document" "backend_execution_secrets" {
       effect    = "Allow"
       actions   = ["kms:Decrypt"]
       resources = var.backend_secret_kms_key_arns
+
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ViaService"
+        values   = ["secretsmanager.${var.aws_region}.${data.aws_partition.current.dns_suffix}"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.ai_integration_enabled && length(var.ai_secret_kms_key_arns) > 0 ? [1] : []
+
+    content {
+      sid       = "DecryptSharedAiSecret"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt"]
+      resources = var.ai_secret_kms_key_arns
 
       condition {
         test     = "StringEquals"
@@ -121,31 +149,12 @@ resource "aws_iam_role_policy" "backend_images" {
   policy = data.aws_iam_policy_document.backend_images.json
 }
 
-data "aws_iam_policy_document" "backend_application_metrics" {
-  statement {
-    sid       = "PublishApplicationMetrics"
-    effect    = "Allow"
-    actions   = ["cloudwatch:PutMetricData"]
-    resources = ["*"]
-
-    condition {
-      test     = "StringEquals"
-      variable = "cloudwatch:namespace"
-      values   = [local.application_metric_namespace]
-    }
-  }
-}
-
-resource "aws_iam_role_policy" "backend_application_metrics" {
-  name   = "application-metrics"
-  role   = aws_iam_role.backend_task.id
-  policy = data.aws_iam_policy_document.backend_application_metrics.json
-}
-
 resource "aws_ecs_task_definition" "backend" {
   family                   = "${local.name_prefix}-backend"
   requires_compatibilities = ["EC2"]
   network_mode             = "bridge"
+  cpu                      = "768"
+  memory                   = "1664"
   execution_role_arn       = aws_iam_role.backend_execution.arn
   task_role_arn            = aws_iam_role.backend_task.arn
 
@@ -161,6 +170,7 @@ resource "aws_ecs_task_definition" "backend" {
       containerPort = 8080
       hostPort      = 0
       protocol      = "tcp"
+      appProtocol   = "http"
     }]
     environment = [
       { name = "SPRING_PROFILES_ACTIVE", value = "prod" },
@@ -177,9 +187,6 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "IMAGE_STORAGE_REGION", value = var.aws_region },
       { name = "IMAGE_STORAGE_PUBLIC_BASE_URL", value = "https://${aws_cloudfront_distribution.images.domain_name}" },
       { name = "IMAGE_STORAGE_CLOUDFRONT_DISTRIBUTION_ID", value = aws_cloudfront_distribution.images.id },
-      { name = "MEETPLE_CLOUDWATCH_METRICS_ENABLED", value = "true" },
-      { name = "MEETPLE_CLOUDWATCH_METRICS_NAMESPACE", value = local.application_metric_namespace },
-      { name = "MEETPLE_CLOUDWATCH_METRICS_ENVIRONMENT", value = local.environment },
       { name = "MEETPLE_PERFORMANCE_AUTH_PROBE_ENABLED", value = "true" },
       { name = "MEETPLE_PERFORMANCE_PUSH_RETRY_ENABLED", value = tostring(var.enable_push_retry_measurement) },
       { name = "OUTBOX_CLEANUP_ENABLED", value = "true" },
@@ -189,6 +196,13 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "MAIL_SMTP_AUTH", value = "true" },
       { name = "MAIL_STARTTLS_ENABLED", value = "true" },
       { name = "MAIL_STARTTLS_REQUIRED", value = "true" },
+      { name = "AI_SEARCH_ENABLED", value = tostring(var.ai_integration_enabled) },
+      { name = "AI_SEARCH_BASE_URL", value = "http://ai:8001" },
+      { name = "AI_SEARCH_TIMEOUT", value = "45s" },
+      { name = "AI_MODERATION_ENABLED", value = tostring(var.ai_integration_enabled) },
+      { name = "MODERATION_AUTO_WARNING_ENABLED", value = tostring(var.moderation_auto_warning_enabled) },
+      { name = "MODERATION_AUTO_WARNING_MIN_CONFIDENCE", value = "0.95" },
+      { name = "MODERATION_AUTO_WARNING_ALLOWED_REPORT_TYPES", value = "SPAM" },
     ]
     secrets = concat(
       [for secret_name in local.backend_application_secret_keys : {
@@ -208,7 +222,21 @@ resource "aws_ecs_task_definition" "backend" {
           name      = "FIREBASE_CREDENTIALS_JSON"
           valueFrom = data.aws_secretsmanager_secret.firebase_credentials.arn
         },
-      ]
+      ],
+      var.ai_integration_enabled && var.ai_application_secret_arn != null ? [
+        {
+          name      = "AI_SEARCH_SERVICE_TOKEN"
+          valueFrom = "${var.ai_application_secret_arn}:AI_SERVICE_TOKEN::"
+        },
+        {
+          name      = "AI_MODERATION_SERVICE_TOKEN"
+          valueFrom = "${var.ai_application_secret_arn}:AI_SERVICE_TOKEN::"
+        },
+        {
+          name      = "AI_SEARCH_CAPABILITY_SECRET"
+          valueFrom = "${data.aws_secretsmanager_secret.backend_application.arn}:AI_SEARCH_CAPABILITY_SECRET::"
+        },
+      ] : []
     )
     healthCheck = {
       command     = ["CMD-SHELL", "curl --fail --silent http://localhost:8080/livez >/dev/null"]
@@ -251,6 +279,21 @@ resource "aws_ecs_service" "backend" {
     container_port   = 8080
   }
 
+  service_connect_configuration {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.this.arn
+
+    service {
+      port_name      = "http"
+      discovery_name = "backend"
+
+      client_alias {
+        dns_name = "backend"
+        port     = 8080
+      }
+    }
+  }
+
   deployment_circuit_breaker {
     enable   = true
     rollback = true
@@ -260,7 +303,6 @@ resource "aws_ecs_service" "backend" {
     aws_ecs_cluster_capacity_providers.this,
     aws_iam_role_policy.backend_execution_secrets,
     aws_iam_role_policy.backend_images,
-    aws_iam_role_policy.backend_application_metrics,
     aws_lb_listener.http,
   ]
 
@@ -272,6 +314,11 @@ resource "aws_ecs_service" "backend" {
     precondition {
       condition     = var.backend_desired_count == 0 || var.ecs_desired_capacity >= 1
       error_message = "Running the backend requires at least one ECS container instance."
+    }
+
+    precondition {
+      condition     = !var.ai_integration_enabled || var.ai_application_secret_arn != null
+      error_message = "ai_integration_enabled requires ai_application_secret_arn."
     }
   }
 
