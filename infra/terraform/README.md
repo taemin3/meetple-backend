@@ -277,11 +277,11 @@ image_upload_allowed_origins = ["https://app.example.com"]
 - `meetple-<environment>-operations` Dashboard
 - ECS backend/AI/event-runtime CPU·memory, ASG instance 수를 AWS 기본 metric으로 조회
 - 즉시 대응할 infrastructure alarm 5개: EC2 없음, ALB unhealthy, target 5xx, RDS free storage, replication slot lag
-- custom log metric/alarm 3개: Kafka DLQ, AI moderation consumer restart, Debezium invalid slot
+- custom log metric/alarm 5개: Backend `ERROR`, AI `ERROR`, Kafka DLQ, AI moderation consumer restart, Debezium invalid slot
 - Backend/AI/Event Runtime CloudWatch Logs 보존 기간 7일
 - ALARM과 복구(OK)를 전달하는 SNS topic
 
-Tomcat thread, Hikari pool, JVM GC, Redis command, API별 latency custom metric과 generic `ERROR` log metric은 상시 수집하지 않습니다. 성능 시험이 필요할 때만 JFR·k6를 사용하고, 애플리케이션 metric은 IAM과 설정을 별도 변경해 임시 활성화합니다. Dashboard는 이미 존재하는 metric을 표시하며 새로운 custom metric을 만들지 않습니다.
+Tomcat thread, Hikari pool, JVM GC, Redis command, API별 latency custom metric은 상시 수집하지 않습니다. Backend와 AI의 `ERROR`는 각각 1분 내 1건부터 알람으로 전환하며, 같은 ALARM 상태에서는 로그마다 알림을 반복하지 않습니다. 성능 시험이 필요할 때만 JFR·k6를 사용하고, 애플리케이션 metric은 IAM과 설정을 별도 변경해 임시 활성화합니다. Dashboard는 log metric 5개 외에는 새로운 custom metric을 만들지 않습니다.
 
 이메일 알림이 필요하면 로컬 `terraform.tfvars`에 주소를 추가합니다. 주소는 Git에 커밋하지 않습니다.
 

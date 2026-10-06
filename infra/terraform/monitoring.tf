@@ -85,13 +85,25 @@ locals {
     }
   }
 
-  # Each filter creates a custom metric and alarm, so keep only data-loss or pipeline-stop signals.
+  # Each filter creates a custom metric and alarm, so keep only application errors or pipeline-stop signals.
   monitoring_log_filters = {
+    backend_error = {
+      description    = "Spring Boot ERROR log detected."
+      log_group_name = aws_cloudwatch_log_group.backend.name
+      metric_name    = "BackendErrorCount"
+      pattern        = "\"ERROR\""
+    }
     consumer_dlq = {
       description    = "A backend Kafka consumer moved an event to a DLQ."
       log_group_name = aws_cloudwatch_log_group.backend.name
       metric_name    = "ConsumerDlqCount"
       pattern        = "\"moved to DLQ\""
+    }
+    ai_error = {
+      description    = "AI service ERROR log detected."
+      log_group_name = aws_cloudwatch_log_group.ai.name
+      metric_name    = "AiErrorCount"
+      pattern        = "\"ERROR\""
     }
     ai_moderation_consumer_restart = {
       description    = "AI moderation Kafka consumer restarted after an error."
@@ -277,6 +289,8 @@ resource "aws_cloudwatch_dashboard" "staging" {
           period = 60
           stat   = "Sum"
           metrics = [
+            [local.monitoring_metric_namespace, "BackendErrorCount", { label = "Backend ERROR" }],
+            [".", "AiErrorCount", { label = "AI ERROR" }],
             [local.monitoring_metric_namespace, "ConsumerDlqCount", { label = "Consumer DLQ" }],
             [".", "AiModerationConsumerRestartCount", { label = "AI moderation restart" }],
             [".", "DebeziumInvalidSlotCount", { label = "Debezium invalid slot" }],
