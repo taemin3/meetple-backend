@@ -72,6 +72,7 @@ git diff --check: 성공
 - AI는 public ALB에 연결하지 않고 ECS Service Connect로 Backend와 통신한다.
 - Service Connect가 주입하는 proxy 자원을 확보하도록 Backend task는 CPU 768/메모리 1,664 MiB, AI task는 CPU 512/메모리 1,664 MiB의 task-level 상한을 명시했다.
 - Spring Boot container CPU 512는 유지하고, 저부하 staging에서 한 `t3.large`에 배치할 수 있도록 Event Runtime 보조 container와 AI container의 CPU 예약을 줄였다. Kafka와 Kafka Connect의 메모리 예약은 유지했다.
+- CloudWatch 비용을 줄이기 위해 Container Insights와 상시 애플리케이션 custom metric 발행을 끄고, 기본 AWS metric 기반 alarm 5개와 핵심 pipeline log alarm 3개만 유지했다. ECS log 보존 기간은 7일로 줄였다.
 - Admin 인증 API 응답이 CloudFront에 남지 않도록 `/api/*` behavior는 caching disabled로 고정했다.
 - AI 자동 경고는 기본 비활성화하며 AI service가 먼저 정상 기동된 뒤 별도 적용한다.
 

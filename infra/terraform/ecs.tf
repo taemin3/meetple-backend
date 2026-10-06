@@ -31,7 +31,7 @@ resource "aws_iam_instance_profile" "ecs" {
 
 resource "aws_cloudwatch_log_group" "backend" {
   name              = "/ecs/${local.name_prefix}/backend"
-  retention_in_days = 14
+  retention_in_days = 7
 }
 
 resource "aws_ecs_cluster" "this" {
@@ -39,7 +39,7 @@ resource "aws_ecs_cluster" "this" {
 
   setting {
     name  = "containerInsights"
-    value = "enabled"
+    value = "disabled"
   }
 }
 

@@ -74,7 +74,7 @@ resource "aws_iam_role" "ai_task" {
 
 resource "aws_cloudwatch_log_group" "ai" {
   name              = "/ecs/${local.name_prefix}/ai"
-  retention_in_days = 14
+  retention_in_days = 7
 }
 
 resource "aws_ecs_task_definition" "ai" {

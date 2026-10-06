@@ -93,7 +93,7 @@ resource "aws_iam_role_policy" "event_runtime_secret" {
 
 resource "aws_cloudwatch_log_group" "event_runtime" {
   name              = "/ecs/${local.name_prefix}/event-runtime"
-  retention_in_days = 14
+  retention_in_days = 7
 }
 
 resource "aws_service_discovery_private_dns_namespace" "this" {

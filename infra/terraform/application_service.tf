@@ -132,27 +132,6 @@ resource "aws_iam_role_policy" "backend_images" {
   policy = data.aws_iam_policy_document.backend_images.json
 }
 
-data "aws_iam_policy_document" "backend_application_metrics" {
-  statement {
-    sid       = "PublishApplicationMetrics"
-    effect    = "Allow"
-    actions   = ["cloudwatch:PutMetricData"]
-    resources = ["*"]
-
-    condition {
-      test     = "StringEquals"
-      variable = "cloudwatch:namespace"
-      values   = [local.application_metric_namespace]
-    }
-  }
-}
-
-resource "aws_iam_role_policy" "backend_application_metrics" {
-  name   = "application-metrics"
-  role   = aws_iam_role.backend_task.id
-  policy = data.aws_iam_policy_document.backend_application_metrics.json
-}
-
 resource "aws_ecs_task_definition" "backend" {
   family                   = "${local.name_prefix}-backend"
   requires_compatibilities = ["EC2"]
@@ -191,9 +170,6 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "IMAGE_STORAGE_REGION", value = var.aws_region },
       { name = "IMAGE_STORAGE_PUBLIC_BASE_URL", value = "https://${aws_cloudfront_distribution.images.domain_name}" },
       { name = "IMAGE_STORAGE_CLOUDFRONT_DISTRIBUTION_ID", value = aws_cloudfront_distribution.images.id },
-      { name = "MEETPLE_CLOUDWATCH_METRICS_ENABLED", value = "true" },
-      { name = "MEETPLE_CLOUDWATCH_METRICS_NAMESPACE", value = local.application_metric_namespace },
-      { name = "MEETPLE_CLOUDWATCH_METRICS_ENVIRONMENT", value = local.environment },
       { name = "MEETPLE_PERFORMANCE_AUTH_PROBE_ENABLED", value = "true" },
       { name = "MEETPLE_PERFORMANCE_PUSH_RETRY_ENABLED", value = tostring(var.enable_push_retry_measurement) },
       { name = "OUTBOX_CLEANUP_ENABLED", value = "true" },
@@ -310,7 +286,6 @@ resource "aws_ecs_service" "backend" {
     aws_ecs_cluster_capacity_providers.this,
     aws_iam_role_policy.backend_execution_secrets,
     aws_iam_role_policy.backend_images,
-    aws_iam_role_policy.backend_application_metrics,
     aws_lb_listener.http,
   ]
 

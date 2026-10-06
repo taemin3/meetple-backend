@@ -272,17 +272,16 @@ image_upload_allowed_origins = ["https://app.example.com"]
 
 ## CloudWatch 모니터링
 
-`monitoring.tf`는 별도 모니터링 서버 없이 기존 ECS Container Insights와 CloudWatch Logs를 사용해 다음 항목을 구성합니다.
+`monitoring.tf`는 저비용 staging에 필요한 장애 신호만 유지합니다. ECS Container Insights와 Spring Micrometer custom metric 발행은 끄고, 추가 수집 비용이 없는 AWS 기본 ECS/ALB/RDS/ASG metric을 Dashboard에서 조회합니다.
 
 - `meetple-<environment>-operations` Dashboard
-- ECS backend/AI/event-runtime의 CPU, memory, 실행 task 수
-- ECS Auto Scaling Group의 실행 중 EC2 instance 수
-- ALB unhealthy target, target HTTP 5xx, p95 응답 시간
-- RDS CPU, connection, freeable memory, free storage
-- PostgreSQL oldest logical replication slot lag, transaction log disk usage
-- 별도로 설정한 안전 기준에 도달한 replication slot 사전 경고
-- Backend/AI `ERROR`, AI moderation consumer restart, Kafka consumer `moved to DLQ`, Debezium connector failed-task 로그 지표와 알람
+- ECS backend/AI/event-runtime CPU·memory, ASG instance 수를 AWS 기본 metric으로 조회
+- 즉시 대응할 infrastructure alarm 5개: EC2 없음, ALB unhealthy, target 5xx, RDS free storage, replication slot lag
+- custom log metric/alarm 3개: Kafka DLQ, AI moderation consumer restart, Debezium invalid slot
+- Backend/AI/Event Runtime CloudWatch Logs 보존 기간 7일
 - ALARM과 복구(OK)를 전달하는 SNS topic
+
+Tomcat thread, Hikari pool, JVM GC, Redis command, API별 latency custom metric과 generic `ERROR` log metric은 상시 수집하지 않습니다. 성능 시험이 필요할 때만 JFR·k6를 사용하고, 애플리케이션 metric은 IAM과 설정을 별도 변경해 임시 활성화합니다. Dashboard는 이미 존재하는 metric을 표시하며 새로운 custom metric을 만들지 않습니다.
 
 이메일 알림이 필요하면 로컬 `terraform.tfvars`에 주소를 추가합니다. 주소는 Git에 커밋하지 않습니다.
 
@@ -300,8 +299,6 @@ monitoring_alarm_actions_enabled = false
 
 이 상태로 `terraform apply`하면 Dashboard와 알람 이력은 유지되지만 SNS의 ALARM/OK 메일은 전송하지 않습니다. 서버를 다시 실행할 때 값을 `true`로 되돌려 적용합니다.
 
-replication slot 지연 경고 기준은 `rds_replication_slot_lag_alarm_threshold_mb`로 별도 관리합니다. 기본 2,048 MiB 제한에서는 1,536 MiB입니다. `max_slot_wal_keep_size` 변경은 `pending-reboot`이므로 제한을 높이더라도 RDS 재부팅과 `SHOW max_slot_wal_keep_size;` 확인 전에는 알람 기준을 높이지 않습니다. 논리 slot용 `OldestLogicalReplicationSlotLag`가 1분 간격으로 두 번 연속 기준을 넘으면 SNS로 ALARM을 보내며, `TransactionLogsDiskUsage`는 같은 Dashboard에서 원인 판단용으로 확인합니다. `Unable to obtain valid replication slot` 로그는 즉시, source task의 `RESTARTING`이 5분 이상 지속되면 별도 알람으로 감지합니다. 알람이 발생하면 ECS만 반복 재시작하지 말고 [Debezium replication slot 복구 절차](../../docs/operations/debezium-replication-slot-recovery.md)에 따라 slot 상태와 Outbox 재처리 범위를 먼저 확인합니다.
+replication slot 지연 경고 기준은 `rds_replication_slot_lag_alarm_threshold_mb`로 별도 관리합니다. 기본 2,048 MiB 제한에서는 1,536 MiB입니다. `max_slot_wal_keep_size` 변경은 `pending-reboot`이므로 제한을 높이더라도 RDS 재부팅과 `SHOW max_slot_wal_keep_size;` 확인 전에는 알람 기준을 높이지 않습니다. 논리 slot용 `OldestLogicalReplicationSlotLag`가 1분 간격으로 두 번 연속 기준을 넘으면 SNS로 ALARM을 보내며, `TransactionLogsDiskUsage`는 같은 Dashboard에서 원인 판단용으로 확인합니다. `Unable to obtain valid replication slot` 로그도 즉시 알립니다. 알람이 발생하면 ECS만 반복 재시작하지 말고 [Debezium replication slot 복구 절차](../../docs/operations/debezium-replication-slot-recovery.md)에 따라 slot 상태와 Outbox 재처리 범위를 먼저 확인합니다.
 
-저활동 RDS에서도 slot LSN이 주기적으로 전진하도록 V13 migration이 `debezium_heartbeat` 1행 테이블을 만들고, connector가 60초마다 해당 행을 갱신합니다. heartbeat 테이블과 native heartbeat record는 Outbox SMT predicate로 사용자 이벤트와 분리되며 전용 Kafka topic 두 개에 1일만 보관합니다. Event Runtime 시작 시에는 기존 topic 목록을 한 번만 읽고 누락 topic만 생성하며, Kafka CLI용 `kafka-init` 컨테이너는 512 MiB 상한과 256 MiB heap을 사용합니다.
-
-`db.t4g.micro` staging의 24시간 관측값에서 `FreeableMemory`는 약 150~189 MiB, `SwapUsage`는 최대 약 12 MiB였습니다. `rds_freeable_memory_alarm_threshold_mb` 기본값은 이 baseline 아래인 128 MiB이며, DB instance class를 바꾸면 새 baseline을 측정한 뒤 함께 조정합니다. Dashboard에서는 `FreeableMemory`와 `SwapUsage`를 같이 확인합니다.
+저활동 RDS에서도 slot LSN이 주기적으로 전진하도록 V13 migration이 `debezium_heartbeat` 1행 테이블을 만들고, connector가 60초마다 해당 행을 갱신합니다. heartbeat 테이블과 native heartbeat record는 Outbox SMT predicate로 사용자 이벤트와 분리되며 전용 Kafka topic 두 개에 1일만 보관합니다. Event Runtime 시작 시에는 기존 topic 목록을 한 번만 읽고 누락 topic만 생성하며, Kafka CLI용 `kafka-init` 컨테이너는 256 MiB 상한과 128 MiB heap을 사용합니다.

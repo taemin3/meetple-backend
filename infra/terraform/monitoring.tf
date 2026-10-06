@@ -1,139 +1,11 @@
 locals {
   monitoring_metric_namespace                    = "${title(var.project_name)}/${title(local.environment)}/Logs"
-  application_metric_namespace                   = "${title(var.project_name)}/${title(local.environment)}/Application"
   monitoring_alarm_actions                       = [aws_sns_topic.monitoring.arn]
   rds_replication_slot_lag_alarm_threshold_bytes = var.rds_replication_slot_lag_alarm_threshold_mb * 1024 * 1024
-  rds_freeable_memory_alarm_threshold_bytes      = var.rds_freeable_memory_alarm_threshold_mb * 1024 * 1024
 
+  # Keep only signals that require prompt action in low-cost staging.
+  # Standard AWS/ECS, ALB, RDS, and ASG metrics remain available in CloudWatch without Container Insights.
   monitoring_infrastructure_alarms = {
-    backend_running_tasks = {
-      description         = "Backend ECS service has no running task."
-      namespace           = "ECS/ContainerInsights"
-      metric_name         = "RunningTaskCount"
-      statistic           = "Minimum"
-      comparison_operator = "LessThanThreshold"
-      threshold           = 1
-      period              = 60
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "breaching"
-      dimensions = {
-        ClusterName = aws_ecs_cluster.this.name
-        ServiceName = aws_ecs_service.backend.name
-      }
-    }
-    event_runtime_running_tasks = {
-      description         = "Event runtime ECS service has no running task."
-      namespace           = "ECS/ContainerInsights"
-      metric_name         = "RunningTaskCount"
-      statistic           = "Minimum"
-      comparison_operator = "LessThanThreshold"
-      threshold           = 1
-      period              = 60
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "breaching"
-      dimensions = {
-        ClusterName = aws_ecs_cluster.this.name
-        ServiceName = aws_ecs_service.event_runtime.name
-      }
-    }
-    backend_cpu_high = {
-      description         = "Backend ECS CPU utilization is at least 85 percent."
-      namespace           = "AWS/ECS"
-      metric_name         = "CPUUtilization"
-      statistic           = "Average"
-      comparison_operator = "GreaterThanOrEqualToThreshold"
-      threshold           = 85
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        ClusterName = aws_ecs_cluster.this.name
-        ServiceName = aws_ecs_service.backend.name
-      }
-    }
-    backend_memory_high = {
-      description         = "Backend ECS memory utilization is at least 85 percent."
-      namespace           = "AWS/ECS"
-      metric_name         = "MemoryUtilization"
-      statistic           = "Average"
-      comparison_operator = "GreaterThanOrEqualToThreshold"
-      threshold           = 85
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        ClusterName = aws_ecs_cluster.this.name
-        ServiceName = aws_ecs_service.backend.name
-      }
-    }
-    ai_cpu_high = {
-      description         = "AI ECS CPU utilization is at least 85 percent."
-      namespace           = "AWS/ECS"
-      metric_name         = "CPUUtilization"
-      statistic           = "Average"
-      comparison_operator = "GreaterThanOrEqualToThreshold"
-      threshold           = 85
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        ClusterName = aws_ecs_cluster.this.name
-        ServiceName = aws_ecs_service.ai.name
-      }
-    }
-    ai_memory_high = {
-      description         = "AI ECS memory utilization is at least 85 percent."
-      namespace           = "AWS/ECS"
-      metric_name         = "MemoryUtilization"
-      statistic           = "Average"
-      comparison_operator = "GreaterThanOrEqualToThreshold"
-      threshold           = 85
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        ClusterName = aws_ecs_cluster.this.name
-        ServiceName = aws_ecs_service.ai.name
-      }
-    }
-    event_runtime_cpu_high = {
-      description         = "Event runtime ECS CPU utilization is at least 85 percent."
-      namespace           = "AWS/ECS"
-      metric_name         = "CPUUtilization"
-      statistic           = "Average"
-      comparison_operator = "GreaterThanOrEqualToThreshold"
-      threshold           = 85
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        ClusterName = aws_ecs_cluster.this.name
-        ServiceName = aws_ecs_service.event_runtime.name
-      }
-    }
-    event_runtime_memory_high = {
-      description         = "Event runtime ECS memory utilization is at least 85 percent."
-      namespace           = "AWS/ECS"
-      metric_name         = "MemoryUtilization"
-      statistic           = "Average"
-      comparison_operator = "GreaterThanOrEqualToThreshold"
-      threshold           = 85
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        ClusterName = aws_ecs_cluster.this.name
-        ServiceName = aws_ecs_service.event_runtime.name
-      }
-    }
     ecs_capacity_missing = {
       description         = "The ECS Auto Scaling group has no in-service EC2 container instance."
       namespace           = "AWS/AutoScaling"
@@ -181,25 +53,9 @@ locals {
         TargetGroup  = aws_lb_target_group.app.arn_suffix
       }
     }
-    rds_cpu_high = {
-      description         = "RDS CPU utilization is at least 80 percent."
-      namespace           = "AWS/RDS"
-      metric_name         = "CPUUtilization"
-      statistic           = "Average"
-      comparison_operator = "GreaterThanOrEqualToThreshold"
-      threshold           = 80
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        DBInstanceIdentifier = aws_db_instance.postgres.identifier
-      }
-    }
     rds_replication_slot_lag_high = {
-      description = "RDS oldest replication slot lag reached the configured warning threshold (${var.rds_replication_slot_lag_alarm_threshold_mb} MiB). Debezium must catch up before the slot becomes lost."
-      namespace   = "AWS/RDS"
-      # OldestLogicalReplicationSlotLag reports -1 for this Debezium slot, while this metric matches pg_replication_slots lag.
+      description         = "RDS replication slot lag reached ${var.rds_replication_slot_lag_alarm_threshold_mb} MiB. Debezium must catch up before the slot becomes lost."
+      namespace           = "AWS/RDS"
       metric_name         = "OldestReplicationSlotLag"
       statistic           = "Maximum"
       comparison_operator = "GreaterThanOrEqualToThreshold"
@@ -227,59 +83,21 @@ locals {
         DBInstanceIdentifier = aws_db_instance.postgres.identifier
       }
     }
-    rds_freeable_memory_low = {
-      description         = "RDS freeable memory is below the configured baseline threshold (${var.rds_freeable_memory_alarm_threshold_mb} MiB)."
-      namespace           = "AWS/RDS"
-      metric_name         = "FreeableMemory"
-      statistic           = "Minimum"
-      comparison_operator = "LessThanThreshold"
-      threshold           = local.rds_freeable_memory_alarm_threshold_bytes
-      period              = 300
-      evaluation_periods  = 2
-      datapoints_to_alarm = 2
-      treat_missing_data  = "notBreaching"
-      dimensions = {
-        DBInstanceIdentifier = aws_db_instance.postgres.identifier
-      }
-    }
   }
 
+  # Each filter creates a custom metric and alarm, so keep only data-loss or pipeline-stop signals.
   monitoring_log_filters = {
-    backend_error = {
-      description    = "Spring Boot ERROR log detected."
-      log_group_name = aws_cloudwatch_log_group.backend.name
-      metric_name    = "BackendErrorCount"
-      pattern        = "\"ERROR\""
-    }
     consumer_dlq = {
       description    = "A backend Kafka consumer moved an event to a DLQ."
       log_group_name = aws_cloudwatch_log_group.backend.name
       metric_name    = "ConsumerDlqCount"
       pattern        = "\"moved to DLQ\""
     }
-    ai_error = {
-      description    = "AI service ERROR log detected."
-      log_group_name = aws_cloudwatch_log_group.ai.name
-      metric_name    = "AiErrorCount"
-      pattern        = "\"ERROR\""
-    }
     ai_moderation_consumer_restart = {
       description    = "AI moderation Kafka consumer restarted after an error."
       log_group_name = aws_cloudwatch_log_group.ai.name
       metric_name    = "AiModerationConsumerRestartCount"
       pattern        = "\"moderation_consumer_restart\""
-    }
-    debezium_failed = {
-      description    = "The Debezium connector manager detected a failed connector task."
-      log_group_name = aws_cloudwatch_log_group.event_runtime.name
-      metric_name    = "DebeziumFailedCount"
-      pattern        = "\"Debezium connector has failed tasks\""
-    }
-    debezium_restarting = {
-      description    = "The Debezium source task remained in RESTARTING for at least five minutes."
-      log_group_name = aws_cloudwatch_log_group.event_runtime.name
-      metric_name    = "DebeziumRestartingCount"
-      pattern        = "\"Debezium connector task is stuck restarting\""
     }
     debezium_invalid_slot = {
       description    = "Debezium could not obtain a valid PostgreSQL replication slot."
@@ -322,31 +140,6 @@ resource "aws_cloudwatch_metric_alarm" "infrastructure" {
   datapoints_to_alarm = each.value.datapoints_to_alarm
   treat_missing_data  = each.value.treat_missing_data
   dimensions          = each.value.dimensions
-}
-
-resource "aws_cloudwatch_metric_alarm" "ai_running_tasks" {
-  count = var.ai_desired_count > 0 ? 1 : 0
-
-  alarm_name                = "${local.name_prefix}-ai-running-tasks"
-  alarm_description         = "AI ECS service has no running task."
-  actions_enabled           = var.monitoring_alarm_actions_enabled
-  alarm_actions             = local.monitoring_alarm_actions
-  ok_actions                = local.monitoring_alarm_actions
-  insufficient_data_actions = []
-
-  namespace           = "ECS/ContainerInsights"
-  metric_name         = "RunningTaskCount"
-  statistic           = "Minimum"
-  comparison_operator = "LessThanThreshold"
-  threshold           = 1
-  period              = 60
-  evaluation_periods  = 2
-  datapoints_to_alarm = 2
-  treat_missing_data  = "breaching"
-  dimensions = {
-    ClusterName = aws_ecs_cluster.this.name
-    ServiceName = aws_ecs_service.ai.name
-  }
 }
 
 resource "aws_cloudwatch_log_metric_filter" "monitoring" {
@@ -423,40 +216,20 @@ resource "aws_cloudwatch_dashboard" "staging" {
         width  = 12
         height = 6
         properties = {
-          title  = "ECS running tasks and EC2 capacity"
-          view   = "timeSeries"
-          region = var.aws_region
-          period = 60
-          stat   = "Minimum"
-          metrics = [
-            ["ECS/ContainerInsights", "RunningTaskCount", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", aws_ecs_service.backend.name, { label = "Backend running tasks" }],
-            [".", ".", ".", ".", ".", aws_ecs_service.event_runtime.name, { label = "Event runtime running tasks" }],
-            [".", ".", ".", ".", ".", aws_ecs_service.ai.name, { label = "AI running tasks" }],
-            ["AWS/AutoScaling", "GroupInServiceInstances", "AutoScalingGroupName", aws_autoscaling_group.ecs.name, { label = "In-service EC2 instances" }],
-          ]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 0
-        y      = 6
-        width  = 12
-        height = 6
-        properties = {
-          title  = "ALB health and errors"
+          title  = "ALB health and ECS capacity"
           view   = "timeSeries"
           region = var.aws_region
           period = 60
           metrics = [
             ["AWS/ApplicationELB", "UnHealthyHostCount", "LoadBalancer", aws_lb.app.arn_suffix, "TargetGroup", aws_lb_target_group.app.arn_suffix, { label = "Unhealthy targets", stat = "Maximum" }],
             [".", "HTTPCode_Target_5XX_Count", ".", ".", ".", ".", { label = "Target 5xx", stat = "Sum" }],
-            [".", "TargetResponseTime", ".", ".", ".", ".", { label = "Target response time", stat = "p95", yAxis = "right" }],
+            ["AWS/AutoScaling", "GroupInServiceInstances", "AutoScalingGroupName", aws_autoscaling_group.ecs.name, { label = "In-service EC2 instances", stat = "Minimum" }],
           ]
         }
       },
       {
         type   = "metric"
-        x      = 12
+        x      = 0
         y      = 6
         width  = 12
         height = 6
@@ -469,15 +242,14 @@ resource "aws_cloudwatch_dashboard" "staging" {
             ["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", aws_db_instance.postgres.identifier, { label = "CPU %", stat = "Average" }],
             [".", "DatabaseConnections", ".", ".", { label = "Connections", stat = "Average" }],
             [".", "FreeableMemory", ".", ".", { label = "Freeable memory", stat = "Minimum", yAxis = "right" }],
-            [".", "SwapUsage", ".", ".", { label = "Swap usage", stat = "Maximum", yAxis = "right" }],
             [".", "FreeStorageSpace", ".", ".", { label = "Free storage", stat = "Minimum", yAxis = "right" }],
           ]
         }
       },
       {
         type   = "metric"
-        x      = 0
-        y      = 12
+        x      = 12
+        y      = 6
         width  = 12
         height = 6
         properties = {
@@ -486,130 +258,28 @@ resource "aws_cloudwatch_dashboard" "staging" {
           region = var.aws_region
           period = 300
           stat   = "Maximum"
-          yAxis  = { left = { min = 0 } }
-          annotations = {
-            horizontal = [{
-              label = "Replication slot warning (${var.rds_replication_slot_lag_alarm_threshold_mb} MiB)"
-              value = local.rds_replication_slot_lag_alarm_threshold_bytes
-              color = "#ff7f0e"
-            }]
-          }
           metrics = [
             ["AWS/RDS", "OldestReplicationSlotLag", "DBInstanceIdentifier", aws_db_instance.postgres.identifier, { label = "Oldest slot lag" }],
-            [".", "ReplicationSlotDiskUsage", ".", ".", { label = "Replication slot disk usage" }],
-            [".", "TransactionLogsDiskUsage", ".", ".", { label = "Transaction logs disk usage" }],
+            [".", "TransactionLogsDiskUsage", ".", ".", { label = "Transaction log disk usage" }],
           ]
         }
       },
       {
         type   = "metric"
-        x      = 12
+        x      = 0
         y      = 12
-        width  = 12
+        width  = 24
         height = 6
         properties = {
-          title  = "Application, consumer, and Debezium failure signals"
+          title  = "Critical pipeline signals"
           view   = "timeSeries"
           region = var.aws_region
           period = 60
           stat   = "Sum"
           metrics = [
-            [local.monitoring_metric_namespace, "BackendErrorCount", { label = "Backend ERROR" }],
-            [".", "ConsumerDlqCount", { label = "Consumer DLQ" }],
-            [".", "AiErrorCount", { label = "AI ERROR" }],
-            [".", "AiModerationConsumerRestartCount", { label = "AI moderation consumer restart" }],
-            [".", "DebeziumFailedCount", { label = "Debezium failed" }],
-            [".", "DebeziumRestartingCount", { label = "Debezium restarting" }],
+            [local.monitoring_metric_namespace, "ConsumerDlqCount", { label = "Consumer DLQ" }],
+            [".", "AiModerationConsumerRestartCount", { label = "AI moderation restart" }],
             [".", "DebeziumInvalidSlotCount", { label = "Debezium invalid slot" }],
-          ]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 0
-        y      = 18
-        width  = 12
-        height = 6
-        properties = {
-          title  = "Backend Tomcat threads"
-          view   = "timeSeries"
-          region = var.aws_region
-          period = 60
-          metrics = [
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"tomcat.threads.busy.value\"', 'Maximum', 60)", id = "tomcat_busy", label = "Busy threads" }],
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"tomcat.threads.current.value\"', 'Maximum', 60)", id = "tomcat_current", label = "Current threads" }],
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"tomcat.threads.config.max.value\"', 'Maximum', 60)", id = "tomcat_max", label = "Configured max" }],
-          ]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 12
-        y      = 18
-        width  = 12
-        height = 6
-        properties = {
-          title  = "Backend Hikari connections"
-          view   = "timeSeries"
-          region = var.aws_region
-          period = 60
-          metrics = [
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"hikaricp.connections.active.value\"', 'Maximum', 60)", id = "hikari_active", label = "Active" }],
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"hikaricp.connections.idle.value\"', 'Minimum', 60)", id = "hikari_idle", label = "Idle" }],
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"hikaricp.connections.pending.value\"', 'Maximum', 60)", id = "hikari_pending", label = "Pending" }],
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"hikaricp.connections.max.value\"', 'Maximum', 60)", id = "hikari_max", label = "Pool max" }],
-          ]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 0
-        y      = 24
-        width  = 12
-        height = 6
-        properties = {
-          title  = "Backend JVM CPU and GC pause"
-          view   = "timeSeries"
-          region = var.aws_region
-          period = 60
-          metrics = [
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"process.cpu.usage.value\"', 'Average', 60)", id = "process_cpu", label = "Process CPU ratio" }],
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"jvm.gc.pause.avg\"', 'Average', 60)", id = "gc_pause_avg", label = "GC pause avg (ms)", yAxis = "right" }],
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"jvm.gc.pause.max\"', 'Maximum', 60)", id = "gc_pause_max", label = "GC pause max (ms)", yAxis = "right" }],
-          ]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 12
-        y      = 24
-        width  = 12
-        height = 6
-        properties = {
-          title  = "Backend Redis command latency"
-          view   = "timeSeries"
-          region = var.aws_region
-          period = 60
-          metrics = [
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"lettuce.command.completion.avg\"', 'Average', 60)", id = "redis_completion_avg", label = "avg $${PROP('Dim.command')} (ms)" }],
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"lettuce.command.completion.max\"', 'Maximum', 60)", id = "redis_completion_max", label = "max $${PROP('Dim.command')} (ms)" }],
-          ]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 0
-        y      = 30
-        width  = 24
-        height = 7
-        properties = {
-          title  = "Performance-test API server latency"
-          view   = "timeSeries"
-          region = var.aws_region
-          period = 60
-          metrics = [
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"http.server.requests.avg\"', 'Average', 60)", id = "http_avg", label = "avg $${PROP('Dim.uri')} (ms)" }],
-            [{ expression = "SEARCH('Namespace=\"${local.application_metric_namespace}\" MetricName=\"http.server.requests.max\"', 'Maximum', 60)", id = "http_max", label = "max $${PROP('Dim.uri')} (ms)" }],
           ]
         }
       },
