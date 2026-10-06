@@ -81,6 +81,8 @@ resource "aws_ecs_task_definition" "ai" {
   family                   = "${local.name_prefix}-ai"
   requires_compatibilities = ["EC2"]
   network_mode             = "bridge"
+  cpu                      = "512"
+  memory                   = "1664"
   execution_role_arn       = aws_iam_role.ai_execution.arn
   task_role_arn            = aws_iam_role.ai_task.arn
 
@@ -88,7 +90,7 @@ resource "aws_ecs_task_definition" "ai" {
     name              = local.ai_container_name
     image             = "${aws_ecr_repository.ai.repository_url}:${var.ai_image_tag}"
     essential         = true
-    cpu               = 512
+    cpu               = 256
     memoryReservation = 1024
     memory            = 1536
     portMappings = [{

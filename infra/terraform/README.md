@@ -64,6 +64,10 @@ NAT Gateway 고정 비용을 피하기 위해 ECS EC2는 public subnet에 배치
 
 기본 `t3.large` 한 대에 Spring Boot, Kafka, Kafka Connect, Redis를 함께 두는 구성이라 저비용 staging 절충안입니다. Kafka/Redis volume은 같은 EC2에서 task가 재시작될 때는 남지만 EC2 교체나 장애 시 유실될 수 있습니다. Kafka가 단일 broker이므로 고가용성 production 구성은 아닙니다.
 
+AI를 포함한 staging 기본 CPU 예약은 Event Runtime 736, Backend task 768, AI task 512로 총 2,016 CPU unit입니다. Backend는 기존 Spring Boot 512 CPU를 유지하고 Service Connect proxy를 위해 task 전체를 768로 설정합니다. AI는 애플리케이션 256과 proxy 여유 256을 합쳐 task 전체 512를 사용합니다. Event Runtime은 Kafka 384, Redis 64, Kafka Connect 256, connector manager 32로 조정했으며 일회성 Kafka init에는 CPU를 예약하지 않습니다. Kafka UI를 켜면 한 `t3.large`에 들어가지 않을 수 있습니다.
+
+메모리는 Event Runtime 예약 3,264 MiB, Backend task 1,664 MiB, AI task 1,664 MiB로 총 6,592 MiB입니다. Backend와 AI의 1,536 MiB container limit은 유지하고 각 task의 나머지 128 MiB를 Service Connect proxy에 남깁니다. 이 값은 저부하 staging 기준이며 CloudWatch CPU/memory, Kafka consumer lag, Debezium catch-up 시간을 확인해 부족하면 Capacity Provider가 `ecs_max_size=2`까지 확장하도록 둡니다. rolling deployment 중에는 교체 task 때문에 두 번째 EC2가 일시적으로 필요할 수 있습니다.
+
 ## secret 준비
 
 Terraform에는 secret 값이 아니라 기존 Secrets Manager ARN만 전달합니다. `terraform.tfvars`나 Terraform state에 비밀번호와 API key를 넣지 않습니다.
