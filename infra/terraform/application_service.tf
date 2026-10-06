@@ -172,7 +172,6 @@ resource "aws_ecs_task_definition" "backend" {
       containerPort = 8080
       hostPort      = 0
       protocol      = "tcp"
-      appProtocol   = "http"
     }]
     environment = [
       { name = "SPRING_PROFILES_ACTIVE", value = "prod" },

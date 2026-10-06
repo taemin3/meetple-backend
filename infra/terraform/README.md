@@ -172,6 +172,8 @@ AI는 public endpoint가 없으므로 ECS task 상태, `/ecs/<prefix>/ai` 로그
 
 Terraform은 backend task definition의 기반 설정과 ECS service 구성을 관리합니다. GitHub Actions는 image-specific task definition revision과 ECS service의 활성 revision을 관리하므로 `aws_ecs_service.backend.task_definition`은 Terraform drift 대상에서 제외합니다. CPU, memory, environment, secret 같은 기반 설정을 Terraform에서 바꿨다면 먼저 Terraform을 적용한 뒤 staging workflow를 수동 실행해 최신 기반 revision에 애플리케이션 image를 반영합니다.
 
+기존 Backend Service Connect는 `appProtocol`이 없는 TCP stable config로 생성되어 있습니다. ECS는 Service Connect service 생성 후 `appProtocol` 변경을 허용하지 않으므로 Backend task definition의 named port에는 `protocol=tcp`만 유지합니다. HTTP 요청은 이 TCP 연결 위에서 그대로 전달됩니다.
+
 ### 1. AWS OIDC role bootstrap
 
 staging의 로컬 `terraform.tfvars`에 다음 값을 추가합니다.
