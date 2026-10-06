@@ -99,11 +99,11 @@ AI 검색을 활성화할 때 위 backend application secret에 `AI_SEARCH_CAPAB
 }
 ```
 
-AI secret이 고객 관리형 KMS key를 사용한다면 `ai_secret_kms_key_arns`에 key ARN을 추가합니다. secret의 `AWSCURRENT`가 변경되면 EventBridge가 AI와 Spring Boot service를 모두 강제 재배포해 새 값을 읽게 합니다.
+AI secret이 고객 관리형 KMS key를 사용한다면 `ai_secret_kms_key_arns`에 key ARN을 추가합니다. AI 연동이 활성화되면 AI와 Backend execution role 모두 해당 key의 복호화 권한을 받습니다. secret의 `AWSCURRENT`가 변경되면 EventBridge가 AI와 Spring Boot service를 모두 강제 재배포해 새 값을 읽게 합니다.
 
 `firebase_credentials_secret_arn`은 key로 감싼 JSON이 아니라 Firebase service-account JSON 문서 전체를 secret value로 저장합니다. ECS는 이를 `FIREBASE_CREDENTIALS_JSON`으로 주입하고 애플리케이션은 파일을 만들지 않고 메모리에서 읽습니다. 로컬의 기존 `GOOGLE_APPLICATION_CREDENTIALS` 파일 방식도 그대로 사용할 수 있습니다.
 
-두 secret이 기본 `aws/secretsmanager` key가 아닌 고객 관리형 KMS key를 사용한다면 해당 key ARN을 `backend_secret_kms_key_arns`에 추가합니다. execution role에는 지정한 key의 `kms:Decrypt`만, 그리고 Secrets Manager를 경유하는 호출만 허용됩니다. KMS key policy도 이 execution role의 사용을 허용해야 합니다.
+Backend application/Firebase secret이 기본 `aws/secretsmanager` key가 아닌 고객 관리형 KMS key를 사용한다면 해당 key ARN을 `backend_secret_kms_key_arns`에 추가합니다. execution role에는 지정한 key의 `kms:Decrypt`만, 그리고 Secrets Manager를 경유하는 호출만 허용됩니다. KMS key policy도 각 secret을 읽는 execution role의 사용을 허용해야 합니다.
 
 RDS username/password는 RDS 관리형 master secret의 `username`, `password` key를 주입합니다. 현재 Debezium과 Spring Boot가 master 계정을 공유하므로 production 전에는 application/replication 전용 DB 계정과 별도 secret을 만드는 bootstrap 단계가 필요합니다.
 
@@ -139,7 +139,9 @@ ECR repository, GitHub 배포 role, 실제 image가 동시에 처음 생기므�
 1. `terraform.tfvars`에 실제 secret ARN을 넣고 backend/AI image tag는 `bootstrap`, 두 `desired_count`는 `0`, `ai_integration_enabled=false`로 둡니다. Admin까지 준비한다면 `admin_hosting_enabled=true`, `admin_api_origin_domain_name`도 설정합니다.
 2. 필요한 `github_actions_*_deploy_enabled=true`를 켜 plan/apply하고 Terraform output의 배포 role ARN 및 배포 대상을 각 GitHub `staging` Environment에 등록합니다.
 3. backend와 AI의 staging workflow를 각각 한 번 수동 실행해 commit SHA image와 실제 task definition revision을 활성화합니다. Admin workflow는 build 결과를 S3에 동기화하고 CloudFront를 무효화합니다.
-4. backend/AI workflow가 성공하면 `backend_desired_count=1`, `ai_desired_count=1`, 실제 `ai_openai_model`을 적용합니다. 두 서비스의 health와 AI Kafka consumer를 확인한 뒤 마지막으로 `ai_integration_enabled=true`를 적용합니다.
+4. 두 `desired_count`와 `ai_integration_enabled`는 아직 `0`/`false`로 두고 실제 `ai_openai_model`을 적용한 뒤 AI workflow를 다시 실행합니다. Terraform이 새 baseline revision을 등록해도 ECS service의 활성 revision은 workflow가 갱신합니다.
+5. `backend_desired_count=1`, `ai_desired_count=1`을 적용하고 두 서비스의 health와 AI Kafka consumer를 확인합니다.
+6. 마지막으로 `ai_integration_enabled=true`를 적용한 뒤 Backend workflow를 다시 실행해 `AI_SEARCH_ENABLED=true`와 공유 AI secret이 포함된 revision을 활성화하고 AI 검색을 검증합니다.
 
 `moderation_auto_warning_enabled`는 AI 연동 확인과 관리자 검토 흐름 검증 후 별도로 켭니다. AI 분석 전체를 자동 제재하는 옵션이 아니라 현재 백엔드의 제한된 경고 규칙만 활성화합니다.
 
@@ -276,10 +278,12 @@ image_upload_allowed_origins = ["https://app.example.com"]
 
 - `meetple-<environment>-operations` Dashboard
 - ECS backend/AI/event-runtime CPU·memory, ASG instance 수를 AWS 기본 metric으로 조회
-- 즉시 대응할 infrastructure alarm 5개: EC2 없음, ALB unhealthy, target 5xx, RDS free storage, replication slot lag
+- 즉시 대응할 infrastructure alarm 최대 8개: EC2 없음, Backend/AI/Event Runtime task 신호 없음, ALB unhealthy, target 5xx, RDS free storage, replication slot lag
 - custom log metric/alarm 5개: Backend `ERROR`, AI `ERROR`, Kafka DLQ, AI moderation consumer restart, Debezium invalid slot
 - Backend/AI/Event Runtime CloudWatch Logs 보존 기간 7일
 - ALARM과 복구(OK)를 전달하는 SNS topic
+
+Backend와 AI task 신호 알람은 각 `desired_count`가 1 이상일 때만 만들고, Event Runtime은 항상 감시합니다. Container Insights 대신 무료 기본 `AWS/ECS` CPU metric이 2분 연속 누락되는지를 확인하므로 task가 0개가 된 상황을 감지하면서 task별 상세 metric은 수집하지 않습니다.
 
 Tomcat thread, Hikari pool, JVM GC, Redis command, API별 latency custom metric은 상시 수집하지 않습니다. Backend와 AI의 `ERROR`는 각각 1분 내 1건부터 알람으로 전환하며, 같은 ALARM 상태에서는 로그마다 알림을 반복하지 않습니다. 성능 시험이 필요할 때만 JFR·k6를 사용하고, 애플리케이션 metric은 IAM과 설정을 별도 변경해 임시 활성화합니다. Dashboard는 log metric 5개 외에는 새로운 custom metric을 만들지 않습니다.
 

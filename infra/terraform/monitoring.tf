@@ -85,6 +85,65 @@ locals {
     }
   }
 
+  # ECS publishes service CPU metrics only while at least one task is RUNNING.
+  # Missing CPU samples therefore provide a low-cost task-presence signal without Container Insights.
+  monitoring_ecs_task_presence_alarms = merge(
+    {
+      event_runtime_tasks_missing = {
+        description         = "Event Runtime has reported no running-task CPU samples for two minutes."
+        namespace           = "AWS/ECS"
+        metric_name         = "CPUUtilization"
+        statistic           = "SampleCount"
+        comparison_operator = "LessThanThreshold"
+        threshold           = 1
+        period              = 60
+        evaluation_periods  = 2
+        datapoints_to_alarm = 2
+        treat_missing_data  = "breaching"
+        dimensions = {
+          ClusterName = aws_ecs_cluster.this.name
+          ServiceName = aws_ecs_service.event_runtime.name
+        }
+      }
+    },
+    var.backend_desired_count > 0 ? {
+      backend_tasks_missing = {
+        description         = "Backend has reported no running-task CPU samples for two minutes."
+        namespace           = "AWS/ECS"
+        metric_name         = "CPUUtilization"
+        statistic           = "SampleCount"
+        comparison_operator = "LessThanThreshold"
+        threshold           = 1
+        period              = 60
+        evaluation_periods  = 2
+        datapoints_to_alarm = 2
+        treat_missing_data  = "breaching"
+        dimensions = {
+          ClusterName = aws_ecs_cluster.this.name
+          ServiceName = aws_ecs_service.backend.name
+        }
+      }
+    } : {},
+    var.ai_desired_count > 0 ? {
+      ai_tasks_missing = {
+        description         = "AI has reported no running-task CPU samples for two minutes."
+        namespace           = "AWS/ECS"
+        metric_name         = "CPUUtilization"
+        statistic           = "SampleCount"
+        comparison_operator = "LessThanThreshold"
+        threshold           = 1
+        period              = 60
+        evaluation_periods  = 2
+        datapoints_to_alarm = 2
+        treat_missing_data  = "breaching"
+        dimensions = {
+          ClusterName = aws_ecs_cluster.this.name
+          ServiceName = aws_ecs_service.ai.name
+        }
+      }
+    } : {},
+  )
+
   # Each filter creates a custom metric and alarm, so keep only application errors or pipeline-stop signals.
   monitoring_log_filters = {
     backend_error = {
@@ -133,7 +192,7 @@ resource "aws_sns_topic_subscription" "monitoring_email" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "infrastructure" {
-  for_each = local.monitoring_infrastructure_alarms
+  for_each = merge(local.monitoring_infrastructure_alarms, local.monitoring_ecs_task_presence_alarms)
 
   alarm_name                = "${local.name_prefix}-${replace(each.key, "_", "-")}"
   alarm_description         = each.value.description

@@ -164,6 +164,10 @@ resource "aws_ecs_service" "ai" {
       port_name      = "http"
       discovery_name = "ai"
 
+      timeout {
+        per_request_timeout_seconds = 60
+      }
+
       client_alias {
         dns_name = "ai"
         port     = 8001

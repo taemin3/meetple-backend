@@ -86,6 +86,23 @@ data "aws_iam_policy_document" "backend_execution_secrets" {
       }
     }
   }
+
+  dynamic "statement" {
+    for_each = var.ai_integration_enabled && length(var.ai_secret_kms_key_arns) > 0 ? [1] : []
+
+    content {
+      sid       = "DecryptSharedAiSecret"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt"]
+      resources = var.ai_secret_kms_key_arns
+
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ViaService"
+        values   = ["secretsmanager.${var.aws_region}.${data.aws_partition.current.dns_suffix}"]
+      }
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "backend_execution_secrets" {
