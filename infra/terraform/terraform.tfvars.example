@@ -77,6 +77,9 @@ github_actions_admin_deploy_enabled = false
 github_actions_admin_repository     = "taemin3/meetple-admin"
 github_actions_oidc_provider_arn    = null
 
+# When GitHub returns use_immutable_subject=true for a repository, replace its value above with the
+# sub_claim_prefix value after "repo:" (for example, owner@123/repository@456).
+
 # CloudWatch alarms remain visible when actions are disabled, but SNS email notifications stop.
 # After apply, confirm the subscription from the email sent by AWS SNS.
 monitoring_notification_email     = null

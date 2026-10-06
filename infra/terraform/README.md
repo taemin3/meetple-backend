@@ -186,6 +186,20 @@ github_actions_admin_deploy_enabled = true
 github_actions_admin_repository     = "taemin3/meetple-admin"
 ```
 
+GitHub repository가 immutable OIDC subject를 사용하면 단순 `owner/repository` 대신 GitHub가 반환하는 ID 포함 prefix를 설정해야 합니다. 각 저장소에서 다음 명령으로 확인합니다.
+
+```powershell
+gh api repos/taemin3/meetple-ai/actions/oidc/customization/sub
+gh api repos/taemin3/meetple-admin/actions/oidc/customization/sub
+```
+
+응답의 `use_immutable_subject`가 `true`이면 `sub_claim_prefix`에서 앞의 `repo:`를 제외한 값을 해당 Terraform 변수에 사용합니다. IAM 신뢰 정책은 여기에 `:environment:staging`을 붙여 저장소 ID와 staging Environment를 모두 제한합니다.
+
+```hcl
+github_actions_ai_repository    = "owner@123/repository@456"
+github_actions_admin_repository = "owner@123/repository@789"
+```
+
 AWS 계정에 `token.actions.githubusercontent.com` OIDC provider가 이미 다른 Terraform state로 관리되고 있다면 중복 생성하지 않고 해당 ARN을 전달합니다.
 
 ```hcl

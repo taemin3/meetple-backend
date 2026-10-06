@@ -9,6 +9,8 @@ locals {
     aws_iam_openid_connect_provider.github[0].arn,
     null,
   )
+  github_actions_backend_service_arn = "arn:${data.aws_partition.current.partition}:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/${local.name_prefix}-cluster/${local.name_prefix}-backend"
+  github_actions_ai_service_arn      = "arn:${data.aws_partition.current.partition}:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/${local.name_prefix}-cluster/${local.name_prefix}-ai"
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
@@ -96,7 +98,7 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "ecs:DescribeServices",
       "ecs:UpdateService",
     ]
-    resources = [aws_ecs_service.backend.arn]
+    resources = [local.github_actions_backend_service_arn]
   }
 
   statement {
@@ -202,7 +204,7 @@ data "aws_iam_policy_document" "github_actions_ai_deploy" {
       "ecs:DescribeServices",
       "ecs:UpdateService",
     ]
-    resources = [aws_ecs_service.ai.arn]
+    resources = [local.github_actions_ai_service_arn]
   }
 
   statement {

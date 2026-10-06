@@ -514,13 +514,16 @@ variable "github_actions_deploy_enabled" {
 }
 
 variable "github_actions_repository" {
-  description = "GitHub repository allowed to assume the deployment role, in owner/repository format."
+  description = "GitHub repository subject prefix allowed to assume the deployment role, using owner/repository or immutable owner@id/repository@id format."
   type        = string
   default     = "taemin3/meetple-backend"
 
   validation {
-    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_actions_repository))
-    error_message = "github_actions_repository must use owner/repository format."
+    condition = can(regex(
+      "^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+|[A-Za-z0-9_.-]+@[0-9]+/[A-Za-z0-9_.-]+@[0-9]+)$",
+      var.github_actions_repository,
+    ))
+    error_message = "github_actions_repository must use owner/repository or immutable owner@id/repository@id format."
   }
 }
 
@@ -531,13 +534,16 @@ variable "github_actions_ai_deploy_enabled" {
 }
 
 variable "github_actions_ai_repository" {
-  description = "GitHub AI repository allowed to assume its deployment role, in owner/repository format."
+  description = "GitHub AI repository subject prefix allowed to assume its deployment role, using owner/repository or immutable owner@id/repository@id format."
   type        = string
   default     = "taemin3/meetple-ai"
 
   validation {
-    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_actions_ai_repository))
-    error_message = "github_actions_ai_repository must use owner/repository format."
+    condition = can(regex(
+      "^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+|[A-Za-z0-9_.-]+@[0-9]+/[A-Za-z0-9_.-]+@[0-9]+)$",
+      var.github_actions_ai_repository,
+    ))
+    error_message = "github_actions_ai_repository must use owner/repository or immutable owner@id/repository@id format."
   }
 }
 
@@ -553,13 +559,16 @@ variable "github_actions_admin_deploy_enabled" {
 }
 
 variable "github_actions_admin_repository" {
-  description = "GitHub admin repository allowed to assume its deployment role, in owner/repository format."
+  description = "GitHub admin repository subject prefix allowed to assume its deployment role, using owner/repository or immutable owner@id/repository@id format."
   type        = string
   default     = "taemin3/meetple-admin"
 
   validation {
-    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_actions_admin_repository))
-    error_message = "github_actions_admin_repository must use owner/repository format."
+    condition = can(regex(
+      "^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+|[A-Za-z0-9_.-]+@[0-9]+/[A-Za-z0-9_.-]+@[0-9]+)$",
+      var.github_actions_admin_repository,
+    ))
+    error_message = "github_actions_admin_repository must use owner/repository or immutable owner@id/repository@id format."
   }
 }
 
