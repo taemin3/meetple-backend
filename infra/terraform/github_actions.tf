@@ -299,6 +299,7 @@ data "aws_iam_policy_document" "github_actions_admin_deploy" {
     actions = [
       "cloudfront:CreateInvalidation",
       "cloudfront:GetDistribution",
+      "cloudfront:GetInvalidation",
     ]
     resources = [aws_cloudfront_distribution.admin[0].arn]
   }
