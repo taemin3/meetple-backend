@@ -1,58 +1,94 @@
-# meetple backend
+# Meetple Backend
 
-Spring Boot 기반 meetple API 서버입니다.
+> 모임·채팅·신고 도메인과 이벤트 파이프라인, AWS 배포 인프라를 담당하는 Spring Boot API 서버
 
-## 현재 스택
+Meetple 전체 구성과 저장소 링크는 [프로젝트 허브](https://github.com/taemin3/meetple)에서 확인할 수 있습니다.
 
-- Spring Boot 4
-- PostgreSQL + PostGIS
-- Redis Pub/Sub
-- WebSocket 예정
-- Docker Compose
+## 주요 역할
 
-## AI 서비스
+- 이메일 인증, JWT 로그인·재발급, 프로필과 계정 삭제
+- PostGIS 기반 주변 모임 탐색, 모임 생성·수정, 참여 신청과 승인·거절·취소
+- STOMP WebSocket 채팅, 메시지 영속화, Redis Pub/Sub fan-out과 재연결 복구
+- S3 이미지 업로드와 삭제, Firebase 푸시 및 이메일 알림
+- 사용자·모임·채팅 신고, AI 신고 분석 수명주기, 관리자 제재와 복구
+- 운영 정책 버전 관리, pgvector 기반 정책 검색과 임베딩 동기화
+- Transactional Outbox, Debezium, Kafka Retry/DLQ 기반 비동기 처리
+- ECS·RDS·S3·CloudFront·모니터링을 포함한 Terraform staging 구성
 
-Python AI 서버는 별도 [meetple-ai 저장소](https://github.com/taemin3/meetple-ai)에서 관리합니다. 백엔드는 로그인·데이터 조회·AI 호출을 담당합니다. [연동 설정과 API 안내](docs/AI_SEARCH.md)를 참고하세요.
+현재 프로젝트 소개 범위에서는 자연어 모임 검색을 제외하고, AI 연동을 운영 정책 기반 신고 분석에 사용합니다.
 
-## 로컬 인프라 실행
+## 기술 구성
 
-PostgreSQL/PostGIS와 Redis는 Docker Compose로 실행합니다.
+| 구분 | 기술 |
+| --- | --- |
+| Application | Java 21, Spring Boot 4, Spring WebMVC, Spring Security, Spring Data JPA |
+| Data | PostgreSQL, PostGIS, pgvector, Flyway |
+| Realtime | STOMP WebSocket, Redis Pub/Sub |
+| Event | Transactional Outbox, Debezium, Kafka |
+| External | AWS S3·CloudFront, Firebase Cloud Messaging, SMTP |
+| Infrastructure | Docker Compose, Terraform, AWS ECS EC2, ALB, RDS, CloudWatch |
+| Test | JUnit 5, H2, Testcontainers |
 
-```bash
-cd backend
+## 서비스 흐름
+
+```text
+Flutter App / Admin SPA
+        │ REST / WebSocket
+        ▼
+Spring Boot Backend ────────────── PostgreSQL · PostGIS · pgvector
+        │                         Redis Pub/Sub
+        │ Outbox
+        ▼
+Debezium → Kafka → Push · Email · Image Delete · AI Report Analysis
+                                                │
+                                                └─ 분석 결과 callback
+```
+
+사용자 요청의 권한과 최종 제재는 Spring이 결정합니다. AI는 신고 증거와 운영 정책을 바탕으로 검토 정보를 만들지만 회원 정지나 모임 삭제를 직접 실행하지 않습니다.
+
+## 로컬 실행
+
+Java 21과 Docker를 준비하고 `.env.example`을 복사한 뒤 비어 있는 로컬 값을 채웁니다. 실제 `.env`와 인증 정보는 커밋하지 않습니다.
+
+```powershell
+Copy-Item .env.example .env
 docker compose up -d
+.\gradlew.bat bootRun
 ```
 
-로컬 접속 정보는 `.env.example`을 복사한 `.env`에만 입력합니다.
+Docker Compose는 PostgreSQL/PostGIS, Kafka, Kafka Connect/Debezium, Kafka UI, Redis, Mailpit을 제공합니다. Kafka consumer와 FCM 같은 외부 연동은 `.env`에서 명시적으로 활성화한 경우에만 동작합니다.
 
-- PostgreSQL: `localhost:15432`
-- database: `meetple`
-- Redis: `localhost:6379`
+### Spring profile
 
-`.env`는 Git에 올리지 않습니다. Spring Boot는 `local` profile에서 `backend/.env`를 optional config로 읽습니다.
+- `local`: 로컬 PostgreSQL/PostGIS·Redis 사용, `ddl-auto=update`
+- `test`: 테스트 전용 설정 사용
+- `prod`: 외부 환경변수 필수, Flyway 사용, `ddl-auto=validate`
 
-## Spring profile
+## 검증
 
-기본 profile은 `local`입니다.
-
-- `local`: 로컬 Docker Compose의 PostgreSQL/PostGIS를 사용하고 `ddl-auto=update`를 적용합니다.
-- `test`: H2 인메모리 DB를 사용합니다.
-- `prod`: 환경변수로 DB 접속 정보를 반드시 주입하고 `ddl-auto=validate`를 적용합니다.
-
-로컬 실행:
-
-```bash
-cd backend
-./gradlew bootRun
+```powershell
+.\gradlew.bat test
 ```
 
-테스트:
+외부 인프라를 사용하는 테스트는 Docker, Redis 또는 별도 환경이 필요할 수 있습니다. 테스트 통과만으로 실제 Firebase 기기 전달이나 AWS 배포가 검증됐다고 보지 않습니다.
 
-```bash
-cd backend
-./gradlew test
-```
+## 배포와 운영 문서
 
-## AWS 배포 인프라
+- [AWS ECS EC2 + RDS Terraform 구성](infra/terraform/README.md)
+- [운영 정책 관리 절차](docs/moderation-policy-operations.md)
+- [Debezium replication slot 복구](docs/operations/debezium-replication-slot-recovery.md)
+- [Outbox CDC 복구 측정](docs/operations/outbox-cdc-recovery-measurement.md)
+- [채팅 성능 개선 측정](docs/performance/chat-performance-summary-2026-09-14.md)
 
-ECS EC2 Capacity Provider와 RDS 기반 Terraform 구성은 [`infra/terraform`](infra/terraform/README.md)에 있습니다. 현재 구성은 인프라 기반까지만 포함하며 ECS 애플리케이션 서비스와 실제 AWS 적용은 후속 단계입니다.
+## 운영 경계
+
+- 기본 staging은 비용을 줄인 단일 EC2·단일 Kafka broker 구성으로 production 고가용성 구조가 아닙니다.
+- Outbox와 consumer 멱등성은 장애 복구 범위를 줄이지만 end-to-end exactly-once를 보장하지 않습니다.
+- FCM sender 성공은 실제 사용자 기기 표시 성공과 동일하지 않습니다.
+- AI 추천은 관리자 검토용이며 위험한 제재를 자동 승인하지 않습니다.
+
+## 관련 저장소
+
+- [Meetple App](https://github.com/taemin3/meetple-app)
+- [Meetple AI](https://github.com/taemin3/meetple-ai)
+- [Meetple Admin](https://github.com/taemin3/meetple-admin)
