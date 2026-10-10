@@ -80,13 +80,6 @@ Docker Compose는 PostgreSQL/PostGIS, Kafka, Kafka Connect/Debezium, Kafka UI, R
 - [Outbox CDC 복구 측정](docs/operations/outbox-cdc-recovery-measurement.md)
 - [채팅 성능 개선 측정](docs/performance/chat-performance-summary-2026-09-14.md)
 
-## 운영 경계
-
-- 기본 staging은 비용을 줄인 단일 EC2·단일 Kafka broker 구성으로 production 고가용성 구조가 아닙니다.
-- Outbox와 consumer 멱등성은 장애 복구 범위를 줄이지만 end-to-end exactly-once를 보장하지 않습니다.
-- FCM sender 성공은 실제 사용자 기기 표시 성공과 동일하지 않습니다.
-- AI 추천은 관리자 검토용이며 위험한 제재를 자동 승인하지 않습니다.
-
 ## 관련 저장소
 
 - [Meetple App](https://github.com/taemin3/meetple-app)
