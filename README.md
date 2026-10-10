@@ -72,14 +72,6 @@ Docker Compose는 PostgreSQL/PostGIS, Kafka, Kafka Connect/Debezium, Kafka UI, R
 
 외부 인프라를 사용하는 테스트는 Docker, Redis 또는 별도 환경이 필요할 수 있습니다. 테스트 통과만으로 실제 Firebase 기기 전달이나 AWS 배포가 검증됐다고 보지 않습니다.
 
-## 배포와 운영 문서
-
-- [AWS ECS EC2 + RDS Terraform 구성](infra/terraform/README.md)
-- [운영 정책 관리 절차](docs/moderation-policy-operations.md)
-- [Debezium replication slot 복구](docs/operations/debezium-replication-slot-recovery.md)
-- [Outbox CDC 복구 측정](docs/operations/outbox-cdc-recovery-measurement.md)
-- [채팅 성능 개선 측정](docs/performance/chat-performance-summary-2026-09-14.md)
-
 ## 관련 저장소
 
 - [Meetple App](https://github.com/taemin3/meetple-app)
